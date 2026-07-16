@@ -38,6 +38,21 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $BuildScript = Join-Path $PSScriptRoot "build.ps1"
 $Validator = Join-Path $PSScriptRoot "validate_ue_automation_run.py"
 $FingerprintTool = Join-Path $PSScriptRoot "environment_fingerprint.py"
+$LocalPathsScript = Join-Path $PSScriptRoot "local.paths.ps1"
+$UnrealProcessSafetyModule = Join-Path $PSScriptRoot "UnrealProcessSafety.psm1"
+
+if (-not $env:UE5_PATH) {
+    if (-not (Test-Path -LiteralPath $LocalPathsScript -PathType Leaf)) {
+        Write-Error "BLOCKED: UE5_PATH is unset and local.paths.ps1 is missing: $LocalPathsScript"
+        exit 3
+    }
+    . $LocalPathsScript
+}
+Import-Module $UnrealProcessSafetyModule -Force -ErrorAction Stop
+$EngineVersion = Assert-UnrealEngineVersion `
+    -EngineRoot $env:UE5_PATH `
+    -ExpectedMajorVersion 5 `
+    -ExpectedMinorVersion 7
 
 function Resolve-RepoPath([string]$Value) {
     if ([System.IO.Path]::IsPathRooted($Value)) {
@@ -66,7 +81,7 @@ function Get-Sha256([string]$Path) {
     }
 }
 
-foreach ($RequiredTool in @($BuildScript, $Validator, $FingerprintTool)) {
+foreach ($RequiredTool in @($BuildScript, $Validator, $FingerprintTool, $UnrealProcessSafetyModule)) {
     if (-not (Test-Path -LiteralPath $RequiredTool -PathType Leaf)) {
         Write-Error "BLOCKED: required orchestration tool is missing: $RequiredTool"
         exit 3
@@ -106,10 +121,18 @@ if ($SourceTreeDirty -and -not $AllowDirty) {
 }
 
 if (-not $DryRun) {
-    $RunningUnreal = @(Get-Process -Name "UnrealEditor", "UnrealEditor-Cmd" -ErrorAction SilentlyContinue)
+    $RunningUnreal = @(
+        Get-EngineOwnedUnrealProcesses -EngineRoot $EngineVersion.EngineRoot
+    )
     if ($RunningUnreal.Count -gt 0) {
-        $ProcessSummary = ($RunningUnreal | ForEach-Object { "$($_.ProcessName):$($_.Id)" }) -join ", "
-        Write-Error "BLOCKED: an Unreal process is already running; refusing to start a duplicate episode: $ProcessSummary"
+        $ProcessSummary = ($RunningUnreal | ForEach-Object {
+            "$($_.ProcessName):$($_.Id) [$($_.Path)]"
+        }) -join ", "
+        Write-Error (
+            "BLOCKED: a UE 5.7 process owned by this project's configured engine is already running; " +
+            "refusing to start a duplicate episode: $ProcessSummary. " +
+            "Unreal processes outside $($EngineVersion.EngineRoot), including UE 5.8, are ignored."
+        )
         exit 3
     }
 }
@@ -228,13 +251,20 @@ $Process = Start-Process powershell.exe `
 $Deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
 while (-not $Process.HasExited) {
     if ([DateTime]::UtcNow -ge $Deadline) {
-        & taskkill.exe /PID $Process.Id /T /F | Out-Null
+        $StoppedProcesses = @(
+            Stop-ValidatedUnrealProcessTree `
+                -RootProcessId $Process.Id `
+                -EngineRoot $EngineVersion.EngineRoot `
+                -ExpectedMajorVersion 5 `
+                -ExpectedMinorVersion 7
+        )
         Write-OrchestrationResult $OrchestrationPath @{
             schema_version = "physanim-ue-automation-orchestration/v1"
             state = "TIMED_OUT"
             verdict = "BLOCKED"
             ended_utc = (Get-Date).ToUniversalTime().ToString("o")
             child_pid = $Process.Id
+            stopped_process_ids = @($StoppedProcesses | ForEach-Object { [int]$_.ProcessId })
             plan = $Plan
             stdout = $StdoutPath
             stderr = $StderrPath

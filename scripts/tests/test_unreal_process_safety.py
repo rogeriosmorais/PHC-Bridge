@@ -9,6 +9,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SAFETY_MODULE = REPO_ROOT / "scripts" / "UnrealProcessSafety.psm1"
 BUILD_SCRIPT = REPO_ROOT / "scripts" / "build.ps1"
+ORCHESTRATION_SCRIPT = REPO_ROOT / "scripts" / "run_ue_automation_episode.ps1"
 SCRIPT_SUFFIXES = {".ps1", ".psm1", ".bat", ".cmd", ".py", ".js", ".ts", ".sh"}
 EXCLUDED_PARTS = {
     ".git",
@@ -90,6 +91,15 @@ def test_build_script_uses_version_scoped_opt_in_cleanup() -> None:
     assert "taskkill" not in text.casefold()
 
 
+def test_orchestration_uses_version_scoped_process_checks_and_timeout_cleanup() -> None:
+    text = ORCHESTRATION_SCRIPT.read_text(encoding="utf-8")
+    assert "Assert-UnrealEngineVersion" in text
+    assert "Get-EngineOwnedUnrealProcesses" in text
+    assert "Stop-ValidatedUnrealProcessTree" in text
+    assert "taskkill" not in text.casefold()
+    assert "Stop-Process" not in text
+
+
 def test_safety_module_refuses_ue58_and_only_stops_ue57_owned_paths(tmp_path: Path) -> None:
     engine57 = tmp_path / "UE_5.7" / "Engine"
     engine58 = tmp_path / "UE_5.8" / "Engine"
@@ -142,6 +152,68 @@ try {{
     assert result["OwnedIds"] == [57]
     assert result["StoppedIds"] == [57]
     assert result["Rejected58"] is True
+
+
+def test_timeout_tree_cleanup_refuses_any_ue58_descendant(tmp_path: Path) -> None:
+    engine57 = tmp_path / "UE_5.7" / "Engine"
+    engine58 = tmp_path / "UE_5.8" / "Engine"
+    for engine, minor in ((engine57, 7), (engine58, 8)):
+        (engine / "Build").mkdir(parents=True)
+        (engine / "Build" / "Build.version").write_text(
+            json.dumps({"MajorVersion": 5, "MinorVersion": minor, "PatchVersion": 0}),
+            encoding="utf-8",
+        )
+
+    module = str(SAFETY_MODULE).replace("'", "''")
+    engine57_ps = str(engine57).replace("'", "''")
+    ue57_editor = str(
+        engine57 / "Binaries" / "Win64" / "UnrealEditor-Cmd.exe"
+    ).replace("'", "''")
+    ue57_worker = str(
+        engine57 / "Binaries" / "Win64" / "ShaderCompileWorker.exe"
+    ).replace("'", "''")
+    ue58_editor = str(
+        engine58 / "Binaries" / "Win64" / "UnrealEditor.exe"
+    ).replace("'", "''")
+
+    script = f"""
+$ErrorActionPreference = 'Stop'
+Import-Module '{module}' -Force
+$SafeTree = @(
+    [pscustomobject]@{{ ProcessId = 10; ParentProcessId = 0; Name = 'powershell.exe'; ExecutablePath = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' }},
+    [pscustomobject]@{{ ProcessId = 11; ParentProcessId = 10; Name = 'cmd.exe'; ExecutablePath = 'C:\\Windows\\System32\\cmd.exe' }},
+    [pscustomobject]@{{ ProcessId = 12; ParentProcessId = 11; Name = 'UnrealEditor-Cmd.exe'; ExecutablePath = '{ue57_editor}' }},
+    [pscustomobject]@{{ ProcessId = 13; ParentProcessId = 12; Name = 'ShaderCompileWorker.exe'; ExecutablePath = '{ue57_worker}' }}
+)
+$UnsafeTree = @(
+    [pscustomobject]@{{ ProcessId = 20; ParentProcessId = 0; Name = 'powershell.exe'; ExecutablePath = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' }},
+    [pscustomobject]@{{ ProcessId = 21; ParentProcessId = 20; Name = 'UnrealEditor.exe'; ExecutablePath = '{ue58_editor}' }}
+)
+$SafeStopped = [System.Collections.Generic.List[int]]::new()
+$UnsafeStopped = [System.Collections.Generic.List[int]]::new()
+$SafeProvider = {{ return $SafeTree }}
+$UnsafeProvider = {{ return $UnsafeTree }}
+$SafeStopper = {{ param($ProcessRecord) $SafeStopped.Add([int]$ProcessRecord.ProcessId) | Out-Null }}
+$UnsafeStopper = {{ param($ProcessRecord) $UnsafeStopped.Add([int]$ProcessRecord.ProcessId) | Out-Null }}
+$null = @(Stop-ValidatedUnrealProcessTree -RootProcessId 10 -EngineRoot '{engine57_ps}' -ProcessSnapshotProvider $SafeProvider -StopProcessAction $SafeStopper)
+$RejectedUnsafe = $false
+try {{
+    $null = @(Stop-ValidatedUnrealProcessTree -RootProcessId 20 -EngineRoot '{engine57_ps}' -ProcessSnapshotProvider $UnsafeProvider -StopProcessAction $UnsafeStopper)
+}} catch {{
+    $RejectedUnsafe = $true
+}}
+[pscustomobject]@{{
+    SafeStopped = @($SafeStopped)
+    UnsafeStopped = @($UnsafeStopped)
+    RejectedUnsafe = $RejectedUnsafe
+}} | ConvertTo-Json -Compress
+"""
+    completed = _run_powershell(script)
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert set(result["SafeStopped"]) == {10, 11, 12, 13}
+    assert result["UnsafeStopped"] == []
+    assert result["RejectedUnsafe"] is True
 
 
 def test_build_script_accepts_ue57_root_and_rejects_ue58_root(tmp_path: Path) -> None:

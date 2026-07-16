@@ -191,10 +191,105 @@ function Stop-EngineOwnedUnrealProcesses {
     }
 }
 
+function Stop-ValidatedUnrealProcessTree {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$RootProcessId,
+
+        [Parameter(Mandatory = $true)]
+        [string]$EngineRoot,
+
+        [int]$ExpectedMajorVersion = 5,
+        [int]$ExpectedMinorVersion = 7,
+
+        [scriptblock]$ProcessSnapshotProvider = {
+            Get-CimInstance Win32_Process |
+                Select-Object ProcessId, ParentProcessId, Name, ExecutablePath
+        },
+
+        [scriptblock]$StopProcessAction = {
+            param($ProcessRecord)
+            Stop-Process -Id ([int]$ProcessRecord.ProcessId) -Force -ErrorAction SilentlyContinue
+        }
+    )
+
+    $null = Assert-UnrealEngineVersion `
+        -EngineRoot $EngineRoot `
+        -ExpectedMajorVersion $ExpectedMajorVersion `
+        -ExpectedMinorVersion $ExpectedMinorVersion
+
+    $CanonicalRoot = Resolve-CanonicalDirectoryPath -Path $EngineRoot
+    $Snapshot = @(& $ProcessSnapshotProvider)
+    $ById = @{}
+    foreach ($Record in $Snapshot) {
+        $ById[[int]$Record.ProcessId] = $Record
+    }
+
+    if (-not $ById.ContainsKey($RootProcessId)) {
+        return
+    }
+
+    $Selected = [System.Collections.Generic.List[object]]::new()
+    $DepthById = @{}
+    $Queue = [System.Collections.Generic.Queue[object]]::new()
+    $Queue.Enqueue([pscustomobject]@{ ProcessId = $RootProcessId; Depth = 0 })
+    while ($Queue.Count -gt 0) {
+        $Current = $Queue.Dequeue()
+        if (-not $ById.ContainsKey([int]$Current.ProcessId)) {
+            continue
+        }
+
+        $Record = $ById[[int]$Current.ProcessId]
+        $Selected.Add($Record)
+        $DepthById[[int]$Record.ProcessId] = [int]$Current.Depth
+        foreach ($Child in $Snapshot) {
+            if ([int]$Child.ParentProcessId -eq [int]$Record.ProcessId) {
+                $Queue.Enqueue([pscustomobject]@{
+                    ProcessId = [int]$Child.ProcessId
+                    Depth = [int]$Current.Depth + 1
+                })
+            }
+        }
+    }
+
+    $UnrealNames = @(
+        "UnrealEditor.exe",
+        "UnrealEditor-Cmd.exe",
+        "ShaderCompileWorker.exe",
+        "UnrealMultiUserServer.exe",
+        "CrashReportClient.exe"
+    )
+    foreach ($Record in $Selected) {
+        if ($UnrealNames -contains [string]$Record.Name) {
+            $ExecutablePath = [string]$Record.ExecutablePath
+            if (
+                [string]::IsNullOrWhiteSpace($ExecutablePath) -or
+                -not (Test-PathIsWithinRoot -CandidatePath $ExecutablePath -RootPath $CanonicalRoot)
+            ) {
+                throw (
+                    "Refusing timeout cleanup: process $($Record.ProcessId) " +
+                    "$($Record.Name) is not proven to belong to UE " +
+                    "$ExpectedMajorVersion.$ExpectedMinorVersion at $CanonicalRoot."
+                )
+            }
+        }
+    }
+
+    $Ordered = @($Selected | Sort-Object {
+        -1 * [int]$DepthById[[int]$_.ProcessId]
+    })
+    foreach ($Record in $Ordered) {
+        $null = & $StopProcessAction $Record
+        Write-Output $Record
+    }
+}
+
 Export-ModuleMember -Function @(
     "Get-UnrealEngineBuildVersion",
     "Assert-UnrealEngineVersion",
     "Test-PathIsWithinRoot",
     "Get-EngineOwnedUnrealProcesses",
-    "Stop-EngineOwnedUnrealProcesses"
+    "Stop-EngineOwnedUnrealProcesses",
+    "Stop-ValidatedUnrealProcessTree"
 )
