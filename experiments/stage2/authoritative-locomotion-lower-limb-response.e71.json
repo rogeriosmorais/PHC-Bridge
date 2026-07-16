@@ -1,0 +1,22 @@
+{
+  "schema_version": "physanim-experiment-result/v1",
+  "experiment_id": "E71",
+  "status": "UNSUPPORTED_WORSE_TOTAL_COST",
+  "baseline_commit": "5ca6daab19b85ef5f8a006a5cab4e5fea6ef583c",
+  "behavior_commit": "475209acef9ab43b69c422f993dc3da9f22215d4",
+  "screen_run": "test-results/scripted-locomotion/e71-authoritative-damping/Normal-1",
+  "observed": {
+    "control_gain_readback_min": 21,
+    "pose_search_non_idle_samples": 45,
+    "shell_path_length_cm": 211.80000288784504,
+    "yaw_delta_deg": 30.0,
+    "baseline_stability_cost_auc": 83.57994904837547,
+    "candidate_stability_cost_auc": 86.52085962540261,
+    "candidate_minus_baseline_auc": 2.940910577027139,
+    "cruise_mean_root_tilt_deg": 13.303070418039958,
+    "moving_turn_mean_root_tilt_deg": 25.500209384494358,
+    "deceleration_mean_root_tilt_deg": 31.58993869357639,
+    "settle_mean_root_tilt_deg": 4.2251279131816855
+  },
+  "conclusion": "The existing thigh/calf damping profile slightly reduced cruise and turn tilt but increased total cost through acceleration, deceleration, and settle interactions. Reject and revert. The next isolated variable is the locomotion-only 1.5 policy strength amplification inherited from standing."
+}
