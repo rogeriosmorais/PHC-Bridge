@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimFrameContract.h"
 #include "PhysAnimLogger.h"
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
 #include "PhysAnimProtoMannyAdapter.h"
@@ -256,6 +257,47 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			OutError))
 		{
 			return;
+		}
+
+		if (ShouldUseBridgeTrajectoryPoseSearchState(RuntimeState))
+		{
+			if (!bBridgePoseSearchTrajectoryInitialized)
+			{
+				OutError = TEXT("E80 locomotion mimic placement requires an initialized Pose Search trajectory.");
+				return;
+			}
+			const FTransformTrajectorySample CurrentTrajectorySample =
+				BridgePoseSearchTrajectory.GetSampleAtTime(0.0f, true);
+			const PhysAnimFrameContract::FWorldTransformCm CurrentQueryWorldRoot(
+				CurrentTrajectorySample.GetTransform());
+			TArray<PhysAnimFrameContract::FWorldTransformCm> FutureQueryWorldRoots;
+			FutureQueryWorldRoots.Reserve(FuturePoseSamples.Num());
+			for (const FPhysAnimFuturePoseSample& FuturePose : FuturePoseSamples)
+			{
+				const FTransformTrajectorySample FutureTrajectorySample =
+					BridgePoseSearchTrajectory.GetSampleAtTime(
+						FuturePose.FutureTimeSeconds,
+						true);
+				FutureQueryWorldRoots.Add(
+					PhysAnimFrameContract::FWorldTransformCm(
+						FutureTrajectorySample.GetTransform()));
+			}
+
+			TArray<FPhysAnimFuturePoseSample> TrajectoryPlacedFuturePoses;
+			if (!PhysAnimFrameContract::PlaceProtoFuturePosesOnWorldTrajectory(
+				FuturePoseSamples,
+				CurrentQueryWorldRoot,
+				FutureQueryWorldRoots,
+				PhysAnimFrameContract::FProtoWorldCanonicalTransformMeters(
+					MimicTargetReferenceWorldRoot),
+				PhysAnimFrameContract::FProtoAnimationDataCanonicalTransformMeters(
+					MimicTargetReferenceDataRoot),
+				TrajectoryPlacedFuturePoses,
+				OutError))
+			{
+				return;
+			}
+			FuturePoseSamples = MoveTemp(TrajectoryPlacedFuturePoses);
 		}
 
 #if WITH_DEV_AUTOMATION_TESTS
