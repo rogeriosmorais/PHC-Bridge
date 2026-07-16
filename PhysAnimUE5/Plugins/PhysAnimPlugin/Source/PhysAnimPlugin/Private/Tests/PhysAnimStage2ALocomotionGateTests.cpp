@@ -13,7 +13,7 @@ bool FPhysAnimStage2ALocomotionGateTest::RunTest(const FString& Parameters)
 	// Helper to reset to "Allowed" state
 	auto ResetToAllowed = [TestComp]() {
 		TestComp->RuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
-		TestComp->BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked;
+		TestComp->BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::GameplayShellObservedOnly;
 		TestComp->BridgeShellState.bInitialized = true;
 		TestComp->bPolicyTargetsAppliedLastFrame = true;
 		TestComp->PolicyControlTicksExecuted = 1;
@@ -53,12 +53,11 @@ bool FPhysAnimStage2ALocomotionGateTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("GATE-04 Denied when SimRoot attempted"), (uint8)Result, (uint8)EStage2ALocomotionTerminalState::Denied_SimRootAttempted);
 	}
 
-	// Case: Denied_ShellRootUnlocked
+	// Case: production standing state owns shell authority without activating the explicit transition lock.
 	{
 		ResetToAllowed();
-		TestComp->BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::GameplayShellObservedOnly;
 		EStage2ALocomotionTerminalState Result = TestComp->EvaluateStage2ALocomotionRequestGate();
-		TestEqual(TEXT("GATE-05 Denied when shell root unlocked"), (uint8)Result, (uint8)EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked);
+		TestEqual(TEXT("GATE-05 Production standing shell authority is accepted"), (uint8)Result, (uint8)EStage2ALocomotionTerminalState::Allowed);
 	}
 
 	// Case: Denied_ShellRootUnlocked (bInitialized=false)
@@ -92,6 +91,7 @@ bool FPhysAnimStage2ALocomotionGateTest::RunTest(const FString& Parameters)
 		ResetToAllowed();
 		TestComp->RuntimeState = EPhysAnimRuntimeState::LocomotionActiveShell;
 		TestComp->Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+		TestComp->BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Locomoting;
 		EStage2ALocomotionTerminalState Result = TestComp->EvaluateStage2ALocomotionRequestGate();
 		TestEqual(TEXT("GATE-10 LocomotionActiveShell re-entry allowed when request is active"), (uint8)Result, (uint8)EStage2ALocomotionTerminalState::Allowed);
 	}

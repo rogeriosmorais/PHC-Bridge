@@ -63,7 +63,7 @@ bool FPhysAnimScriptedLocomotionRuntimeTest::RunTest(const FString& Parameters)
 	{
 		Fixture.Actor->SetActorLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator, false);
 		TestComp->RuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
-		TestComp->BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked;
+		TestComp->BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::GameplayShellObservedOnly;
 		TestComp->BridgeShellState = FBridgeShellState();
 		TestComp->BridgeShellState.bInitialized = true;
 		TestComp->BridgeShellState.LastAcceptedActorLocation = FVector::ZeroVector;
@@ -95,6 +95,10 @@ bool FPhysAnimScriptedLocomotionRuntimeTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("SCRIPTED-07 Actor yaw is composed"), (double)Fixture.Actor->GetActorRotation().Yaw, 5.0, 1.0e-3);
 		TestEqual(TEXT("SCRIPTED-08 Accepted displacement magnitude is 1.5 cm"), (double)TestComp->BridgeShellState.AcceptedWorldDeltaCm.Size2D(), 1.5, 1.0e-3);
 		TestTrue(TEXT("SCRIPTED-09 Telemetry identifies scripted locomotion"), TestComp->LastStage2ALocomotionTelemetryLine.Contains(TEXT("locomotion_intent=ScriptedLocomotion")));
+		TestTrue(
+			TEXT("SCRIPTED-09B A second locomotion step continues without reopening the standing gate"),
+			TestComp->TryActivateStage2AScriptedLocomotionIntent(0.05f, 0.5f, 0.0f, true));
+		TestEqual(TEXT("SCRIPTED-09C Two half-speed steps travel 3 cm"), (double)Fixture.Actor->GetActorLocation().Size2D(), 3.0, 1.0e-3);
 	}
 
 	// Red contract 2: destructive control applies the same shell transform but hides trajectory conditioning.

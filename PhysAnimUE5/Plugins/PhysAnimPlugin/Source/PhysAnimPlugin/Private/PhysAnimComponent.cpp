@@ -2087,8 +2087,13 @@ bool UPhysAnimComponent::IsStage2APolicyOutputActive() const
 
 bool UPhysAnimComponent::IsStage2AShellRootLocked() const
 {
-	return BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked
-		&& BridgeShellState.bInitialized;
+	const bool bStandingRuntimeOwnsShell = IsTransitionOwnedShellLocked();
+	const bool bActiveLocomotionOwnsShell =
+		RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell &&
+		Stage2ALocomotionRequestState == EBridgeLocomotionRequestState::LocomotionRequested &&
+		BridgeLocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle;
+	return BridgeShellState.bInitialized &&
+		(bStandingRuntimeOwnsShell || bActiveLocomotionOwnsShell);
 }
 
 const TCHAR* UPhysAnimComponent::Stage2ATerminalStateToString(EStage2ALocomotionTerminalState TerminalState)
