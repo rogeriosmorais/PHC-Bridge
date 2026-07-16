@@ -10,6 +10,7 @@ import pytest
 from scripts.evaluate_scripted_locomotion_protocol import (
     ProtocolLinkageError,
     _resolve_step,
+    validate_protocol_identity_and_observed_schedule,
     validate_protocol_linkage,
 )
 
@@ -126,6 +127,19 @@ def test_authoritative_protocol_linkage_accepts_exact_protocol_and_evidence(tmp_
     assert result["protocol_version"] == 2
     assert result["physics_samples"] == 600
     assert result["policy_samples"] == 300
+
+
+def test_protocol_identity_can_pass_while_complete_evidence_is_invalid(tmp_path: Path) -> None:
+    manifest_path = _make_valid_run(tmp_path)
+    policy_path = tmp_path / "policy.jsonl"
+    rows = policy_path.read_text(encoding="utf-8").splitlines()[:188]
+    policy_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    identity = validate_protocol_identity_and_observed_schedule(manifest_path)
+    assert identity["valid"] is True
+    assert identity["policy_samples"] == 188
+    with pytest.raises(ProtocolLinkageError, match="policy stream is shorter"):
+        validate_protocol_linkage(manifest_path)
 
 
 def test_authoritative_protocol_linkage_rejects_hash_only_metadata(tmp_path: Path) -> None:

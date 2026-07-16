@@ -99,7 +99,11 @@ def _resolve_step(protocol: dict[str, Any], time_sec: float) -> tuple[str, float
     return "Settle", 0.0, False
 
 
-def validate_protocol_linkage(manifest_path: Path | str) -> dict[str, Any]:
+def _validate_protocol_linkage_impl(
+    manifest_path: Path | str,
+    *,
+    require_complete_streams: bool,
+) -> dict[str, Any]:
     manifest_path = Path(manifest_path).resolve()
     manifest = _read_json(manifest_path, "run manifest")
     _require_fields(
@@ -208,10 +212,11 @@ def validate_protocol_linkage(manifest_path: Path | str) -> dict[str, Any]:
 
     physics_required = protocol["sample_streams"]["physics"]["required_fields"]
     policy_required = protocol["sample_streams"]["policy"]["required_fields"]
-    if len(physics_rows) < int(protocol["sample_streams"]["physics"]["minimum_samples"]):
-        raise ProtocolLinkageError("physics stream is shorter than the protocol minimum")
-    if len(policy_rows) < int(protocol["sample_streams"]["policy"]["minimum_samples"]):
-        raise ProtocolLinkageError("policy stream is shorter than the protocol minimum")
+    if require_complete_streams:
+        if len(physics_rows) < int(protocol["sample_streams"]["physics"]["minimum_samples"]):
+            raise ProtocolLinkageError("physics stream is shorter than the protocol minimum")
+        if len(policy_rows) < int(protocol["sample_streams"]["policy"]["minimum_samples"]):
+            raise ProtocolLinkageError("policy stream is shorter than the protocol minimum")
 
     fixed_delta = float(protocol["script"]["fixed_delta_time_sec"])
     nominal_speed = float(protocol["script"]["nominal_speed_cm_per_sec"])
@@ -250,6 +255,7 @@ def validate_protocol_linkage(manifest_path: Path | str) -> dict[str, Any]:
 
     return {
         "valid": True,
+        "complete_streams_required": require_complete_streams,
         "manifest_path": str(manifest_path),
         "protocol_path": str(protocol_path),
         "protocol_sha256": protocol_sha,
@@ -262,6 +268,14 @@ def validate_protocol_linkage(manifest_path: Path | str) -> dict[str, Any]:
     }
 
 
+def validate_protocol_identity_and_observed_schedule(manifest_path: Path | str) -> dict[str, Any]:
+    return _validate_protocol_linkage_impl(manifest_path, require_complete_streams=False)
+
+
+def validate_protocol_linkage(manifest_path: Path | str) -> dict[str, Any]:
+    return _validate_protocol_linkage_impl(manifest_path, require_complete_streams=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Validate authoritative protocol linkage for one scripted-locomotion product run."
@@ -269,11 +283,44 @@ def main() -> int:
     parser.add_argument("manifest", type=Path)
     args = parser.parse_args()
     try:
-        result = validate_protocol_linkage(args.manifest)
+        identity_result = validate_protocol_identity_and_observed_schedule(args.manifest)
     except ProtocolLinkageError as exc:
-        print(json.dumps({"valid": False, "error": str(exc)}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "protocol_linkage_valid": False,
+                    "evidence_valid": False,
+                    "error": str(exc),
+                },
+                indent=2,
+            )
+        )
         return 1
-    print(json.dumps(result, indent=2))
+    try:
+        complete_result = validate_protocol_linkage(args.manifest)
+    except ProtocolLinkageError as exc:
+        print(
+            json.dumps(
+                {
+                    "protocol_linkage_valid": True,
+                    "evidence_valid": False,
+                    "protocol": identity_result,
+                    "error": str(exc),
+                },
+                indent=2,
+            )
+        )
+        return 1
+    print(
+        json.dumps(
+            {
+                "protocol_linkage_valid": True,
+                "evidence_valid": True,
+                "protocol": complete_result,
+            },
+            indent=2,
+        )
+    )
     return 0
 
 

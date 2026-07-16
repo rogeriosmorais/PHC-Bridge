@@ -1,0 +1,36 @@
+{
+  "schema_version": "physanim-experiment-result/v1",
+  "experiment_id": "E78",
+  "status": "SUPPORTED_WITH_SEPARATE_BEHAVIOR_FAILURE",
+  "behavior_commit": "8edd31fddfb2e9bda8798173679c2ed13454e565",
+  "protocol": {
+    "path": "product-gates/scripted-locomotion.v2.json",
+    "sha256": "DA9830EC14EC659D85A4AF86CDD1CC44A3C7E57A544DD63A4A6C36C56705D381",
+    "version": 2,
+    "status": "LOCKED",
+    "v1_unchanged_sha256": "FCFA625F759BC268A6A9B624A28E4AC2BF518A3FA568586BD02A25B7E23F2F87"
+  },
+  "fast_validation": {
+    "unreal_test_family": "PhysAnim.Locomotion",
+    "unreal_tests_passed": 6,
+    "python_linkage_tests_passed": 6,
+    "diagnostics": "clean"
+  },
+  "authoritative_product_probe": {
+    "run_root": "test-results/scripted-locomotion/e78-authoritative-product-v2",
+    "variant": "Normal",
+    "repetition": 1,
+    "protocol_linkage_valid": true,
+    "complete_product_evidence_valid": false,
+    "invalid_reason": "policy stream is shorter than protocol minimum: 188 < 270",
+    "physics_samples": 601,
+    "policy_samples": 188,
+    "shell_path_length_cm": 211.80000194907188,
+    "yaw_delta_deg": 30.0,
+    "final_runtime_state": "FailStopped",
+    "final_root_shell_tracking_error_cm": 780.9942310310482,
+    "max_root_shell_tracking_error_cm": 790.9884275291433
+  },
+  "conclusion": "Protocol linkage is now authoritative rather than declarative. The fixture loads the locked v2 bytes before PIE and derives map, fixed timestep, phase schedule, nominal speed, capture window, and acceptance thresholds from the parsed object. The manifest emits the exact SHA-256 and complete resolved configuration, and an independent evaluator verifies them plus observed phases and intents. The current E77 controller behavior remains a separate failure and cannot be promoted or included in a final causal bundle.",
+  "next": "Do not run more coordinate hypotheses through full Chaos. Build a typed pure frame-adaptation layer and deterministic replay/factorial fixture, then use the surviving contract in one bounded product run."
+}
