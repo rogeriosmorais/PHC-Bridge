@@ -1535,6 +1535,7 @@ public:
 		TArray<float>& InOutActions);
 	static bool IsCausalPolicyControlRuntimeState(EPhysAnimRuntimeState InRuntimeState);
 	static bool ShouldUseBalanceIdlePoseSearchState(EPhysAnimRuntimeState InRuntimeState);
+	static bool ShouldUseBridgeTrajectoryPoseSearchState(EPhysAnimRuntimeState InRuntimeState);
 	static float ResolveCausalStandingPolicyStrengthFactor(
 		bool bStandingPolicyMode,
 		bool bFirstActiveStandingPolicyCaptured,

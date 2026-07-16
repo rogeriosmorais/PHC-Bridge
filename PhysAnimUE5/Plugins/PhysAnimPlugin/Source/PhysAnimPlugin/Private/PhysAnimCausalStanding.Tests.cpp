@@ -881,6 +881,18 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("E64 denied locomotion does not masquerade as standing idle Pose Search"),
 		UPhysAnimComponent::ShouldUseBalanceIdlePoseSearchState(
 			EPhysAnimRuntimeState::LocomotionActiveShellDenied));
+	TestTrue(
+		TEXT("E65 active locomotion routes to bridge-trajectory Pose Search"),
+		UPhysAnimComponent::ShouldUseBridgeTrajectoryPoseSearchState(
+			EPhysAnimRuntimeState::LocomotionActiveShell));
+	TestFalse(
+		TEXT("E65 standing does not route to bridge-trajectory Pose Search"),
+		UPhysAnimComponent::ShouldUseBridgeTrajectoryPoseSearchState(
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(
+		TEXT("E65 denied locomotion does not route to bridge-trajectory Pose Search"),
+		UPhysAnimComponent::ShouldUseBridgeTrajectoryPoseSearchState(
+			EPhysAnimRuntimeState::LocomotionActiveShellDenied));
 	TestEqual(
 		TEXT("E63 production locomotion retains proven policy authority"),
 		UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(

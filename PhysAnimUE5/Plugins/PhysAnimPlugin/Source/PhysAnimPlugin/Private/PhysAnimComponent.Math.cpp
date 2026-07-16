@@ -995,6 +995,12 @@ bool UPhysAnimComponent::ShouldUseBalanceIdlePoseSearchState(
 	return InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
 }
 
+bool UPhysAnimComponent::ShouldUseBridgeTrajectoryPoseSearchState(
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return InRuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell;
+}
+
 float UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
 	bool bStandingPolicyMode,
 	bool bFirstActiveStandingPolicyCaptured,

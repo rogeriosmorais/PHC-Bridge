@@ -60,7 +60,8 @@ bool UPhysAnimComponent::QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchRe
 	}
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	if (ShouldUseBridgeOwnedMovementDrive(EffectiveSettings))
+	if (ShouldUseBridgeTrajectoryPoseSearchState(RuntimeState) ||
+		ShouldUseBridgeOwnedMovementDrive(EffectiveSettings))
 	{
 		FString TrajectoryError;
 		if (QueryPoseSearchWithBridgeTrajectory(OutSearchResult, TrajectoryError))
