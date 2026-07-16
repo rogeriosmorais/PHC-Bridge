@@ -1,0 +1,31 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E78",
+  "title": "Authoritative scripted-locomotion protocol loading",
+  "status": "PREREGISTERED",
+  "baseline_commit": "409f897",
+  "problem": "Post-E69 scripted locomotion executes a 160 cm/s, 1.0/1.6/2.1/2.4/3.0 second schedule while manifests declare locked scripted-locomotion.v1, whose authoritative values are 60 cm/s and 1.0/2.0/4.0/5.0/6.0 seconds. The fixture copies a protocol path but does not load or enforce the file.",
+  "single_change": "Introduce a pure versioned protocol parser/resolver, create scripted-locomotion.v2.json for the E69 schedule, and make the fixture load schedule, fixed timestep, map, capture duration, and acceptance thresholds from the selected protocol before PIE. Emit the exact protocol SHA-256 and resolved protocol fields in evidence.",
+  "locked_invariants": [
+    "scripted-locomotion.v1.json is never edited",
+    "No Pose Search, policy, Physics Control, Chaos, frame conversion, gain, or action behavior changes",
+    "E78 product runs use scripted-locomotion.v2.json",
+    "A missing, malformed, unlocked, or internally inconsistent protocol invalidates the run before PIE",
+    "Runtime phase resolution and nominal speed are derived only from the loaded protocol object",
+    "Manifest protocol_path, protocol_sha256, protocol_id, protocol_version, and resolved script values match the loaded bytes"
+  ],
+  "tdd_red": [
+    "v1 loader returns its original 60 cm/s and 1.0/2.0/4.0/5.0/6.0 boundaries",
+    "v2 loader returns 160 cm/s and 1.0/1.6/2.1/2.4/3.0 boundaries",
+    "phase resolver uses the loaded protocol rather than compile-time constants",
+    "malformed or non-LOCKED protocols fail validation",
+    "fixture configuration selects v2 and exposes its loaded hash and schedule"
+  ],
+  "acceptance": [
+    "Focused protocol tests pass",
+    "Existing scripted schedule test passes using loaded v2",
+    "Existing Stage2A tests pass",
+    "A product evidence manifest identifies v2 and contains its actual SHA-256 and resolved schedule",
+    "No runtime schedule constant remains in PhysAnimCausalStanding.Tests.cpp"
+  ]
+}
