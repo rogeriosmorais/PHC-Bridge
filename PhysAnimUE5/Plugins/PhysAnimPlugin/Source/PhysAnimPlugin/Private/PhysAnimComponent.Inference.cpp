@@ -294,7 +294,9 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 			FirstActiveStandingConditionedActionsForTesting);
 #endif
 		PreviousConditionedActionBuffer = ConditionedActionBuffer;
-		const bool bCaptureMetrics = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		const bool bCaptureMetrics =
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+			RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell ||
 			((RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
 			  RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
 			  RuntimeState == EPhysAnimRuntimeState::ReadyForActivation) && bLiveRuntimeEvidenceProofActive);
