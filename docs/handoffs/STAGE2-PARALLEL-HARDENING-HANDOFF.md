@@ -13,6 +13,7 @@ The main runtime branch was not modified. Each track lives in an isolated worktr
 | `parallel/asset-audit` | `c03f93c59dfaec65c99100c7aa7026d59cf579b3` | Durable automation success report for the corpus audit |
 | `parallel/evidence-audit` | `8acd78ce09620e504b74090d30d814fdf33a7dc5` | Experiment/result/manifest/artifact/protocol consistency scanner |
 | `parallel/evidence-audit` | `1db23c289826bca1cb92230e8203c35c246ae393` | Adversarial causal locomotion endpoint library and bundle-membership checks |
+| `parallel/evidence-audit` | `a83b8b4a6b0474a32c47e8f9240f3f8efdd2aa82` | Cross-platform locked-policy hashing; normalizes line endings before digest verification |
 | `parallel/run-orchestration` | `99898c82d42e61d5a614df119ef873fbd766fe9c` | Single-process Unreal episode runner and fixture validator |
 | `parallel/run-orchestration` | `315bce679326c44843ef6eb3e20a7774cc6f024f` | Authority/environment fingerprint and determinism-level contract |
 | `parallel/stage2-docs` | `b62a2ec5f7dc962d2079467ffb6bcc8139fffee4` | Stage 2A claim, authority, frame glossary, and architecture diagrams |
@@ -25,6 +26,7 @@ The main runtime branch was not modified. Each track lives in an isolated worktr
 - UE automation fixture validator: 4 Python tests passed.
 - Environment fingerprint: 3 Python tests passed.
 - Stage 2 documentation contract: 3 Python tests passed.
+- Repository fast Python tier after the line-ending fix: 138 tests passed.
 - Pose Search corpus audit: Unreal compile succeeded; `PhysAnim.Development.PoseSearchCorpusAudit` succeeded with zero warnings and zero errors.
 - All 16 expected movement assets loaded and satisfied their locked direction contracts.
 
@@ -35,6 +37,7 @@ The main runtime branch was not modified. Each track lives in an isolated worktr
 3. The full unarmed locomotion corpus confirms authored forward `+Y`, authored left `+X`, and approximately 300 cm/s walk roots; jog roots range approximately 500–600 cm/s.
 4. Causal endpoints now expose statue behavior, reversed progress, lateral divergence, forbidden assistance, tracking error over time, and selective/duplicated bundle membership without defining protocol-v2 thresholds.
 5. The orchestration wrapper avoids the observed Boolean-string and bridge-timeout relaunch failures by generating a typed child invocation and polling the same process.
+6. The locked impact-policy digest matched LF bytes but failed on CRLF checkouts. The fix canonicalizes only line endings before hashing, preserving the locked logical content and restoring the fast test tier on Windows.
 
 ## Integration order
 
@@ -42,7 +45,7 @@ Recommended low-conflict order:
 
 1. `eb08dff` — policy contract and independent builder.
 2. `2d41e3f`, then `c03f93c` — corpus audit and durable report.
-3. `8acd78c`, then `1db23c2` — evidence audit and causal metrics.
+3. `8acd78c`, then `1db23c2`, then `a83b8b4` — evidence audit, causal metrics, and cross-platform locked-policy hashing.
 4. `99898c8`, then `315bce6` — runner, validator, and fingerprint.
 5. `b62a2ec` — architecture and Stage 2A claim documentation.
 
