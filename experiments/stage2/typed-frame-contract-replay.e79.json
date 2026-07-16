@@ -1,0 +1,68 @@
+{
+  "schema_version": "physanim-experiment-result/v1",
+  "experiment_id": "E79",
+  "status": "SUPPORTED",
+  "baseline_commit": "61e0409481be1baef97f086feee0c41833a959e8",
+  "date": "2026-07-16",
+  "runtime_behavior_changed": false,
+  "tests": {
+    "PhysAnim.Frames.TypedRoundTrips": "PASS",
+    "PhysAnim.Frames.TypedPolicyTensors": "PASS",
+    "PhysAnim.Frames.LocomotionReplayMatrix": "PASS",
+    "PhysAnim.Locomotion.FrameAdapter.ReplayContract": "PASS",
+    "PhysAnim.Locomotion.FrameAdapter.Factorial": "PASS"
+  },
+  "typed_engine": {
+    "private_header": "PhysAnimFrameContract.h",
+    "private_implementation": "PhysAnimFrameContract.cpp",
+    "non_interchangeable_types": [
+      "world position cm",
+      "world velocity cm/s",
+      "actor facing",
+      "mesh facing",
+      "world transform cm",
+      "animation-data transform cm",
+      "canonical Proto transform meters"
+    ],
+    "pure_functions": [
+      "WorldTrajectoryToPoseSearchQuery",
+      "WorldTransformToAnimationData",
+      "AnimationDataTransformToWorld",
+      "PlaceAnimationPoseOnTrajectory",
+      "AnimationPoseToCanonicalProtoPose",
+      "CanonicalBodyToPolicyObservation",
+      "AnimationFutureToPolicyMimicTarget"
+    ]
+  },
+  "factorial": {
+    "case_count": 8,
+    "survivor_count": 1,
+    "survivor": {
+      "query_contract": "E77_MeshFacing_WorldVelocity",
+      "future_root_source": "QueryTrajectoryRootMotion",
+      "selected_asset": "Walk_Fwd",
+      "route_projection_cm_at_0_5_sec": 80.0,
+      "future_root_speed_cm_per_sec": 160.0,
+      "speed_relative_error": 0.0,
+      "turn_delta_deg": 30.0
+    },
+    "current_e77_raw_root": {
+      "selected_asset": "Walk_Fwd",
+      "route_projection_cm_at_0_5_sec": 150.0,
+      "future_root_speed_cm_per_sec": 300.0,
+      "speed_relative_error": 0.875,
+      "turn_delta_deg": 0.0,
+      "failed": [
+        "requested_speed_match",
+        "turn_sign_and_magnitude"
+      ]
+    },
+    "e74_trajectory_root": {
+      "failed": [
+        "world_query_velocity_preserved"
+      ]
+    }
+  },
+  "conclusion": "The coordinate search no longer needs full Chaos. The unique algebraic contract keeps Pose Search mesh-facing while preserving the authoritative world velocity, maps current and future through one selected world-to-data transform, and places animation-relative body pose on the query-trajectory root. Raw animation root motion is rejected because it advances about 300 cm/s and omits the requested turn against the 160 cm/s scripted shell contract.",
+  "next": "E80 may change only future-root placement to the unique survivor. No other frame, policy, gain, action, protocol, or shell variable may change before one authoritative v2 probe."
+}
