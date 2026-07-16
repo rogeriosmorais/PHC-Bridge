@@ -1,0 +1,22 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E66",
+  "title": "Preserve explicit Stage2A locomotion authority during trajectory Pose Search",
+  "baseline_commit": "6715806809ce696a65c3670ee7bf1e2cbcab918d",
+  "date": "2026-07-15",
+  "observed_failure": {
+    "e65_script_step_failures": 298,
+    "path_length_cm": 0.21500010788440704,
+    "terminal_denial": "Denied_NotBalanceActiveStanding",
+    "code_cause": "UpdateBridgeLocomotionAuthorityState resets BridgeLocomotionAuthorityState and Stage2ALocomotionRequestState whenever IsTransitionOwnedShellLocked is true; IsTransitionOwnedShellLocked includes LocomotionActiveShell"
+  },
+  "hypothesis": "An explicitly authorized LocomotionActiveShell episode must retain its request and authority state while trajectory Pose Search updates. The transition-lock reset remains correct for balance entry, standing, pending balance start, denied locomotion, and unrequested locomotion.",
+  "single_behavior_change": "Exclude only RuntimeState=LocomotionActiveShell with Stage2ALocomotionRequestState=LocomotionRequested from the transition-owned shell reset inside UpdateBridgeLocomotionAuthorityState.",
+  "tdd_contract": [
+    "Explicit active shell locomotion preserves its request and non-idle locomotion authority when the trajectory state machine updates.",
+    "LocomotionActiveShell without LocomotionRequested is still reset.",
+    "BalanceActive_Standing, balance entry states, and pending balance requests retain existing reset behavior.",
+    "No speed, trajectory threshold, animation asset, policy scale, gain, shell motion, or script value changes."
+  ],
+  "next_if_supported": "Rerun E60 Normal-1 and inspect selected animation, path completion, and locked causal cost."
+}
