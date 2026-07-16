@@ -30,6 +30,7 @@ param(
 
     [switch]$AllowDirty,
     [switch]$SkipCompile,
+    [switch]$PolicyInputProvenanceTrace,
     [switch]$DryRun
 )
 
@@ -97,6 +98,11 @@ $Protocol = Get-Content -Raw -LiteralPath $ProtocolPath | ConvertFrom-Json
 if ($Protocol.status -ne "LOCKED") {
     Write-Error "INVALID: protocol must declare status LOCKED: $ProtocolPath"
     exit 2
+}
+if ($PolicyInputProvenanceTrace -and
+    $Protocol.test_family -eq "PhysAnim.Product.ScriptedLocomotion" -and
+    $RequiredArtifactFields -notcontains "locomotion_frame_replay") {
+    $RequiredArtifactFields += "locomotion_frame_replay"
 }
 
 if (-not $ModelPath) {
@@ -186,6 +192,7 @@ $Plan = [ordered]@{
     test_mode = $TestMode
     timeout_seconds = $TimeoutSeconds
     compile_before_run = -not $SkipCompile
+    policy_input_provenance_trace = [bool]$PolicyInputProvenanceTrace
     required_artifact_fields = $RequiredArtifactFields
 }
 
@@ -213,6 +220,7 @@ $EscapedSourceCommit = $SourceCommit.Replace("'", "''")
 $EscapedModelHash = $ModelHash.Replace("'", "''")
 $SkipBuildLiteral = if ($SkipCompile) { '$true' } else { '$false' }
 $DirtyLiteral = if ($SourceTreeDirty) { '$true' } else { '$false' }
+$PolicyInputProvenanceLiteral = if ($PolicyInputProvenanceTrace) { '$true' } else { '$false' }
 
 $Invocation = @"
 `$ErrorActionPreference = 'Stop'
@@ -228,6 +236,7 @@ $Invocation = @"
     SourceCommit = '$EscapedSourceCommit'
     ModelOnnxSha256 = '$EscapedModelHash'
     SourceTreeDirty = $DirtyLiteral
+    PolicyInputProvenanceTrace = $PolicyInputProvenanceLiteral
 }
 & '$EscapedBuildScript' @Parameters
 exit `$LASTEXITCODE
