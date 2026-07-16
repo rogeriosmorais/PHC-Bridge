@@ -1,0 +1,29 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E72",
+  "title": "Remove standing-only policy strength amplification during active shell locomotion",
+  "baseline_commit": "e1821b9bf9d56c9bb55134cefc9f9ad6ae9ec4bf",
+  "date": "2026-07-16",
+  "observed_failure": {
+    "normal_stability_cost_auc": 83.57994904837547,
+    "zero_actions_stability_cost_auc": 62.317112063324664,
+    "normal_to_zero_ratio": 1.341203716397994,
+    "moving_root_tilt_normal_deg": {
+      "Cruise": 14.6297225634257,
+      "MovingTurn": 28.042778650919598,
+      "Deceleration": 31.034517659081352
+    },
+    "strength_inheritance": "ResolveCausalStandingPolicyStrengthFactor returns 1.5 for both BalanceActive_Standing and LocomotionActiveShell. The 1.5 factor was established by standing experiments before LocomotionActiveShell existed and has not been causally validated for moving references."
+  },
+  "hypothesis": "Retaining the proven 1.5 strength only in BalanceActive_Standing while using identity strength 1.0 in LocomotionActiveShell will reduce action-driven moving tilt without suppressing policy actions or changing Pose Search, shell motion, target composition, or standing behavior.",
+  "single_behavior_change": "ResolveCausalStandingPolicyStrengthFactor returns 1.5 only for BalanceActive_Standing after the first active policy capture. LocomotionActiveShell returns 1.0. All other states and passive/ZeroActions modes remain unchanged.",
+  "tdd_contract": [
+    "Captured nonzero policy in BalanceActive_Standing still resolves 1.5.",
+    "Captured nonzero policy in LocomotionActiveShell resolves 1.0.",
+    "Before first active policy capture, both states resolve 1.0.",
+    "ZeroActions/passive mode resolves 1.0.",
+    "Standing production bundle focused regressions remain green.",
+    "Scripted path remains 180-260 cm, yaw remains 30 degrees, Pose Search remains non-idle, control gain readback remains 21/21, and stop returns to standing."
+  ],
+  "next_if_supported": "Run Normal and ZeroActions and evaluate the locked AUC ratio. If it passes, create protocol v2 and run the complete deterministic causal/control bundle."
+}
