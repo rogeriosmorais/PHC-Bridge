@@ -782,3 +782,13 @@ Machine-readable record: `experiments/stage1/production-scaled-delayed-neck.e51.
 **Next experiment selected.** Promote delayed left proximal scale 0.25 into production.
 
 Machine-readable record: `experiments/stage1/scaled-delayed-left-proximal.e52.json`.
+
+## E53 — Production left proximal arm at 25% after first active policy cycle (2026-07-15)
+
+**Hypothesis.** Production can reproduce E52 without any PhysAnim experimental argument.
+
+**Result.** Supported. The no-flag bundle exactly reproduced E52: Normal AUC 31.1022, ZeroActions 39.3495, ratio 0.790409. Normal and ZeroActions streams were byte-deterministic, and destructive controls remained discriminative.
+
+**Next experiment selected.** Delayed right proximal restoration at a conservative scale because little causal margin remains.
+
+Machine-readable record: `experiments/stage1/production-scaled-delayed-left-proximal.e53.json`.

@@ -1,0 +1,188 @@
+{
+  "acceptance_checks": {
+    "bundle_pass": true,
+    "normal_deterministic": true,
+    "ratio_at_most_0_8": true,
+    "timing_and_mask_contract": true,
+    "zero_deterministic": true
+  },
+  "bundle_failed_criteria": [],
+  "bundle_status": "PASS",
+  "expected_nonzero_regions": [
+    "Neck"
+  ],
+  "expected_zero_regions": [
+    "Torso",
+    "RightProximal"
+  ],
+  "first_active_checks": {
+    "DropControlDispatch-1": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "ForcedSupportLoss-1": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "Normal-1": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "Normal-2": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "Normal-3": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "ZeroActions-1": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "ZeroActions-2": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "ZeroActions-3": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    }
+  },
+  "hypothesis_verdict": "SUPPORTED",
+  "manifest_checks": {
+    "DropControlDispatch-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ForcedSupportLoss-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-2": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-3": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-2": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-3": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    }
+  },
+  "normal_deterministic": true,
+  "normal_hash_sets": {
+    "first-active-conditioned-actions.json": [
+      "16E59670B752C59AA44EEBDB63C4CEE4D3708BBA6E2EA68C06D6024888A87602"
+    ],
+    "physics.jsonl": [
+      "7E692646E9F3FC3073057D33D2AA4B77763449B441DE5CF1B29851C0B4423EF8"
+    ],
+    "policy-input-snapshot.json": [
+      "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    ],
+    "policy.jsonl": [
+      "AD40AE2A83EE2F491AE64BE5E958F368E757126D5899EA0EE4A9B244A7C58538"
+    ]
+  },
+  "normal_to_zero_recovery_auc_ratio": 0.7904090514701594,
+  "policy_checks": {
+    "DropControlDispatch-1": {},
+    "ForcedSupportLoss-1": {},
+    "Normal-1": {
+      "Neck_later_nonzero": true,
+      "RightProximal_exact_zero": true,
+      "Torso_exact_zero": true,
+      "selected_region_later_nonzero": true
+    },
+    "Normal-2": {
+      "Neck_later_nonzero": true,
+      "RightProximal_exact_zero": true,
+      "Torso_exact_zero": true,
+      "selected_region_later_nonzero": true
+    },
+    "Normal-3": {
+      "Neck_later_nonzero": true,
+      "RightProximal_exact_zero": true,
+      "Torso_exact_zero": true,
+      "selected_region_later_nonzero": true
+    },
+    "ZeroActions-1": {
+      "all_conditioned_scalars_exact_zero": true
+    },
+    "ZeroActions-2": {
+      "all_conditioned_scalars_exact_zero": true
+    },
+    "ZeroActions-3": {
+      "all_conditioned_scalars_exact_zero": true
+    }
+  },
+  "region": "LeftProximal",
+  "runner_contains_onethread": true,
+  "runner_experimental_tokens": [],
+  "scale": 0.25,
+  "schema_version": "physanim-e53-audit/v2",
+  "status": "VALID",
+  "validity_checks_pass": true,
+  "zero_deterministic": true,
+  "zero_hash_sets": {
+    "first-active-conditioned-actions.json": [
+      "0CDB154D0961A673CE36BC8D9A3F51D7E0221857E686EDFE917A8E23F038D3F3"
+    ],
+    "physics.jsonl": [
+      "3218349B7C4E2074FFFBB62832795A10D4A3AA4241BF8A453E35BC0D3E78C379"
+    ],
+    "policy-input-snapshot.json": [
+      "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    ],
+    "policy.jsonl": [
+      "2F714337B24256890CECE5FE16974CB6994F15FE432D5C6EAD02372CF4D65BE5"
+    ]
+  }
+}

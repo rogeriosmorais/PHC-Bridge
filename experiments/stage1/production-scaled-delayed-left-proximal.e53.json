@@ -1,0 +1,27 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "production-scaled-delayed-left-proximal-e53",
+  "recorded_utc": "2026-07-16T02:00:00Z",
+  "preregistration_commit": "c8dbb0fb032f9e79ae772c54ce1f62dbd5d53a8c",
+  "production_behavior_commit": "f4304db00301cbc98c9406fdf0b7a751214fe0ff",
+  "status": "VALID",
+  "hypothesis_verdict": "SUPPORTED",
+  "bundle_status": "PASS",
+  "bundle_failed_criteria": [],
+  "region": "LeftProximal",
+  "scale": 0.25,
+  "activation_timing": "after first active-policy cycle",
+  "normal_recovery_auc": [31.10216818946051, 31.10216818946051, 31.10216818946051],
+  "zero_actions_recovery_auc": [39.34945852607651, 39.34945852607651, 39.34945852607651],
+  "normal_to_zero_recovery_auc_ratio": 0.7904090514701594,
+  "normal_repetitions_byte_deterministic": true,
+  "zero_repetitions_byte_deterministic": true,
+  "production_behavior_flags": [],
+  "destructive_controls": {
+    "DropControlDispatch": {"failed_criteria": ["target_readback"]},
+    "ForcedSupportLoss": {"failed_criteria": ["support_gap"]}
+  },
+  "authoritative_bundle_artifact": "test-results/causal-standing/e53-production-left-proximal/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/production-scaled-delayed-left-proximal.e53.audit.json",
+  "next": "Screen the right proximal arm chain at a conservative delayed scale."
+}
