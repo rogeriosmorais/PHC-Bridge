@@ -1035,6 +1035,17 @@ float UPhysAnimComponent::ResolveCausalStandingRightProximalScaleAfterFirstPolic
 		: 0.0f;
 }
 
+float UPhysAnimComponent::ResolveCausalStandingTorsoScaleAfterFirstPolicy(
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+		bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		InRuntimeState)
+		? 0.0000152587890625f
+		: 0.0f;
+}
+
 bool UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
 	EPhysAnimRuntimeState InRuntimeState)
 {

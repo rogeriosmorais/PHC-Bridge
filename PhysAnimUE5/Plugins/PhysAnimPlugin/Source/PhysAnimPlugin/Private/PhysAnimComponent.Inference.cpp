@@ -204,7 +204,9 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 		OutError);
 	if (bSuccess)
 	{
-		float TorsoScale = 0.0f;
+		float TorsoScale = ResolveCausalStandingTorsoScaleAfterFirstPolicy(
+			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+			RuntimeState);
 		float SpineChestScale = 1.0f;
 		float NeckScale = ResolveCausalStandingNeckScaleAfterFirstPolicy(
 			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,

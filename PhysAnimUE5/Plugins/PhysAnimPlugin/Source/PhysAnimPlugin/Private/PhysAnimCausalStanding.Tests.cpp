@@ -599,6 +599,24 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			true,
 			EPhysAnimRuntimeState::Standing_PolicyBlend),
 		0.0f);
+	TestEqual(
+		TEXT("E58 production Torso remains masked on the first active-policy inference"),
+		UPhysAnimComponent::ResolveCausalStandingTorsoScaleAfterFirstPolicy(
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		0.0f);
+	TestEqual(
+		TEXT("E58 production Torso restores at the validated tiny scale after an earlier active-policy inference"),
+		UPhysAnimComponent::ResolveCausalStandingTorsoScaleAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		0.0000152587890625f);
+	TestEqual(
+		TEXT("E58 production Torso remains masked outside active standing"),
+		UPhysAnimComponent::ResolveCausalStandingTorsoScaleAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend),
+		0.0f);
 	Component->ApplyProductVariantFromCommandLineForTesting(
 		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCausalStandingUpperBody=SpineChest"));
 	TestTrue(
