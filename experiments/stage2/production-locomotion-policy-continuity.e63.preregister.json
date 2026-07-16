@@ -1,0 +1,36 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E63",
+  "title": "Preserve production policy-control continuity in LocomotionActiveShell",
+  "baseline_commit": "9c4d7064f65a9ea01f49765c675d3dadaeca36a1",
+  "date": "2026-07-15",
+  "observed_failure": {
+    "run": "E60 Normal-1 on E62 candidate",
+    "locomotion_gate_opened": true,
+    "successful_motion_steps": 6,
+    "shell_path_length_cm": 0.8250003457069397,
+    "policy_samples": 31,
+    "locomotion_strength_multiplier": 0.0,
+    "final_runtime_state": "FailStopped"
+  },
+  "hypothesis": "LocomotionActiveShell can continue the E58 production policy-control path without changing its calibrated action scales or gains: policy inference remains active, all-joint conditioning uses the E58 scales and component-axis adapter, Physics Control retains the published 1.5 strength multiplier, and target dispatch remains live until the scripted stop transition.",
+  "single_behavior_change": "Introduce one shared causal-policy-control runtime-state predicate covering standing activation states plus LocomotionActiveShell, and use it only for policy inference/action conditioning, target dispatch, production control publication, zero-actions behavior, and bridge-physics ownership.",
+  "explicit_exclusions": [
+    "Do not apply StandingActivation.ObserveStanding while moving.",
+    "Do not alter E58 joint scales or strength values.",
+    "Do not relax instability thresholds or fail-stop behavior.",
+    "Do not change the E60 script, speed, yaw, shell transform, CMC, capsule, or root authority.",
+    "Do not include LocomotionActiveShellDenied or any terminal state."
+  ],
+  "tdd_contract": [
+    "LocomotionActiveShell is a causal policy-control runtime state; LocomotionActiveShellDenied is not.",
+    "Component-axis action interpretation remains active in LocomotionActiveShell.",
+    "Delayed all-joint regions retain their E58 production scales in LocomotionActiveShell after the first active policy snapshot.",
+    "Production policy strength remains 1.5 in LocomotionActiveShell after the first active policy snapshot.",
+    "ZeroActions still forces all actions to zero in LocomotionActiveShell.",
+    "ApplyControlTargets treats LocomotionActiveShell as policy-influence active.",
+    "TickRuntimeStateMachine republishes E58 Physics Control topology/gains in LocomotionActiveShell without calling standing observation/failure evaluation.",
+    "Policy liveness continues to refresh from successful locomotion target writes."
+  ],
+  "next_if_supported": "Rerun E60 Normal-1 from a clean candidate and require sustained policy samples, nonzero control strength, full scripted path, turn, stop, and settle."
+}
