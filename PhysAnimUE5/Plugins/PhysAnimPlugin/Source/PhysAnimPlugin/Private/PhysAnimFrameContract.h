@@ -72,6 +72,8 @@ namespace PhysAnimFrameContract
 	struct FWorldTransformCmTag;
 	struct FAnimationDataTransformCmTag;
 	struct FProtoCanonicalTransformMetersTag;
+	struct FProtoWorldCanonicalTransformMetersTag;
+	struct FProtoAnimationDataCanonicalTransformMetersTag;
 
 	using FWorldPositionCm = TTypedVector<FWorldPositionCmTag>;
 	using FWorldVelocityCmPerSecond = TTypedVector<FWorldVelocityCmPerSecondTag>;
@@ -85,6 +87,8 @@ namespace PhysAnimFrameContract
 	using FWorldTransformCm = TTypedTransform<FWorldTransformCmTag>;
 	using FAnimationDataTransformCm = TTypedTransform<FAnimationDataTransformCmTag>;
 	using FProtoCanonicalTransformMeters = TTypedTransform<FProtoCanonicalTransformMetersTag>;
+	using FProtoWorldCanonicalTransformMeters = TTypedTransform<FProtoWorldCanonicalTransformMetersTag>;
+	using FProtoAnimationDataCanonicalTransformMeters = TTypedTransform<FProtoAnimationDataCanonicalTransformMetersTag>;
 
 	enum class EQueryFrameContract : uint8
 	{
@@ -219,6 +223,15 @@ namespace PhysAnimFrameContract
 		const FSelectedAnimationFrameCm& SelectedFrame,
 		EFutureRootSource RootSource,
 		FPolicyMimicTargetObservation& OutObservation,
+		FString& OutError);
+
+	bool PlaceProtoFuturePosesOnWorldTrajectory(
+		const TArray<FPhysAnimFuturePoseSample>& RawFuturePoses,
+		const FWorldTransformCm& CurrentQueryWorldRoot,
+		const TArray<FWorldTransformCm>& FutureQueryWorldRoots,
+		const FProtoWorldCanonicalTransformMeters& CurrentSelectedWorldRoot,
+		const FProtoAnimationDataCanonicalTransformMeters& CurrentSelectedDataRoot,
+		TArray<FPhysAnimFuturePoseSample>& OutPlacedFuturePoses,
 		FString& OutError);
 
 	TArray<FReplayCandidateResult> EvaluateReplayMatrix(const FReplayFixture& Fixture);

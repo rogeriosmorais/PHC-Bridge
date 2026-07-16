@@ -396,6 +396,119 @@ namespace PhysAnimFrameContract
 			OutError);
 	}
 
+	bool PlaceProtoFuturePosesOnWorldTrajectory(
+		const TArray<FPhysAnimFuturePoseSample>& RawFuturePoses,
+		const FWorldTransformCm& CurrentQueryWorldRoot,
+		const TArray<FWorldTransformCm>& FutureQueryWorldRoots,
+		const FProtoWorldCanonicalTransformMeters& CurrentSelectedWorldRoot,
+		const FProtoAnimationDataCanonicalTransformMeters& CurrentSelectedDataRoot,
+		TArray<FPhysAnimFuturePoseSample>& OutPlacedFuturePoses,
+		FString& OutError)
+	{
+		OutPlacedFuturePoses.Reset();
+		OutError.Reset();
+		if (RawFuturePoses.Num() != PhysAnimBridge::NumFutureSteps ||
+			FutureQueryWorldRoots.Num() != RawFuturePoses.Num())
+		{
+			OutError = FString::Printf(
+				TEXT("E80 future pose/root count mismatch: expected %d but found poses=%d roots=%d."),
+				PhysAnimBridge::NumFutureSteps,
+				RawFuturePoses.Num(),
+				FutureQueryWorldRoots.Num());
+			return false;
+		}
+		if (!CurrentQueryWorldRoot.IsFinite() ||
+			!CurrentSelectedWorldRoot.IsFinite() ||
+			!CurrentSelectedDataRoot.IsFinite())
+		{
+			OutError = TEXT("E80 current query or selected canonical root is malformed.");
+			return false;
+		}
+
+		const FTransform& CurrentQuery = CurrentQueryWorldRoot.Get();
+		const FTransform& CurrentSelectedWorld = CurrentSelectedWorldRoot.Get();
+		const FTransform& CurrentSelectedData = CurrentSelectedDataRoot.Get();
+		const FQuat WorldToDataRotation = (
+			CurrentSelectedData.GetRotation() *
+			CurrentSelectedWorld.GetRotation().Inverse()).GetNormalized();
+
+		OutPlacedFuturePoses.Reserve(RawFuturePoses.Num());
+		for (int32 FutureIndex = 0; FutureIndex < RawFuturePoses.Num(); ++FutureIndex)
+		{
+			const FPhysAnimFuturePoseSample& RawFuture = RawFuturePoses[FutureIndex];
+			const FWorldTransformCm& FutureQueryRoot = FutureQueryWorldRoots[FutureIndex];
+			if (RawFuture.BodyTransforms.Num() != PhysAnimBridge::NumSmplBodies)
+			{
+				OutPlacedFuturePoses.Reset();
+				OutError = FString::Printf(
+					TEXT("E80 future body width mismatch at step %d: expected %d but found %d."),
+					FutureIndex,
+					PhysAnimBridge::NumSmplBodies,
+					RawFuture.BodyTransforms.Num());
+				return false;
+			}
+			if (!FutureQueryRoot.IsFinite())
+			{
+				OutPlacedFuturePoses.Reset();
+				OutError = FString::Printf(TEXT("E80 query trajectory root %d is malformed."), FutureIndex);
+				return false;
+			}
+			for (const FTransform& BodyTransform : RawFuture.BodyTransforms)
+			{
+				if (BodyTransform.ContainsNaN() || !BodyTransform.GetRotation().IsNormalized())
+				{
+					OutPlacedFuturePoses.Reset();
+					OutError = FString::Printf(TEXT("E80 raw future pose %d contains a malformed body."), FutureIndex);
+					return false;
+				}
+			}
+
+			const FTransform& FutureQuery = FutureQueryRoot.Get();
+			const FVector UeWorldDeltaCm =
+				FutureQuery.GetLocation() - CurrentQuery.GetLocation();
+			const FQuat UeWorldDeltaRotation = (
+				FutureQuery.GetRotation() * CurrentQuery.GetRotation().Inverse()).GetNormalized();
+			const FVector ProtoWorldDeltaMeters =
+				PhysAnimBridge::UeWorldPositionToProtoRuntime(UeWorldDeltaCm);
+			const FQuat ProtoWorldDeltaRotation =
+				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(UeWorldDeltaRotation);
+
+			const FVector DesiredWorldRootPosition =
+				CurrentSelectedWorld.GetLocation() + ProtoWorldDeltaMeters;
+			const FQuat DesiredWorldRootRotation = (
+				ProtoWorldDeltaRotation * CurrentSelectedWorld.GetRotation()).GetNormalized();
+			const FVector DesiredDataRootPosition =
+				CurrentSelectedData.GetLocation() +
+				WorldToDataRotation.RotateVector(
+					DesiredWorldRootPosition - CurrentSelectedWorld.GetLocation());
+			const FQuat DesiredDataRootRotation = (
+				WorldToDataRotation * DesiredWorldRootRotation).GetNormalized();
+			const FTransform DesiredDataRoot(
+				DesiredDataRootRotation,
+				DesiredDataRootPosition);
+
+			const FTransform& RawRoot = RawFuture.BodyTransforms[0];
+			const FQuat AlignmentRotation = (
+				DesiredDataRoot.GetRotation() * RawRoot.GetRotation().Inverse()).GetNormalized();
+			const FVector AlignmentTranslation =
+				DesiredDataRoot.GetLocation() -
+				AlignmentRotation.RotateVector(RawRoot.GetLocation());
+
+			FPhysAnimFuturePoseSample PlacedFuture;
+			PlacedFuture.FutureTimeSeconds = RawFuture.FutureTimeSeconds;
+			PlacedFuture.BodyTransforms.Reserve(RawFuture.BodyTransforms.Num());
+			for (const FTransform& RawBody : RawFuture.BodyTransforms)
+			{
+				PlacedFuture.BodyTransforms.Add(FTransform(
+					(AlignmentRotation * RawBody.GetRotation()).GetNormalized(),
+					AlignmentTranslation + AlignmentRotation.RotateVector(RawBody.GetLocation()),
+					RawBody.GetScale3D()));
+			}
+			OutPlacedFuturePoses.Add(MoveTemp(PlacedFuture));
+		}
+		return true;
+	}
+
 	TArray<FReplayCandidateResult> EvaluateReplayMatrix(const FReplayFixture& Fixture)
 	{
 		TArray<FReplayCandidateResult> Results;

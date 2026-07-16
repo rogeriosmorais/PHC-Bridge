@@ -258,4 +258,164 @@ bool FPhysAnimTypedPolicyTensorTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimProtoFutureTrajectoryPlacementTest,
+	"PhysAnim.Frames.ProtoFutureTrajectoryPlacement",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimProtoFutureTrajectoryPlacementTest::RunTest(const FString& Parameters)
+{
+	using namespace PhysAnimFrameContract;
+
+	const FWorldTransformCm CurrentQueryRoot(FTransform(
+		FQuat(FVector::UpVector, FMath::DegreesToRadians(-90.0)),
+		FVector(0.0, 0.0, 90.0)));
+	const FTransform CurrentSelectedWorldTransform(
+		PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CurrentQueryRoot.Get().GetRotation()),
+		PhysAnimBridge::UeWorldPositionToProtoRuntime(CurrentQueryRoot.Get().GetLocation()));
+	const FTransform CurrentSelectedDataTransform = FTransform::Identity;
+	const FProtoWorldCanonicalTransformMeters CurrentSelectedWorld(CurrentSelectedWorldTransform);
+	const FProtoAnimationDataCanonicalTransformMeters CurrentSelectedData(CurrentSelectedDataTransform);
+
+	TArray<FPhysAnimFuturePoseSample> RawFuturePoses;
+	TArray<FWorldTransformCm> FutureQueryRoots;
+	RawFuturePoses.Reserve(PhysAnimBridge::NumFutureSteps);
+	FutureQueryRoots.Reserve(PhysAnimBridge::NumFutureSteps);
+	for (int32 FutureIndex = 0; FutureIndex < PhysAnimBridge::NumFutureSteps; ++FutureIndex)
+	{
+		const double TimeSeconds =
+			static_cast<double>(FutureIndex + 1) * PhysAnimBridge::FutureStepSeconds;
+		const double Alpha = TimeSeconds / 0.5;
+		FPhysAnimFuturePoseSample RawPose;
+		RawPose.FutureTimeSeconds = static_cast<float>(TimeSeconds);
+		const FTransform RawRoot(
+			FQuat::Identity,
+			FVector(0.0, 3.0 * TimeSeconds, 0.9));
+		RawPose.BodyTransforms.Reserve(PhysAnimBridge::NumSmplBodies);
+		for (int32 BodyIndex = 0; BodyIndex < PhysAnimBridge::NumSmplBodies; ++BodyIndex)
+		{
+			const FVector LocalOffset(
+				0.02 * BodyIndex,
+				-0.01 * BodyIndex,
+				0.005 * BodyIndex);
+			const FQuat LocalRotation(
+				FVector::ForwardVector,
+				FMath::DegreesToRadians(0.25 * BodyIndex));
+			RawPose.BodyTransforms.Add(FTransform(
+				(RawRoot.GetRotation() * LocalRotation).GetNormalized(),
+				RawRoot.GetLocation() + RawRoot.GetRotation().RotateVector(LocalOffset)));
+		}
+		RawFuturePoses.Add(MoveTemp(RawPose));
+
+		FutureQueryRoots.Add(FWorldTransformCm(FTransform(
+			FQuat::Slerp(
+				CurrentQueryRoot.Get().GetRotation(),
+				FQuat(FVector::UpVector, FMath::DegreesToRadians(-60.0)),
+				Alpha).GetNormalized(),
+			FVector(160.0 * TimeSeconds, 0.0, 90.0))));
+	}
+
+	TArray<FPhysAnimFuturePoseSample> PlacedFuturePoses;
+	FString Error;
+	TestTrue(
+		TEXT("E80 typed placement accepts the locked fifteen-step trajectory"),
+		PlaceProtoFuturePosesOnWorldTrajectory(
+			RawFuturePoses,
+			CurrentQueryRoot,
+			FutureQueryRoots,
+			CurrentSelectedWorld,
+			CurrentSelectedData,
+			PlacedFuturePoses,
+			Error));
+	TestTrue(TEXT("E80 typed placement error is empty"), Error.IsEmpty());
+	TestEqual(
+		TEXT("E80 typed placement preserves future sample count"),
+		PlacedFuturePoses.Num(),
+		PhysAnimBridge::NumFutureSteps);
+
+	const FTransform& RawFinalRoot = RawFuturePoses.Last().BodyTransforms[0];
+	const FTransform& PlacedFinalRoot = PlacedFuturePoses.Last().BodyTransforms[0];
+	const FQuat WorldToDataRotation = (
+		CurrentSelectedDataTransform.GetRotation() *
+		CurrentSelectedWorldTransform.GetRotation().Inverse()).GetNormalized();
+	const FQuat DataToWorldRotation = WorldToDataRotation.Inverse();
+	const FVector PlacedFinalWorldPosition =
+		CurrentSelectedWorldTransform.GetLocation() +
+		DataToWorldRotation.RotateVector(
+			PlacedFinalRoot.GetLocation() - CurrentSelectedDataTransform.GetLocation());
+	const FQuat PlacedFinalWorldRotation = (
+		DataToWorldRotation * PlacedFinalRoot.GetRotation()).GetNormalized();
+	const FVector ExpectedFinalWorldPosition =
+		CurrentSelectedWorldTransform.GetLocation() +
+		PhysAnimBridge::UeWorldPositionToProtoRuntime(FVector(80.0, 0.0, 0.0));
+	const FQuat ExpectedFinalWorldRotation = (
+		PhysAnimBridge::UeWorldQuaternionToProtoRuntime(
+			FutureQueryRoots.Last().Get().GetRotation() *
+			CurrentQueryRoot.Get().GetRotation().Inverse()) *
+		CurrentSelectedWorldTransform.GetRotation()).GetNormalized();
+	TestTrue(
+		TEXT("E80 final query root replaces raw 1.5 m animation progression with the 0.8 m trajectory progression"),
+		PlacedFinalWorldPosition.Equals(ExpectedFinalWorldPosition, 1.0e-5));
+	TestTrue(
+		TEXT("E80 final query root carries the requested thirty-degree turn"),
+		PlacedFinalWorldRotation.AngularDistance(ExpectedFinalWorldRotation) <= 1.0e-5);
+	TestTrue(
+		TEXT("E80 raw animation root was materially different from the placed root"),
+		!RawFinalRoot.GetLocation().Equals(PlacedFinalRoot.GetLocation(), 0.1));
+
+	for (int32 BodyIndex = 1; BodyIndex < PhysAnimBridge::NumSmplBodies; ++BodyIndex)
+	{
+		const FTransform RawRelative =
+			RawFuturePoses.Last().BodyTransforms[BodyIndex].GetRelativeTransform(RawFinalRoot);
+		const FTransform PlacedRelative =
+			PlacedFuturePoses.Last().BodyTransforms[BodyIndex].GetRelativeTransform(PlacedFinalRoot);
+		TestTrue(
+			*FString::Printf(TEXT("E80 body %d preserves animation-relative position"), BodyIndex),
+			PlacedRelative.GetLocation().Equals(RawRelative.GetLocation(), 1.0e-5));
+		TestTrue(
+			*FString::Printf(TEXT("E80 body %d preserves animation-relative rotation"), BodyIndex),
+			PlacedRelative.GetRotation().AngularDistance(RawRelative.GetRotation()) <= 1.0e-5);
+	}
+
+	TArray<FWorldTransformCm> ZeroQueryRoots;
+	ZeroQueryRoots.Init(CurrentQueryRoot, PhysAnimBridge::NumFutureSteps);
+	TArray<FPhysAnimFuturePoseSample> ZeroPlacedPoses;
+	Error.Reset();
+	TestTrue(
+		TEXT("E80 zero trajectory placement succeeds"),
+		PlaceProtoFuturePosesOnWorldTrajectory(
+			RawFuturePoses,
+			CurrentQueryRoot,
+			ZeroQueryRoots,
+			CurrentSelectedWorld,
+			CurrentSelectedData,
+			ZeroPlacedPoses,
+			Error));
+	TestTrue(
+		TEXT("E80 zero trajectory preserves the current selected data root"),
+		ZeroPlacedPoses.Last().BodyTransforms[0].GetLocation().Equals(
+			CurrentSelectedDataTransform.GetLocation(),
+			1.0e-6) &&
+		ZeroPlacedPoses.Last().BodyTransforms[0].GetRotation().AngularDistance(
+			CurrentSelectedDataTransform.GetRotation()) <= 1.0e-6);
+
+	TArray<FWorldTransformCm> MalformedRoots = FutureQueryRoots;
+	MalformedRoots.Pop();
+	TArray<FPhysAnimFuturePoseSample> RejectedOutput;
+	Error.Reset();
+	TestFalse(
+		TEXT("E80 rejects a mismatched trajectory sample count"),
+		PlaceProtoFuturePosesOnWorldTrajectory(
+			RawFuturePoses,
+			CurrentQueryRoot,
+			MalformedRoots,
+			CurrentSelectedWorld,
+			CurrentSelectedData,
+			RejectedOutput,
+			Error));
+	TestTrue(TEXT("E80 rejected output remains empty"), RejectedOutput.IsEmpty());
+	TestTrue(TEXT("E80 count rejection is explicit"), Error.Contains(TEXT("count")));
+	return true;
+}
+
 #endif
