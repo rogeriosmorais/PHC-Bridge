@@ -1,0 +1,27 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "production-scaled-delayed-neck-e51",
+  "recorded_utc": "2026-07-16T01:05:00Z",
+  "preregistration_commit": "fb9fcf565a4e7a9032958681564529d024616356",
+  "production_behavior_commit": "5b582ad88a6d56881087fc8d22a6777bc888fab8",
+  "status": "VALID",
+  "hypothesis_verdict": "SUPPORTED",
+  "bundle_status": "PASS",
+  "bundle_failed_criteria": [],
+  "region": "Neck",
+  "scale": 0.25,
+  "activation_timing": "after first active-policy cycle",
+  "normal_recovery_auc": [30.261613701709276, 30.261613701709276, 30.261613701709276],
+  "zero_actions_recovery_auc": [39.34945852607651, 39.34945852607651, 39.34945852607651],
+  "normal_to_zero_recovery_auc_ratio": 0.7690477794416204,
+  "normal_repetitions_byte_deterministic": true,
+  "zero_repetitions_byte_deterministic": true,
+  "production_behavior_flags": [],
+  "destructive_controls": {
+    "DropControlDispatch": {"failed_criteria": ["target_readback"]},
+    "ForcedSupportLoss": {"failed_criteria": ["support_gap"]}
+  },
+  "authoritative_bundle_artifact": "test-results/causal-standing/e51-production-neck/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/production-scaled-delayed-neck.e51.audit.json",
+  "next": "Screen the left proximal arm chain with delayed scaled actions."
+}

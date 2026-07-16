@@ -762,3 +762,13 @@ Machine-readable record: `experiments/stage1/scaled-delayed-neck.e49.json`.
 **Next experiment selected.** Promote delayed Neck scale 0.25 into production and rerun the no-flag deterministic bundle.
 
 Machine-readable record: `experiments/stage1/scaled-delayed-neck.e50.json`.
+
+## E51 — Production Neck at 25% after first active policy cycle (2026-07-15)
+
+**Hypothesis.** Production can reproduce E50 without any PhysAnim experimental argument.
+
+**Result.** Supported. The no-flag deterministic bundle exactly reproduced E50: Normal AUC 30.2616, ZeroActions 39.3495, ratio 0.769048. First-active Neck remained zero, later Neck was nonzero, and destructive controls remained discriminative.
+
+**Next experiment selected.** Delayed scaled restoration of the left proximal arm chain.
+
+Machine-readable record: `experiments/stage1/production-scaled-delayed-neck.e51.json`.
