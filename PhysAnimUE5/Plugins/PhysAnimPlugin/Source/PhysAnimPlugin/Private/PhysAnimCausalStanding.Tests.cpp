@@ -146,6 +146,10 @@ namespace
 		bool bPreviousUseFixedTimeStep,
 		double PreviousFixedDeltaTimeSeconds);
 	double AdvanceCausalStandingSupportGapMs(double CurrentGapMs, bool bHasSupportContact, double DeltaTimeSeconds);
+	double MeasureRootShellTrackingErrorCm(
+		const FTransform& ActorTransform,
+		const FVector& InitialActorLocalRootOffset,
+		const FVector& PhysicalRootWorldLocation);
 	TArray<TSharedPtr<FJsonValue>> BuildPolicyActionJsonArray(const TArray<float>& Actions)
 	{
 		TArray<TSharedPtr<FJsonValue>> JsonActions;
@@ -267,6 +271,35 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("Observed support resets the product support-gap timer"),
 		AdvanceCausalStandingSupportGapMs(50.0, true, 1.0 / 60.0),
 		0.0);
+
+	const FVector InitialActorLocalRootOffset(12.0f, -7.0f, 91.2f);
+	const FTransform InitialActorTransform(FRotator(0.0f, 0.0f, 0.0f), FVector(100.0f, 200.0f, 300.0f));
+	const FVector InitialExpectedRootWorld = InitialActorTransform.TransformPosition(InitialActorLocalRootOffset);
+	TestEqual(
+		TEXT("E73 root-shell tracking error is zero at the preserved actor-local offset"),
+		MeasureRootShellTrackingErrorCm(
+			InitialActorTransform,
+			InitialActorLocalRootOffset,
+			InitialExpectedRootWorld),
+		0.0);
+	const FTransform MovedAndTurnedActorTransform(
+		FRotator(0.0f, 73.0f, 0.0f),
+		FVector(-425.0f, 810.0f, 300.0f));
+	const FVector MovedExpectedRootWorld = MovedAndTurnedActorTransform.TransformPosition(InitialActorLocalRootOffset);
+	TestEqual(
+		TEXT("E73 root-shell tracking is invariant to shell translation and yaw"),
+		MeasureRootShellTrackingErrorCm(
+			MovedAndTurnedActorTransform,
+			InitialActorLocalRootOffset,
+			MovedExpectedRootWorld),
+		0.0);
+	TestEqual(
+		TEXT("E73 five-centimeter planar root displacement reports five-centimeter tracking error"),
+		MeasureRootShellTrackingErrorCm(
+			MovedAndTurnedActorTransform,
+			InitialActorLocalRootOffset,
+			MovedExpectedRootWorld + FVector(3.0f, 4.0f, 25.0f)),
+		5.0);
 
 	TestFalse(TEXT("Dispatch fault is disabled by default"), Component->IsProductControlDispatchDroppedForTesting());
 	Component->SetProductControlDispatchDroppedForTesting(true);
@@ -1850,6 +1883,16 @@ namespace
 		}
 	}
 
+	double MeasureRootShellTrackingErrorCm(
+		const FTransform& ActorTransform,
+		const FVector& InitialActorLocalRootOffset,
+		const FVector& PhysicalRootWorldLocation)
+	{
+		const FVector ExpectedRootWorldLocation =
+			ActorTransform.TransformPosition(InitialActorLocalRootOffset);
+		return FVector::Dist2D(ExpectedRootWorldLocation, PhysicalRootWorldLocation);
+	}
+
 	double MeasurePelvisHeight(UWorld* World, ACharacter* Character, FBodyInstance* PelvisBody)
 	{
 		if (!World || !Character || !PelvisBody || !PelvisBody->IsValidBodyInstance())
@@ -3098,10 +3141,38 @@ namespace
 			const TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
 			const AActor* const OwnerActor = Component ? Component->GetOwner() : nullptr;
 			const FVector ActorLocation = OwnerActor ? OwnerActor->GetActorLocation() : FVector::ZeroVector;
+			const bool bPhysicalRootValid = PelvisBody && PelvisBody->IsValidBodyInstance();
+			const FVector PhysicalRootLocation = bPhysicalRootValid
+				? PelvisBody->GetUnrealWorldTransform().GetLocation()
+				: FVector::ZeroVector;
+			double RootShellTrackingErrorCm = 0.0;
 			if (Config.bScriptedLocomotionRun && bScenarioTransformInitialized)
 			{
 				ShellPathLengthCm += FVector::Dist2D(LastScenarioActorLocation, ActorLocation);
 				LastScenarioActorLocation = ActorLocation;
+				if (OwnerActor && bPhysicalRootValid)
+				{
+					if (!bPhysicalRootTrackingInitialized)
+					{
+						InitialActorLocalRootOffset =
+							OwnerActor->GetActorTransform().InverseTransformPosition(PhysicalRootLocation);
+						ScenarioStartPhysicalRootLocation = PhysicalRootLocation;
+						LastPhysicalRootLocation = PhysicalRootLocation;
+						bPhysicalRootTrackingInitialized = true;
+					}
+					else
+					{
+						PhysicalRootPathLengthCm +=
+							FVector::Dist2D(LastPhysicalRootLocation, PhysicalRootLocation);
+						LastPhysicalRootLocation = PhysicalRootLocation;
+					}
+					RootShellTrackingErrorCm = MeasureRootShellTrackingErrorCm(
+						OwnerActor->GetActorTransform(),
+						InitialActorLocalRootOffset,
+						PhysicalRootLocation);
+					MaxRootShellTrackingErrorCm =
+						FMath::Max(MaxRootShellTrackingErrorCm, RootShellTrackingErrorCm);
+				}
 			}
 			const FScriptedLocomotionStep ScriptStep = ResolveScriptedLocomotionStep(TimeSeconds);
 			const FBridgeShellState& ScriptShell = Component
@@ -3118,6 +3189,11 @@ namespace
 			Row->SetBoolField(TEXT("trajectory_conditioning_published"), Config.bScriptedLocomotionRun && Config.Variant != TEXT("DropTrajectoryConditioning") && ScriptStep.bMove);
 			Row->SetNumberField(TEXT("shell_accepted_speed_cm_per_sec"), ScriptShell.AcceptedPlanarVelocityCmPerSecond.Size2D());
 			Row->SetNumberField(TEXT("shell_path_length_cm"), ShellPathLengthCm);
+			Row->SetNumberField(TEXT("physical_root_location_x_cm"), PhysicalRootLocation.X);
+			Row->SetNumberField(TEXT("physical_root_location_y_cm"), PhysicalRootLocation.Y);
+			Row->SetNumberField(TEXT("physical_root_location_z_cm"), PhysicalRootLocation.Z);
+			Row->SetNumberField(TEXT("root_shell_tracking_error_cm"), RootShellTrackingErrorCm);
+			Row->SetNumberField(TEXT("physical_root_path_length_cm"), PhysicalRootPathLengthCm);
 			Row->SetNumberField(TEXT("target_readback_match_ratio"), LatestTargetReadbackMatchRatio);
 			Row->SetNumberField(TEXT("script_step_failure_count"), ScriptStepFailureCount);
 			Row->SetBoolField(TEXT("human_input"), false);
@@ -3566,6 +3642,26 @@ namespace
 				const FVector EndLocation = OwnerActor ? OwnerActor->GetActorLocation() : FVector::ZeroVector;
 				const float EndYawDegrees = OwnerActor ? OwnerActor->GetActorRotation().Yaw : 0.0f;
 				const FVector PlanarDelta(EndLocation.X - ScenarioStartLocation.X, EndLocation.Y - ScenarioStartLocation.Y, 0.0f);
+				FBodyInstance* const EndPelvisBody = Component && Component->GetMeshComponent()
+					? Component->GetMeshComponent()->GetBodyInstance(TEXT("pelvis"))
+					: nullptr;
+				const bool bEndPhysicalRootValid = EndPelvisBody && EndPelvisBody->IsValidBodyInstance();
+				const FVector EndPhysicalRootLocation = bEndPhysicalRootValid
+					? EndPelvisBody->GetUnrealWorldTransform().GetLocation()
+					: LastPhysicalRootLocation;
+				const FVector PhysicalRootPlanarDelta = bPhysicalRootTrackingInitialized
+					? FVector(
+						EndPhysicalRootLocation.X - ScenarioStartPhysicalRootLocation.X,
+						EndPhysicalRootLocation.Y - ScenarioStartPhysicalRootLocation.Y,
+						0.0f)
+					: FVector::ZeroVector;
+				const double FinalRootShellTrackingErrorCm =
+					OwnerActor && bPhysicalRootTrackingInitialized && bEndPhysicalRootValid
+						? MeasureRootShellTrackingErrorCm(
+							OwnerActor->GetActorTransform(),
+							InitialActorLocalRootOffset,
+							EndPhysicalRootLocation)
+						: 0.0;
 				const TSharedRef<FJsonObject> Summary = MakeShared<FJsonObject>();
 				Summary->SetStringField(TEXT("schema_version"), TEXT("physanim-scripted-locomotion-summary/v1"));
 				Summary->SetStringField(TEXT("variant"), Config.Variant);
@@ -3578,6 +3674,10 @@ namespace
 				Summary->SetNumberField(TEXT("script_step_failure_count"), ScriptStepFailureCount);
 				Summary->SetNumberField(TEXT("shell_path_length_cm"), ShellPathLengthCm);
 				Summary->SetNumberField(TEXT("net_planar_displacement_cm"), PlanarDelta.Size2D());
+				Summary->SetNumberField(TEXT("physical_root_path_length_cm"), PhysicalRootPathLengthCm);
+				Summary->SetNumberField(TEXT("physical_root_net_planar_displacement_cm"), PhysicalRootPlanarDelta.Size2D());
+				Summary->SetNumberField(TEXT("final_root_shell_tracking_error_cm"), FinalRootShellTrackingErrorCm);
+				Summary->SetNumberField(TEXT("max_root_shell_tracking_error_cm"), MaxRootShellTrackingErrorCm);
 				Summary->SetNumberField(TEXT("yaw_delta_deg"), FMath::FindDeltaAngleDegrees(ScenarioStartYawDegrees, EndYawDegrees));
 				Summary->SetStringField(TEXT("final_runtime_state"), Component ? RuntimeStateName(Component->GetRuntimeState()) : TEXT("Uninitialized"));
 				Summary->SetNumberField(TEXT("final_shell_speed_cm_per_sec"), Component ? Component->GetBridgeShellStateForTesting().AcceptedPlanarVelocityCmPerSecond.Size2D() : 0.0);
@@ -3650,14 +3750,20 @@ namespace
 		double ProductSupportGapTimerMs = 0.0;
 		double LatestTargetReadbackMatchRatio = 0.0;
 		double ShellPathLengthCm = 0.0;
+		double PhysicalRootPathLengthCm = 0.0;
+		double MaxRootShellTrackingErrorCm = 0.0;
 		FVector ScenarioStartLocation = FVector::ZeroVector;
 		FVector LastScenarioActorLocation = FVector::ZeroVector;
+		FVector InitialActorLocalRootOffset = FVector::ZeroVector;
+		FVector ScenarioStartPhysicalRootLocation = FVector::ZeroVector;
+		FVector LastPhysicalRootLocation = FVector::ZeroVector;
 		float ScenarioStartYawDegrees = 0.0f;
 		FString CurrentScriptPhase = TEXT("StandingHold");
 		float CurrentScriptIntentMagnitude = 0.0f;
 		TSet<FString> ObservedScriptPhases;
 		FBridgeShellState EmptyBridgeShellState;
 		bool bScenarioTransformInitialized = false;
+		bool bPhysicalRootTrackingInitialized = false;
 		bool bLocomotionGateOpened = false;
 		bool bStopDecisionMade = false;
 		bool bStopIssued = false;
