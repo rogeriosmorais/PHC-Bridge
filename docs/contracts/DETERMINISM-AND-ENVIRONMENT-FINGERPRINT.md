@@ -35,4 +35,22 @@ python .\scripts\environment_fingerprint.py `
   --output test-results\...\environment-fingerprint.json
 ```
 
-For authoritative bundles, compare the `authority_digest_sha256` across all repetitions before comparing behavior. A mismatch means the runs are not repetitions of the same authority and the bundle should be considered malformed.
+For authoritative bundles, compare the `authority_digest_sha256` across all repetitions before comparing behavior. A mismatch means the runs are not repetitions of the same authority and the bundle is malformed.
+
+## Preregistered locomotion campaign
+
+`product-gates/scripted-locomotion.v3.json` defines `normal_cross_process_same_machine`: three clean `Normal` runs launched in separate Unreal processes from the same source commit, model, protocol, and authority digest. It requires byte identity for the policy-input snapshot and preregisters absolute and relative spread limits for the causal physical-root endpoints.
+
+Audit a completed campaign with:
+
+```powershell
+python .\scripts\audit_locomotion_determinism.py `
+  --protocol product-gates\scripted-locomotion.v3.json `
+  --campaign normal_cross_process_same_machine `
+  --run-root <normal-run-1> `
+  --run-root <normal-run-2> `
+  --run-root <normal-run-3> `
+  --output <determinism-audit.json>
+```
+
+The auditor returns `INVALID` for missing repetitions, dirty or inconsistent authority, or malformed fingerprints. It returns `FAIL` for a valid campaign that violates byte identity, causal acceptance, or numerical spread bounds. Only a clean, authority-consistent campaign within every locked bound returns `PASS`.

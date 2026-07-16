@@ -1,6 +1,6 @@
 # Product Protocols
 
-`causal-standing.v1.json` is the active product protocol.
+`causal-standing.v1.json` is the active standing protocol. `scripted-locomotion.v3.json` is the current Stage 2 scripted-locomotion protocol; v1 and v2 remain immutable historical authorities for evidence captured under those versions.
 
 The `standing-v0.v1.json`, `standing-v0.v2.json`, and `impact-policy.v1.json`
 files are retained byte-for-byte as historical records of the retired signed-

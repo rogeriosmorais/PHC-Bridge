@@ -75,6 +75,47 @@ def test_mimic_tensor_encodes_previous_frame_and_root_relative_positions() -> No
     assert math.isclose(values[433], 0.1, abs_tol=1.0e-9)
 
 
+def test_synthetic_forward_and_lateral_trajectories_have_locked_first_step_axes() -> None:
+    current = _bodies(root_position=(0.0, 0.0, 1.0))
+    cases = {
+        "forward": ((0.1, 0.0), (0.1, 0.0, 0.0)),
+        "lateral": ((0.0, 0.1), (0.0, 0.1, 0.0)),
+    }
+    for direction, (step_xy, expected_delta) in cases.items():
+        futures = [
+            FuturePoseSample(
+                bodies=_bodies(
+                    root_position=(step_xy[0] * (step + 1), step_xy[1] * (step + 1), 1.0)
+                ),
+                future_time=(step + 1) / 30.0,
+            )
+            for step in range(15)
+        ]
+
+        values = build_mimic_target_poses(current, futures)
+
+        assert values[0:3] == list(expected_delta), direction
+        assert values[72:75] == list(expected_delta), direction
+
+
+def test_synthetic_thirty_degree_turn_has_locked_relative_rotation_encoding() -> None:
+    current = _bodies(root_position=(0.0, 0.0, 1.0))
+    futures = [
+        FuturePoseSample(
+            bodies=_bodies(root_position=(0.0, 0.0, 1.0), root_rotation=_yaw(30.0)),
+            future_time=(step + 1) / 30.0,
+        )
+        for step in range(15)
+    ]
+
+    values = build_mimic_target_poses(current, futures)
+
+    rotation_start = 24 * 3 + 24 * 3
+    assert math.isclose(values[rotation_start], math.cos(math.radians(30.0)), abs_tol=1.0e-9)
+    assert math.isclose(values[rotation_start + 1], math.sin(math.radians(30.0)), abs_tol=1.0e-9)
+    assert values[rotation_start + 2 : rotation_start + 6] == [0.0, 0.0, 0.0, 1.0]
+
+
 def test_machine_readable_contract_matches_reference_widths() -> None:
     contract_path = Path(__file__).parents[2] / "docs" / "contracts" / "phc-policy-tensor-contract.v1.json"
     contract = json.loads(contract_path.read_text(encoding="utf-8"))

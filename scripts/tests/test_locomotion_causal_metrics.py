@@ -7,6 +7,7 @@ import pytest
 from scripts.locomotion_causal_metrics import (
     CausalMetricError,
     analyze_trace,
+    evaluate_metric_contract,
     validate_bundle_membership,
 )
 
@@ -75,6 +76,83 @@ def test_tracking_trace_reports_auc_final_and_max_independently() -> None:
     assert result["final_tracking_error_cm"] == 5.0
     assert result["max_tracking_error_cm"] == 5.0
     assert result["root_to_shell_progress_ratio"] == 0.95
+
+
+def test_trace_accepts_runtime_separate_physical_root_fields() -> None:
+    rows = [
+        _row(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        _row(1.0, 100.0, 0.0, 95.0, 0.0, 5.0),
+    ]
+    for row in rows:
+        root = row.pop("physical_root_location_xyz_cm")
+        row["physical_root_location_x_cm"] = root[0]
+        row["physical_root_location_y_cm"] = root[1]
+        row["physical_root_location_z_cm"] = root[2]
+
+    result = analyze_trace(rows)
+
+    assert result["classification"] == "FORWARD_TRACKING"
+    assert result["root_route_projected_progress_cm"] == 95.0
+
+
+def test_metric_contract_passes_healthy_forward_tracking() -> None:
+    metrics = analyze_trace(
+        [
+            _row(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            _row(1.0, 100.0, 0.0, 95.0, 5.0, 8.0),
+        ]
+    )
+    contract = {
+        "required_classification": "FORWARD_TRACKING",
+        "minimum_root_route_projected_progress_cm": 80.0,
+        "minimum_root_to_shell_progress_ratio": 0.8,
+        "maximum_root_to_shell_progress_ratio": 1.2,
+        "maximum_abs_root_route_lateral_displacement_cm": 20.0,
+        "maximum_tracking_error_time_average_cm": 10.0,
+        "maximum_final_tracking_error_cm": 10.0,
+        "maximum_tracking_error_cm": 15.0,
+        "require_assistance_clean": True,
+    }
+
+    result = evaluate_metric_contract(metrics, contract)
+
+    assert result["verdict"] == "PASS"
+    assert result["failed_criteria"] == []
+
+
+def test_metric_contract_rejects_statue_lateral_error_and_assistance() -> None:
+    metrics = analyze_trace(
+        [
+            _row(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            _row(1.0, 100.0, 0.0, 0.0, 30.0, 104.0),
+        ]
+    )
+    metrics["assistance_clean"] = False
+    contract = {
+        "required_classification": "FORWARD_TRACKING",
+        "minimum_root_route_projected_progress_cm": 80.0,
+        "minimum_root_to_shell_progress_ratio": 0.8,
+        "maximum_root_to_shell_progress_ratio": 1.2,
+        "maximum_abs_root_route_lateral_displacement_cm": 20.0,
+        "maximum_tracking_error_time_average_cm": 10.0,
+        "maximum_final_tracking_error_cm": 10.0,
+        "maximum_tracking_error_cm": 15.0,
+        "require_assistance_clean": True,
+    }
+
+    result = evaluate_metric_contract(metrics, contract)
+
+    assert result["verdict"] == "FAIL"
+    assert set(result["failed_criteria"]) >= {
+        "classification",
+        "root_route_projected_progress_cm",
+        "root_to_shell_progress_ratio_min",
+        "root_route_lateral_displacement_cm",
+        "tracking_error_time_average_cm",
+        "final_tracking_error_cm",
+        "max_tracking_error_cm",
+        "assistance_clean",
+    }
 
 
 def test_forbidden_assistance_is_reported_without_changing_kinematics() -> None:
