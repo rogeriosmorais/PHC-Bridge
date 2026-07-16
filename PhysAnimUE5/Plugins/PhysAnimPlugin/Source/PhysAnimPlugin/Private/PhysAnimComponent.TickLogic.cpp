@@ -440,12 +440,12 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		}
 #if WITH_DEV_AUTOMATION_TESTS
 		const bool bCaptureLocomotionFrameReplayThisStep =
-			bPolicyInputProvenanceTraceEnabledForTesting &&
-			StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
-			bEnablePolicyInference &&
-			bStandingVariantUsesPolicyInference &&
-			ShouldUseBridgeTrajectoryPoseSearchState(RuntimeState) &&
-			!FirstLocomotionFrameReplaySnapshot.bCaptured;
+			PhysAnimBridge::ShouldCaptureLocomotionFrameReplay(
+				bPolicyInputProvenanceTraceEnabledForTesting,
+				bEnablePolicyInference,
+				bStandingVariantUsesPolicyInference,
+				ShouldUseBridgeTrajectoryPoseSearchState(RuntimeState),
+				FirstLocomotionFrameReplaySnapshot.bCaptured);
 		if (bCaptureLocomotionFrameReplayThisStep)
 		{
 			TArray<FPhysAnimBodySample> PhysicalBodySamplesForReplay;

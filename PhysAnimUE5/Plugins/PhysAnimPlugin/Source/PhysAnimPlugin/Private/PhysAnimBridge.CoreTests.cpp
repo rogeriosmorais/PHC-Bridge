@@ -1,5 +1,6 @@
 #include "PhysAnimBridge.h"
 #include "PhysAnimComponent.h"
+#include "PhysAnimStandingActivation.h"
 #include "Misc/AutomationTest.h"
 
 #include <limits>
@@ -1975,6 +1976,37 @@ namespace
 		TestEqual(TEXT("Transition snapshot restores distal mismatch counts"), ExportedSnapshot.DistalBoneMismatchTicks.FindRef(TEXT("foot_l")), 3);
 		TestTrue(TEXT("Transition snapshot restores audit flags"), ExportedSnapshot.Audit.bUsedRelaxedCertification);
 #endif
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimLocomotionFrameReplayCaptureGateTest,
+		"PhysAnim.Bridge.LocomotionFrameReplayCaptureGate",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimLocomotionFrameReplayCaptureGateTest::RunTest(const FString& Parameters)
+	{
+		const bool bNormalUsesPolicyInference =
+			FPhysAnimStandingActivationPlan::UsesPolicyInference(
+				EPhysAnimStandingVariant::Normal);
+		TestTrue(TEXT("The Normal product arm uses policy inference"), bNormalUsesPolicyInference);
+		TestTrue(
+			TEXT("The Normal product arm captures the first traced locomotion step"),
+			ShouldCaptureLocomotionFrameReplay(
+				true,
+				true,
+				bNormalUsesPolicyInference,
+				true,
+				false));
+		TestFalse(
+			TEXT("Replay capture remains disabled without explicit trace authority"),
+			ShouldCaptureLocomotionFrameReplay(false, true, true, true, false));
+		TestFalse(
+			TEXT("Replay capture remains disabled outside locomotion"),
+			ShouldCaptureLocomotionFrameReplay(true, true, true, false, false));
+		TestFalse(
+			TEXT("Replay capture remains first-step only"),
+			ShouldCaptureLocomotionFrameReplay(true, true, true, true, true));
 		return true;
 	}
 

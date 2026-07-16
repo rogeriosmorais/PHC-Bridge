@@ -926,6 +926,20 @@ namespace PhysAnimBridge
 		ConditionedActionCrc32 = 0u;
 	}
 
+	bool ShouldCaptureLocomotionFrameReplay(
+		const bool bTraceEnabled,
+		const bool bPolicyInferenceEnabled,
+		const bool bVariantUsesPolicyInference,
+		const bool bLocomotionActive,
+		const bool bAlreadyCaptured)
+	{
+		return bTraceEnabled &&
+			bPolicyInferenceEnabled &&
+			bVariantUsesPolicyInference &&
+			bLocomotionActive &&
+			!bAlreadyCaptured;
+	}
+
 	bool ValidateLocomotionFrameReplaySnapshot(
 		const FPhysAnimLocomotionFrameReplaySnapshot& Snapshot,
 		FString& OutError)
