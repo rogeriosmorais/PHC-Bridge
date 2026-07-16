@@ -164,6 +164,43 @@ bool FPhysAnimScriptedLocomotionRuntimeTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("SCRIPTED-29 Denial preserves actor position"), (double)Fixture.Actor->GetActorLocation().Size(), 0.0, 0.0);
 	}
 
+	// E67 regression contract: Pose Search query velocity remains independent from physical shell speed.
+	{
+		ResetToAllowed();
+		TestComp->BridgeIntentState.WorldMoveDirection = FVector::ForwardVector;
+		TestComp->BridgeIntentState.LocalMoveDirection = FVector::ForwardVector;
+		TestComp->BridgeIntentState.IntentMagnitude = 1.0f;
+		TestComp->BridgeIntentState.DesiredSpeedCmPerSecond = 60.0f;
+		TestComp->BridgeTrajectoryState.DesiredVelocityCmPerSecond = FVector(60.0f, 0.0f, 0.0f);
+		TestComp->BridgeTrajectoryState.AcceptedVelocityCmPerSecond = FVector(60.0f, 0.0f, 0.0f);
+
+		const FPhysAnimStabilizationSettings EffectiveSettings = TestComp->ResolveEffectiveStabilizationSettings();
+		FVector QueryVelocity = FVector::ZeroVector;
+		TestComp->ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, QueryVelocity);
+		TestEqual(TEXT("SCRIPTED-E67-01 Stabilized animation query speed is 160 cm/s"), (double)QueryVelocity.Size2D(), 160.0, 1.0e-4);
+
+		FVector CurrentPosition = FVector::ZeroVector;
+		FQuat CurrentFacing = FQuat::Identity;
+		FVector CurrentVelocity = FVector::ZeroVector;
+		TestComp->GetCurrentState(CurrentPosition, CurrentFacing, CurrentVelocity);
+		TestEqual(TEXT("SCRIPTED-E67-02 Current predictor state publishes query speed"), (double)CurrentVelocity.Size2D(), 160.0, 1.0e-4);
+
+		FVector VelocityOnly = FVector::ZeroVector;
+		TestComp->GetVelocity(VelocityOnly);
+		TestEqual(TEXT("SCRIPTED-E67-03 Predictor velocity publishes query speed"), (double)VelocityOnly.Size2D(), 160.0, 1.0e-4);
+
+		FTransformTrajectory QueryTrajectory;
+		QueryTrajectory.Samples.SetNum(19);
+		TestComp->Predict(QueryTrajectory, 8, 0.20f, 10);
+		TestEqual(TEXT("SCRIPTED-E67-04 First future sample advances 32 cm"), (double)QueryTrajectory.Samples[11].Position.X, 32.0, 1.0e-3);
+		TestEqual(TEXT("SCRIPTED-E67-05 First future sample has no lateral drift"), (double)QueryTrajectory.Samples[11].Position.Y, 0.0, 1.0e-4);
+
+		TestComp->BridgeIntentState = FBridgeIntentState();
+		TestComp->BridgeTrajectoryState = FBridgeTrajectoryState();
+		TestComp->GetVelocity(VelocityOnly);
+		TestEqual(TEXT("SCRIPTED-E67-06 Zero intent publishes zero query speed"), (double)VelocityOnly.Size2D(), 0.0, 0.0);
+	}
+
 	Fixture.Destroy();
 	return true;
 }
