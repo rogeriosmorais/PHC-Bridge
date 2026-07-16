@@ -100,6 +100,14 @@ def test_orchestration_uses_version_scoped_process_checks_and_timeout_cleanup() 
     assert "Stop-Process" not in text
 
 
+def test_orchestration_refreshes_completed_child_before_reading_exit_code() -> None:
+    text = ORCHESTRATION_SCRIPT.read_text(encoding="utf-8")
+    wait_index = text.index("$Process.WaitForExit()")
+    refresh_index = text.index("$Process.Refresh()", wait_index)
+    exit_code_index = text.index("$ExitCode = $Process.ExitCode", refresh_index)
+    assert wait_index < refresh_index < exit_code_index
+
+
 def test_safety_module_refuses_ue58_and_only_stops_ue57_owned_paths(tmp_path: Path) -> None:
     engine57 = tmp_path / "UE_5.7" / "Engine"
     engine58 = tmp_path / "UE_5.8" / "Engine"

@@ -276,6 +276,11 @@ while (-not $Process.HasExited) {
     $Process.Refresh()
 }
 
+# PowerShell can observe HasExited before the managed Process object has
+# populated its cached exit-code state. Synchronize and refresh explicitly
+# before classifying the child result.
+$Process.WaitForExit()
+$Process.Refresh()
 $ExitCode = $Process.ExitCode
 if ($ExitCode -ne 0) {
     $StdoutTail = if (Test-Path $StdoutPath) { (Get-Content $StdoutPath -Tail 80) -join "`n" } else { "" }
