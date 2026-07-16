@@ -1564,43 +1564,113 @@ namespace
 
 	FScriptedLocomotionStep ResolveScriptedLocomotionStep(double TimeSeconds)
 	{
+		static constexpr double StandingEndSeconds = 1.0;
+		static constexpr double AccelerationEndSeconds = 1.6;
+		static constexpr double CruiseEndSeconds = 2.1;
+		static constexpr double MovingTurnEndSeconds = 2.4;
+		static constexpr double DecelerationEndSeconds = 3.0;
+		static constexpr double AccelerationDurationSeconds =
+			AccelerationEndSeconds - StandingEndSeconds;
+		static constexpr double MovingTurnDurationSeconds =
+			MovingTurnEndSeconds - CruiseEndSeconds;
+		static constexpr double DecelerationDurationSeconds =
+			DecelerationEndSeconds - MovingTurnEndSeconds;
+
 		FScriptedLocomotionStep Step;
-		if (TimeSeconds < 1.0)
+		if (TimeSeconds < StandingEndSeconds)
 		{
 			return Step;
 		}
-		if (TimeSeconds < 2.0)
+		if (TimeSeconds < AccelerationEndSeconds)
 		{
 			Step.Phase = TEXT("Acceleration");
-			Step.IntentMagnitude = FMath::Lerp(0.1f, 1.0f, static_cast<float>(TimeSeconds - 1.0));
+			const float PhaseAlpha = static_cast<float>(
+				(TimeSeconds - StandingEndSeconds) / AccelerationDurationSeconds);
+			Step.IntentMagnitude = FMath::Lerp(0.1f, 1.0f, PhaseAlpha);
 			Step.bMove = true;
 			return Step;
 		}
-		if (TimeSeconds < 4.0)
+		if (TimeSeconds < CruiseEndSeconds)
 		{
 			Step.Phase = TEXT("Cruise");
 			Step.IntentMagnitude = 1.0f;
 			Step.bMove = true;
 			return Step;
 		}
-		if (TimeSeconds < 5.0)
+		if (TimeSeconds < MovingTurnEndSeconds)
 		{
 			Step.Phase = TEXT("MovingTurn");
 			Step.IntentMagnitude = 0.8f;
-			Step.YawDeltaDegrees = 30.0f * static_cast<float>(CausalStandingFixedDeltaTimeSeconds);
+			Step.YawDeltaDegrees =
+				30.0f * static_cast<float>(CausalStandingFixedDeltaTimeSeconds / MovingTurnDurationSeconds);
 			Step.bMove = true;
 			return Step;
 		}
-		if (TimeSeconds < 6.0)
+		if (TimeSeconds < DecelerationEndSeconds)
 		{
 			Step.Phase = TEXT("Deceleration");
-			Step.IntentMagnitude = FMath::Lerp(0.8f, 0.05f, static_cast<float>(TimeSeconds - 5.0));
+			const float PhaseAlpha = static_cast<float>(
+				(TimeSeconds - MovingTurnEndSeconds) / DecelerationDurationSeconds);
+			Step.IntentMagnitude = FMath::Lerp(0.8f, 0.05f, PhaseAlpha);
 			Step.bMove = true;
 			return Step;
 		}
 		Step.Phase = TEXT("Settle");
 		Step.bStop = true;
 		return Step;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimScriptedLocomotionScheduleContractTest,
+		"PhysAnim.Locomotion.ScriptedSchedule",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimScriptedLocomotionScheduleContractTest::RunTest(const FString& Parameters)
+	{
+		auto TestPhase = [this](double TimeSeconds, const TCHAR* ExpectedPhase)
+		{
+			TestEqual(
+				FString::Printf(TEXT("E69 phase at %.3f seconds"), TimeSeconds),
+				ResolveScriptedLocomotionStep(TimeSeconds).Phase,
+				FString(ExpectedPhase));
+		};
+
+		TestPhase(0.999, TEXT("StandingHold"));
+		TestPhase(1.000, TEXT("Acceleration"));
+		TestPhase(1.599, TEXT("Acceleration"));
+		TestPhase(1.600, TEXT("Cruise"));
+		TestPhase(2.099, TEXT("Cruise"));
+		TestPhase(2.100, TEXT("MovingTurn"));
+		TestPhase(2.399, TEXT("MovingTurn"));
+		TestPhase(2.400, TEXT("Deceleration"));
+		TestPhase(2.999, TEXT("Deceleration"));
+		TestPhase(3.000, TEXT("Settle"));
+
+		double IntegratedYawDegrees = 0.0;
+		double PredictedPathCm = 0.0;
+		TSet<FString> ObservedPhases;
+		for (int32 StepIndex = 0; StepIndex < 300; ++StepIndex)
+		{
+			const double TimeSeconds = static_cast<double>(StepIndex) * CausalStandingFixedDeltaTimeSeconds;
+			const FScriptedLocomotionStep Step = ResolveScriptedLocomotionStep(TimeSeconds);
+			ObservedPhases.Add(Step.Phase);
+			IntegratedYawDegrees += Step.YawDeltaDegrees;
+			PredictedPathCm += static_cast<double>(Step.IntentMagnitude) * 160.0 * CausalStandingFixedDeltaTimeSeconds;
+		}
+
+		for (const FString& RequiredPhase : {
+			FString(TEXT("StandingHold")),
+			FString(TEXT("Acceleration")),
+			FString(TEXT("Cruise")),
+			FString(TEXT("MovingTurn")),
+			FString(TEXT("Deceleration")),
+			FString(TEXT("Settle")) })
+		{
+			TestTrue(FString::Printf(TEXT("E69 observes phase %s"), *RequiredPhase), ObservedPhases.Contains(RequiredPhase));
+		}
+		TestEqual(TEXT("E69 moving turn integrates to 30 degrees"), IntegratedYawDegrees, 30.0, 1.0e-4);
+		TestTrue(TEXT("E69 predicted path is inside the locked 180-260 cm band"), PredictedPathCm >= 180.0 && PredictedPathCm <= 260.0);
+		return true;
 	}
 
 	struct FCausalStandingRunConfig
