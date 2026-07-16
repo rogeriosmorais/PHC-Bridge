@@ -1156,7 +1156,10 @@ void UPhysAnimComponent::UpdateBridgeLocomotionAuthorityState(
 	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
 	const bool bPhase1RootOn = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
 	const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
-	if (IsTransitionOwnedShellLocked() ||
+	const bool bExplicitStage2AActiveShellLocomotion =
+		RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell &&
+		Stage2ALocomotionRequestState == EBridgeLocomotionRequestState::LocomotionRequested;
+	if ((IsTransitionOwnedShellLocked() && !bExplicitStage2AActiveShellLocomotion) ||
 		((bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle) && BalanceReadyTransition.ShouldSuppressShell()) ||
 		bPendingBalanceModeStartRequest)
 	{

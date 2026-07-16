@@ -108,6 +108,15 @@ bool FPhysAnimScriptedLocomotionRuntimeTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("SCRIPTED-07 Actor yaw is composed"), (double)Fixture.Actor->GetActorRotation().Yaw, 5.0, 1.0e-3);
 		TestEqual(TEXT("SCRIPTED-08 Accepted displacement magnitude is 1.5 cm"), (double)TestComp->BridgeShellState.AcceptedWorldDeltaCm.Size2D(), 1.5, 1.0e-3);
 		TestTrue(TEXT("SCRIPTED-09 Telemetry identifies scripted locomotion"), TestComp->LastStage2ALocomotionTelemetryLine.Contains(TEXT("locomotion_intent=ScriptedLocomotion")));
+		const FPhysAnimStabilizationSettings EffectiveSettings = TestComp->ResolveEffectiveStabilizationSettings();
+		TestComp->UpdateBridgeLocomotionAuthorityState(
+			TestComp->BridgeTrajectoryState.QueryVelocityCmPerSecond,
+			EffectiveSettings,
+			TestComp->GetPhysAnimClockTime());
+		TestEqual(
+			TEXT("SCRIPTED-09A E66 trajectory authority update preserves explicit locomotion request"),
+			(int32)TestComp->Stage2ALocomotionRequestState,
+			(int32)EBridgeLocomotionRequestState::LocomotionRequested);
 		TestTrue(
 			TEXT("SCRIPTED-09B A second locomotion step continues without reopening the standing gate"),
 			TestComp->TryActivateStage2AScriptedLocomotionIntent(0.05f, 0.5f, 0.0f, true));
