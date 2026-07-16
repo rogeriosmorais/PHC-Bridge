@@ -1,0 +1,35 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E71",
+  "title": "Publish the existing locomotion lower-limb damping profile through the authoritative causal gain path",
+  "baseline_commit": "5ca6daab19b85ef5f8a006a5cab4e5fea6ef583c",
+  "date": "2026-07-16",
+  "observed_failure": {
+    "normal_stability_cost_auc": 83.57994904837547,
+    "zero_actions_stability_cost_auc": 62.317112063324664,
+    "normal_to_zero_ratio": 1.341203716397994,
+    "moving_root_tilt_normal_deg": {
+      "Cruise": 14.6297225634257,
+      "MovingTurn": 28.042778650919598,
+      "Deceleration": 31.034517659081352
+    },
+    "moving_root_tilt_zero_actions_deg": {
+      "Cruise": 1.687855605284373,
+      "MovingTurn": 2.4621851311789618,
+      "Deceleration": 3.5574130879508123
+    },
+    "authoritative_path_gap": "PublishStandingActivationFrame republishes one common standing multiplier to every control during LocomotionActiveShell. The existing default-enabled locomotion thigh/calf damping profile exists only in the skipped legacy tuning path."
+  },
+  "hypothesis": "Applying the existing numerical thigh/calf damping scales in PublishStandingActivationFrame only while RuntimeState is LocomotionActiveShell will reduce moving root tilt while preserving action targets, Pose Search selection, shell trajectory, standing gains, and readback authority.",
+  "single_behavior_change": "In the authoritative causal gain publisher, multiply damping ratio by 1.10 for thighs and 1.25 for calves, and extra damping by 1.15 for thighs and 1.45 for calves, using the existing TrainingAlignedLocomotionLowerLimbResponsePolicyBlend. Apply only when the existing policy is enabled and RuntimeState is LocomotionActiveShell. Update authoritative readback to compare each control against its per-bone expected multiplier.",
+  "tdd_contract": [
+    "LocomotionActiveShell resolves thigh damping scales to 1.10 and 1.15.",
+    "LocomotionActiveShell resolves calf damping scales to 1.25 and 1.45.",
+    "Feet, toes, upper body, and pelvis resolve identity scales.",
+    "BalanceActive_Standing resolves identity scales for every bone.",
+    "Disabled policy or zero blend resolves identity scales.",
+    "Authoritative control gain readback remains 21/21.",
+    "The scripted path remains 180-260 cm, turn remains 30 degrees, Pose Search remains non-idle during movement, and stop returns to standing."
+  ],
+  "next_if_supported": "Recompute Normal versus ZeroActions. Continue with a separately preregistered locomotion-only strength correction only if the causal ratio remains above 0.9."
+}
