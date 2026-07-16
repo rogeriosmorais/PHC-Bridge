@@ -1,0 +1,34 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E77",
+  "title": "Use the skeletal-mesh facing basis for Pose Search while preserving world velocity",
+  "baseline_commit": "c01f223ff83d93acc53241a0571f07003d5b77b4",
+  "date": "2026-07-16",
+  "root_cause": {
+    "database_forward_root_axis": "animation-data +Y",
+    "standard_manny_mesh_relative_yaw_degrees": -90.0,
+    "shell_forward_world_axis_at_yaw_zero": "world +X",
+    "current_query_facing": "actor yaw 0",
+    "current_query_velocity": "world +X",
+    "current_localized_velocity": "query-local +X, which matches Walk_Left",
+    "correct_query_facing": "mesh world yaw -90",
+    "correct_query_velocity": "unchanged world +X",
+    "correct_localized_velocity": "mesh-facing-local +Y, which matches Walk_Fwd"
+  },
+  "e74_e75_falsification": "Rotating world velocity into animation axes was incorrect and caused all-idle search. Pose Search expects world trajectory vectors plus the correct world-facing basis; it performs the local frame comparison internally.",
+  "hypothesis": "The trajectory facing was sourced from the actor rather than the skeletal mesh. Using the mesh's world facing for current trajectory state and applying the same actor-to-mesh relative rotation to desired actor facing will make forward shell motion select Walk_Fwd without changing world velocity, path, or live pose history.",
+  "single_behavior_change": "Pose Search current facing becomes the skeletal mesh world rotation when a mesh exists. Desired facing becomes desired actor-world facing composed with the existing actor-to-mesh relative rotation. Current/future velocity and positions remain unchanged world-space values. Components without a mesh retain actor facing.",
+  "tdd_contract": [
+    "Actor yaw 0 and mesh yaw -90 resolve current Pose Search facing yaw -90.",
+    "With unchanged world velocity +X, inverse mesh-facing maps velocity to authored local +Y.",
+    "Actor yaw 30 and mesh yaw -60 preserve the same actor-to-mesh -90 offset; actor-forward world yaw 30 localizes to authored +Y.",
+    "Desired actor yaw 30 resolves desired Pose Search facing yaw -60.",
+    "Velocity magnitude and exact zero velocity are unchanged.",
+    "No-mesh fallback returns actor facing.",
+    "All locomotion and standing contracts remain green.",
+    "Authoritative Normal selects MF_Unarmed_Walk_Fwd during sustained forward movement without asset-name intervention.",
+    "Normal physical root has positive route-projected progress, exceeds ZeroActions, finishes closer to the shell than ZeroActions, preserves support/readback, and returns to BalanceActive_Standing."
+  ],
+  "rejection_rule": "Reject and revert if Walk_Fwd is not selected during sustained movement, route-projected physical progress is nonpositive, Normal tracking is not better than ZeroActions, or any standing/stop/support contract regresses.",
+  "next_if_supported": "Run matched Normal and ZeroActions measurements, then preregister and execute immutable scripted-locomotion protocol v2 with full negative controls and repetitions."
+}
