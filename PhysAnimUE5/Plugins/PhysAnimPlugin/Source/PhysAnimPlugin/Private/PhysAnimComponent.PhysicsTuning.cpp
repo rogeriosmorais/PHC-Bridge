@@ -1886,11 +1886,15 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					BoneName,
 					EffectiveSettings.TrainingAlignedControlFamilyProfileBlend)
 				: 1.0f;
+		const bool bLocomotionLowerLimbResponseModeActive =
+			ShouldUseLocomotionLowerLimbResponseMode(
+				RuntimeState,
+				bDistalLocomotionCompositionModeActive);
 		const bool bApplyTrainingAlignedLocomotionLowerLimbResponseProfile =
 			ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(
 				EffectiveSettings.bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy,
 				EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend,
-				bDistalLocomotionCompositionModeActive);
+				bLocomotionLowerLimbResponseModeActive);
 		const bool bApplyPhase1TransitionLowerLimbResponseProfile =
 			(bPhase1Prepare || bPhase1LateValidate) &&
 			EffectiveSettings.bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy &&

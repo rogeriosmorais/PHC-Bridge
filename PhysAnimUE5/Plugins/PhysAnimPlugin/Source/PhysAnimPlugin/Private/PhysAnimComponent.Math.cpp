@@ -703,6 +703,15 @@ bool UPhysAnimComponent::ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePo
 }
 
 
+bool UPhysAnimComponent::ShouldUseLocomotionLowerLimbResponseMode(
+	EPhysAnimRuntimeState RuntimeState,
+	bool bDistalLocomotionCompositionModeActive)
+{
+	return RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell ||
+		bDistalLocomotionCompositionModeActive;
+}
+
+
 float UPhysAnimComponent::ResolveShellCouplingPlanarOffsetDeltaCm(
 	const FVector& OwnerLocationCm,
 	const FVector& RootLocationCm,

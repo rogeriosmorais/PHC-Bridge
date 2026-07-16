@@ -3237,6 +3237,7 @@ public:
 	static float ResolveTrainingAlignedControlExtraDampingScaleForBone(FName BoneName, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedControlFamilyProfile(bool bApplyTrainingAlignedControlFamilyProfile, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(bool bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy, float BlendAlpha, bool bLocomotionModeActive);
+	static bool ShouldUseLocomotionLowerLimbResponseMode(EPhysAnimRuntimeState RuntimeState, bool bDistalLocomotionCompositionModeActive);
 	static float CalculateConstraintMinLimitedAngleDegrees(
 		EAngularConstraintMotion TwistMotion,
 		float TwistLimit,

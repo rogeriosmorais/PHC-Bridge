@@ -302,6 +302,21 @@ namespace
 		TestFalse(
 			TEXT("Distal target-write composition is not altered by default"),
 			RuntimeDefaults.bApplyTrainingAlignedDistalLocomotionCompositionPolicy);
+		TestTrue(
+			TEXT("E70 active shell locomotion enables the lower-limb response without distal composition"),
+			UPhysAnimComponent::ShouldUseLocomotionLowerLimbResponseMode(
+				EPhysAnimRuntimeState::LocomotionActiveShell,
+				false));
+		TestFalse(
+			TEXT("E70 active standing does not enable the locomotion response by itself"),
+			UPhysAnimComponent::ShouldUseLocomotionLowerLimbResponseMode(
+				EPhysAnimRuntimeState::BalanceActive_Standing,
+				false));
+		TestTrue(
+			TEXT("E70 legacy distal composition still enables the shared response mode"),
+			UPhysAnimComponent::ShouldUseLocomotionLowerLimbResponseMode(
+				EPhysAnimRuntimeState::BalanceActive_Standing,
+				true));
 		TestEqual(
 			TEXT("Policy target slew limiting is disabled by default"),
 			RuntimeDefaults.MaxAngularStepDegreesPerSecond,
