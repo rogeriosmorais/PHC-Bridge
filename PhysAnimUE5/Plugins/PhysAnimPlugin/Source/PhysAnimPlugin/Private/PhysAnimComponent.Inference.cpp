@@ -218,7 +218,9 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
 			RuntimeState);
 		float LeftDistalScale = 1.0f;
-		float RightProximalScale = 0.0f;
+		float RightProximalScale = ResolveCausalStandingRightProximalScaleAfterFirstPolicy(
+			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+			RuntimeState);
 		float RightDistalScale = 1.0f;
 #if WITH_DEV_AUTOMATION_TESTS
 		if (bExperimentalCausalStandingNeckEnabledForTesting)

@@ -1545,6 +1545,9 @@ public:
 	static float ResolveCausalStandingLeftProximalScaleAfterFirstPolicy(
 		bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
 		EPhysAnimRuntimeState InRuntimeState);
+	static float ResolveCausalStandingRightProximalScaleAfterFirstPolicy(
+		bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		EPhysAnimRuntimeState InRuntimeState);
 	static bool ShouldUseCausalStandingComponentActionAxis(
 		EPhysAnimRuntimeState InRuntimeState);
 	static FQuat ExpressCachedWorldActionAxisInMeshComponent(
