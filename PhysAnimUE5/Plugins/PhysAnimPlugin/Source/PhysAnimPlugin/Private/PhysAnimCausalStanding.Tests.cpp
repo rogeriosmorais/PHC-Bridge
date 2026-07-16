@@ -894,12 +894,12 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		UPhysAnimComponent::ShouldUseBridgeTrajectoryPoseSearchState(
 			EPhysAnimRuntimeState::LocomotionActiveShellDenied));
 	TestEqual(
-		TEXT("E63 production locomotion retains proven policy authority"),
+		TEXT("E72 production locomotion uses identity policy strength"),
 		UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
 			true,
 			true,
 			EPhysAnimRuntimeState::LocomotionActiveShell),
-		1.5f);
+		1.0f);
 	TestTrue(
 		TEXT("E63 production component action axis remains active during locomotion"),
 		UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
