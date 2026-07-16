@@ -166,6 +166,7 @@ $StderrPath = Join-Path $RunRoot "automation.stderr.log"
 $ValidationPath = Join-Path $RunRoot "fixture-validation.json"
 $FingerprintPath = Join-Path $RunRoot "environment-fingerprint.json"
 $OrchestrationPath = Join-Path $RunRoot "orchestration.json"
+$ChildExitCodePath = Join-Path $RunRoot "child-exit-code.txt"
 $ModelHash = Get-Sha256 $ModelPath
 
 $Plan = [ordered]@{
@@ -214,6 +215,7 @@ $EscapedVariant = $Variant.Replace("'", "''")
 $EscapedProtocolPath = $ProtocolPath.Replace("'", "''")
 $EscapedSourceCommit = $SourceCommit.Replace("'", "''")
 $EscapedModelHash = $ModelHash.Replace("'", "''")
+$EscapedChildExitCodePath = $ChildExitCodePath.Replace("'", "''")
 $SkipBuildLiteral = if ($SkipCompile) { '$true' } else { '$false' }
 $DirtyLiteral = if ($SourceTreeDirty) { '$true' } else { '$false' }
 $PolicyInputProvenanceTraceLiteral = if ($PolicyInputProvenanceTrace) { '$true' } else { '$false' }
@@ -236,7 +238,13 @@ $Invocation = @"
     PolicyInputProvenanceTrace = $PolicyInputProvenanceTraceLiteral
 }
 & '$EscapedBuildScript' @Parameters
-exit `$LASTEXITCODE
+`$BuildInvocationSucceeded = `$?
+`$ChildExitCode = `$LASTEXITCODE
+if (`$null -eq `$ChildExitCode) {
+    `$ChildExitCode = if (`$BuildInvocationSucceeded) { 0 } else { 1 }
+}
+Set-Content -LiteralPath '$EscapedChildExitCodePath' -Value ([int]`$ChildExitCode) -Encoding ascii
+exit ([int]`$ChildExitCode)
 "@
 $Invocation | Set-Content -LiteralPath $InvocationPath -Encoding utf8
 
@@ -282,12 +290,41 @@ while (-not $Process.HasExited) {
     $Process.Refresh()
 }
 
-# PowerShell can observe HasExited before the managed Process object has
-# populated its cached exit-code state. Synchronize and refresh explicitly
-# before classifying the child result.
+# PowerShell can observe HasExited before redirected streams and managed
+# process state are fully synchronized. The child writes its own integer exit
+# marker; the Process.ExitCode property is only a fallback.
 $Process.WaitForExit()
 $Process.Refresh()
-$ExitCode = $Process.ExitCode
+$ExitCode = $null
+if (Test-Path -LiteralPath $ChildExitCodePath -PathType Leaf) {
+    $RawChildExitCode = (Get-Content -Raw -LiteralPath $ChildExitCodePath).Trim()
+    $ParsedChildExitCode = 0
+    if ([int]::TryParse($RawChildExitCode, [ref]$ParsedChildExitCode)) {
+        $ExitCode = $ParsedChildExitCode
+    }
+}
+if ($null -eq $ExitCode) {
+    try {
+        $ExitCode = [int]$Process.ExitCode
+    }
+    catch {
+        $ExitCode = $null
+    }
+}
+if ($null -eq $ExitCode) {
+    Write-OrchestrationResult $OrchestrationPath @{
+        schema_version = "physanim-ue-automation-orchestration/v1"
+        state = "CHILD_EXIT_UNKNOWN"
+        verdict = "INVALID"
+        ended_utc = (Get-Date).ToUniversalTime().ToString("o")
+        plan = $Plan
+        stdout = $StdoutPath
+        stderr = $StderrPath
+        child_exit_code_path = $ChildExitCodePath
+    }
+    Write-Error "INVALID: automation child completed without a readable exit code. Artifacts and logs were retained at $RunRoot"
+    exit 2
+}
 if ($ExitCode -ne 0) {
     $StdoutTail = if (Test-Path $StdoutPath) { (Get-Content $StdoutPath -Tail 80) -join "`n" } else { "" }
     $Verdict = if ($StdoutTail -match 'COMPILATION FAILED|Result: Failed') { "BLOCKED" } else { "INVALID" }
