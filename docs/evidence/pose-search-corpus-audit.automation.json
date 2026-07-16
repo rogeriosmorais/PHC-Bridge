@@ -1,0 +1,57 @@
+﻿{
+	"devices": [
+		{
+			"deviceName": "DESKTOP-79MP8GH",
+			"instance": "059DB9A946F950B0CD82549ABE61D272",
+			"instanceName": "DESKTOP-79MP8GH-14744",
+			"platform": "WindowsEditor",
+			"oSVersion": "Windows 10 (22H2) [10.0.19045.5011] ",
+			"model": "Default",
+			"gPU": "NVIDIA GeForce RTX 4070 SUPER",
+			"cPUModel": "Intel(R) Core(TM) i7-14700KF",
+			"rAMInGB": 32,
+			"renderMode": "SM6",
+			"rHI": "",
+			"appInstanceLog": ""
+		}
+	],
+	"reportCreatedOn": "2026.07.16-15.44.02",
+	"succeeded": 1,
+	"succeededWithWarnings": 0,
+	"failed": 0,
+	"notRun": 0,
+	"inProcess": 0,
+	"totalDuration": 0.0017281994223594666,
+	"comparisonExported": false,
+	"comparisonExportDirectory": "",
+	"tests": [
+		{
+			"testDisplayName": "PoseSearchCorpusAudit",
+			"fullTestPath": "PhysAnim.Development.PoseSearchCorpusAudit",
+			"tags": [],
+			"state": "Success",
+			"deviceInstance": [
+				"059DB9A946F950B0CD82549ABE61D272"
+			],
+			"duration": 0.0017281994223594666,
+			"dateTime": "2026.07.16-15.44.02",
+			"entries": [
+				{
+					"event":
+					{
+						"type": "Info",
+						"message": "Pose Search corpus audit: F:/NewEngine-AgentB/.worktrees/asset-audit/PhysAnimUE5/Saved/PhysAnim/pose-search-corpus-audit.json",
+						"context": "",
+						"artifact": "00000000000000000000000000000000"
+					},
+					"filename": "",
+					"lineNumber": -1,
+					"timestamp": "2026.07.16-15.44.02"
+				}
+			],
+			"warnings": 0,
+			"errors": 0,
+			"artifacts": []
+		}
+	]
+}
