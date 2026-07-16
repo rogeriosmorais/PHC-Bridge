@@ -2125,6 +2125,15 @@ EStage2ALocomotionTerminalState UPhysAnimComponent::EvaluateStage2ALocomotionReq
 
 bool UPhysAnimComponent::TryOpenStage2ALocomotionRequestGate(const TCHAR* RequestReason)
 {
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing && !BridgeShellState.bInitialized)
+	{
+		if (const AActor* const OwnerActor = GetOwner())
+		{
+			BridgeShellState = FBridgeShellState();
+			BridgeShellState.LastAcceptedActorLocation = OwnerActor->GetActorLocation();
+			BridgeShellState.bInitialized = true;
+		}
+	}
 	Stage2ALastLocomotionTerminalState = EvaluateStage2ALocomotionRequestGate();
 	const bool bAllowed = Stage2ALastLocomotionTerminalState == EStage2ALocomotionTerminalState::Allowed;
 	Stage2ALocomotionRequestState = bAllowed ? EBridgeLocomotionRequestState::LocomotionRequested : EBridgeLocomotionRequestState::LocomotionRequestDenied;

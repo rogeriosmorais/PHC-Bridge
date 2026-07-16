@@ -81,6 +81,19 @@ bool FPhysAnimScriptedLocomotionRuntimeTest::RunTest(const FString& Parameters)
 		TestComp->Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::NotEvaluated;
 	};
 
+	// E62 red contract: production request boundary seeds the shell state without moving the actor.
+	{
+		ResetToAllowed();
+		const FVector SeedLocation(12.0f, -7.0f, 25.0f);
+		Fixture.Actor->SetActorLocation(SeedLocation, false);
+		TestComp->BridgeShellState = FBridgeShellState();
+		TestFalse(TEXT("SCRIPTED-SEED-01 Shell starts uninitialized"), TestComp->BridgeShellState.bInitialized);
+		TestTrue(TEXT("SCRIPTED-SEED-02 TryOpen seeds and opens production shell state"), TestComp->TryOpenStage2ALocomotionRequestGate(TEXT("ScriptedSeedTest")));
+		TestTrue(TEXT("SCRIPTED-SEED-03 Shell is initialized"), TestComp->BridgeShellState.bInitialized);
+		TestEqual(TEXT("SCRIPTED-SEED-04 Seed location matches actor"), (double)FVector::Distance(TestComp->BridgeShellState.LastAcceptedActorLocation, SeedLocation), 0.0, 0.0);
+		TestEqual(TEXT("SCRIPTED-SEED-05 Seeding does not move actor"), (double)FVector::Distance(Fixture.Actor->GetActorLocation(), SeedLocation), 0.0, 0.0);
+	}
+
 	// Red contract 1: scalable forward movement and yaw are composed in one real runtime step.
 	{
 		ResetToAllowed();
