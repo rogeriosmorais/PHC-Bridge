@@ -1,0 +1,1007 @@
+{
+  "experiments": {
+    "E58": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/production-all-joints.e58.json"
+      ]
+    },
+    "E59": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage2/scripted-locomotion-runtime.e59.preregister.json"
+      ],
+      "results": []
+    },
+    "E60": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage2/scripted-causal-locomotion.e60.preregister.json"
+      ],
+      "results": []
+    },
+    "E61": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage2/production-locomotion-gate-alignment.e61.preregister.json"
+      ],
+      "results": []
+    },
+    "E62": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage2/production-locomotion-shell-seed.e62.preregister.json"
+      ],
+      "results": []
+    },
+    "E63": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage2/production-locomotion-policy-continuity.e63.preregister.json"
+      ],
+      "results": []
+    },
+    "E64": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage2/locomotion-trajectory-pose-search.e64.preregister.json"
+      ],
+      "results": []
+    },
+    "E65": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage2/locomotion-pose-search-routing.e65.preregister.json"
+      ],
+      "results": []
+    },
+    "E66": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage2/active-shell-locomotion-authority-preservation.e66.preregister.json"
+      ],
+      "results": []
+    },
+    "E67": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage2/pose-search-query-velocity-regression.e67.preregister.json"
+      ],
+      "results": []
+    },
+    "E68": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage2/stage2-pose-search-speed-coherence.e68.preregister.json"
+      ],
+      "results": [
+        "experiments/stage2/stage2-pose-search-speed-coherence.e68.json"
+      ]
+    },
+    "E69": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage2/scripted-locomotion-speed-coherent-schedule.e69.preregister.json"
+      ],
+      "results": []
+    },
+    "E70": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage2/locomotion-lower-limb-response-runtime-gate.e70.preregister.json"
+      ],
+      "results": [
+        "experiments/stage2/locomotion-lower-limb-response-runtime-gate.e70.json"
+      ]
+    },
+    "E71": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage2/authoritative-locomotion-lower-limb-response.e71.preregister.json"
+      ],
+      "results": [
+        "experiments/stage2/authoritative-locomotion-lower-limb-response.e71.json"
+      ]
+    },
+    "E72": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage2/locomotion-policy-strength-identity.e72.preregister.json"
+      ],
+      "results": [
+        "experiments/stage2/locomotion-policy-strength-identity.e72.json"
+      ]
+    },
+    "E73": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage2/root-shell-tracking-evidence.e73.preregister.json"
+      ],
+      "results": [
+        "experiments/stage2/root-shell-tracking-evidence.e73.json"
+      ]
+    },
+    "E74": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage2/pose-search-animation-frame-adapter.e74.preregister.json"
+      ],
+      "results": [
+        "experiments/stage2/pose-search-animation-frame-adapter.e74.json"
+      ]
+    },
+    "E75": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage2/pose-search-full-trajectory-frame.e75.preregister.json"
+      ],
+      "results": [
+        "experiments/stage2/pose-search-full-trajectory-frame.e75.json"
+      ]
+    },
+    "E76": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage2/locomotion-translation-only-mimic-frame.e76.preregister.json"
+      ],
+      "results": [
+        "experiments/stage2/locomotion-translation-only-mimic-frame.e76.json"
+      ]
+    },
+    "E77": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage2/pose-search-mesh-facing-basis.e77.preregister.json"
+      ],
+      "results": []
+    },
+    "acceleration-strength-screen-e30": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/acceleration-strength-screen.e30.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/acceleration-strength-screen.e30.json"
+      ]
+    },
+    "action-adapter-factorial-e18": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/action-adapter-factorial.e18.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/action-adapter-factorial.e18.json"
+      ]
+    },
+    "active-standing-action-axis-frame-e16": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage1/active-standing-action-axis-frame.e16.preregister.json"
+      ],
+      "results": []
+    },
+    "active-standing-action-axis-frame-e16-attempt1": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/active-standing-action-axis-frame.e16.attempt1.json"
+      ]
+    },
+    "active-standing-action-axis-frame-e16-attempt2": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/active-standing-action-axis-frame.e16.attempt2.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/active-standing-action-axis-frame.e16.attempt2.json"
+      ]
+    },
+    "active-standing-action-decode-contract-e14": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/active-standing-action-decode-contract.e14.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/active-standing-action-decode-contract.e14.json"
+      ]
+    },
+    "active-standing-action-semantics-e3": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/active-standing-action-semantics.e3.json"
+      ]
+    },
+    "active-standing-constraint-range-remap-bypass-e4": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/active-standing-constraint-range-remap-bypass.e4.json"
+      ]
+    },
+    "active-standing-constraint-range-remap-controlled-e13": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/active-standing-constraint-range-remap-controlled.e13.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/active-standing-constraint-range-remap-controlled.e13.json"
+      ]
+    },
+    "active-standing-manny-local-frame-roundtrip-e15": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/active-standing-manny-local-frame-roundtrip.e15.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/active-standing-manny-local-frame-roundtrip.e15.json"
+      ]
+    },
+    "active-standing-root-frame-alignment-e2": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/active-standing-root-frame-alignment.e2.json"
+      ]
+    },
+    "active-standing-root-frame-observation-e1": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/active-standing-root-frame-observation.e1.json"
+      ]
+    },
+    "checkpoint-force-pd-e22": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/checkpoint-force-pd.e22.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/checkpoint-force-pd.e22.json"
+      ]
+    },
+    "checkpoint-torque-ceiling-e21": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage1/checkpoint-torque-ceiling.e21.preregister.json"
+      ],
+      "results": []
+    },
+    "checkpoint-torque-ceiling-e21-attempt1": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/checkpoint-torque-ceiling.e21.attempt1.json"
+      ]
+    },
+    "checkpoint-torque-ceiling-e21-attempt2": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/checkpoint-torque-ceiling.e21.attempt2.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/checkpoint-torque-ceiling.e21.attempt2.json"
+      ]
+    },
+    "deterministic-distal-hands-restoration-e44": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/deterministic-distal-hands-restoration.e44.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/deterministic-distal-hands-restoration.e44.json"
+      ]
+    },
+    "deterministic-head-after-first-policy-e46": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/deterministic-head-after-first-policy.e46.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/deterministic-head-after-first-policy.e46.json"
+      ]
+    },
+    "deterministic-pre-pie-fixed-step-e42": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/deterministic-pre-pie-fixed-step.e42.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/deterministic-pre-pie-fixed-step.e42.json"
+      ]
+    },
+    "deterministic-single-thread-execution-e43": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/deterministic-single-thread-execution.e43.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/deterministic-single-thread-execution.e43.json"
+      ]
+    },
+    "exact-adapter-range-remap-e19": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/exact-adapter-range-remap.e19.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/exact-adapter-range-remap.e19.json"
+      ]
+    },
+    "individual-harmful-joint-ablation-e24": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/individual-harmful-joint-ablation.e24.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/individual-harmful-joint-ablation.e24.json"
+      ]
+    },
+    "lower-joint-recovery-screen-e26": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/lower-joint-recovery-screen.e26.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/lower-joint-recovery-screen.e26.json"
+      ]
+    },
+    "lower-only-causal-standing-e25": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/lower-only-causal-standing.e25.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/lower-only-causal-standing.e25.json"
+      ]
+    },
+    "lower-policy-authority-bundle-e31": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/lower-policy-authority-bundle.e31.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/lower-policy-authority-bundle.e31.json"
+      ]
+    },
+    "policy-action-baseline-residual-e27": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/policy-action-baseline-residual.e27.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/policy-action-baseline-residual.e27.json"
+      ]
+    },
+    "policy-action-family-ablation-e20": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/policy-action-family-ablation.e20.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/policy-action-family-ablation.e20.json"
+      ]
+    },
+    "policy-action-zero-until-baseline-e28": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/policy-action-zero-until-baseline.e28.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/policy-action-zero-until-baseline.e28.json"
+      ]
+    },
+    "production-causal-standing-e32": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/production-causal-standing.e32.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/production-causal-standing.e32.json"
+      ]
+    },
+    "production-component-action-axis-e33": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/production-component-action-axis.e33.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/production-component-action-axis.e33.json"
+      ]
+    },
+    "production-distal-hands-restoration-e45": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/production-distal-hands-restoration.e45.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/production-distal-hands-restoration.e45.json"
+      ]
+    },
+    "production-head-after-first-policy-e47": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/production-head-after-first-policy.e47.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/production-head-after-first-policy.e47.json"
+      ]
+    },
+    "production-scaled-delayed-left-proximal-e53": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/production-scaled-delayed-left-proximal.e53.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/production-scaled-delayed-left-proximal.e53.json"
+      ]
+    },
+    "production-scaled-delayed-neck-e51": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/production-scaled-delayed-neck.e51.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/production-scaled-delayed-neck.e51.json"
+      ]
+    },
+    "production-scaled-delayed-right-proximal-e55": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/production-scaled-delayed-right-proximal.e55.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/production-scaled-delayed-right-proximal.e55.json"
+      ]
+    },
+    "production-scaled-delayed-torso-e58": {
+      "has_preregistration": true,
+      "has_result": false,
+      "preregistrations": [
+        "experiments/stage1/production-scaled-delayed-torso.e58.preregister.json"
+      ],
+      "results": []
+    },
+    "production-spine-chest-restoration-e40": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/production-spine-chest-restoration.e40.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/production-spine-chest-restoration.e40.json"
+      ]
+    },
+    "real-onnx-coherent-prior-epoch-e12": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/real-onnx-coherent-prior-epoch.e12.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/real-onnx-coherent-prior-epoch.e12.json"
+      ]
+    },
+    "real-onnx-first-policy-delay-e7": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/real-onnx-first-policy-delay.e7.json"
+      ]
+    },
+    "real-onnx-ground-reference-e11": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/real-onnx-ground-reference.e11.json"
+      ]
+    },
+    "real-onnx-policy-input-provenance-e6": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/real-onnx-policy-input-provenance.e6.json"
+      ]
+    },
+    "real-onnx-preintervention-determinism-e5": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/real-onnx-preintervention-determinism.e5.json"
+      ]
+    },
+    "real-onnx-prior-body-replay-e10": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/real-onnx-prior-body-replay.e10.json"
+      ]
+    },
+    "real-onnx-startup-chronology-e8": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/real-onnx-startup-chronology.e8.json"
+      ]
+    },
+    "real-onnx-waiting-chronology-e9": {
+      "has_preregistration": false,
+      "has_result": true,
+      "preregistrations": [],
+      "results": [
+        "experiments/stage1/real-onnx-waiting-chronology.e9.json"
+      ]
+    },
+    "rigid-body-position-observation-e29": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/rigid-body-position-observation.e29.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/rigid-body-position-observation.e29.json"
+      ]
+    },
+    "scaled-delayed-left-proximal-e52": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/scaled-delayed-left-proximal.e52.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/scaled-delayed-left-proximal.e52.json"
+      ]
+    },
+    "scaled-delayed-neck-e49": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/scaled-delayed-neck.e49.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/scaled-delayed-neck.e49.json"
+      ]
+    },
+    "scaled-delayed-neck-e50": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/scaled-delayed-neck.e50.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/scaled-delayed-neck.e50.json"
+      ]
+    },
+    "scaled-delayed-restoration-framework-e48": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/scaled-delayed-restoration-framework.e48.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/scaled-delayed-restoration-framework.e48.json"
+      ]
+    },
+    "scaled-delayed-right-proximal-e54": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/scaled-delayed-right-proximal.e54.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/scaled-delayed-right-proximal.e54.json"
+      ]
+    },
+    "scaled-delayed-torso-e56": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/scaled-delayed-torso.e56.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/scaled-delayed-torso.e56.json"
+      ]
+    },
+    "scaled-delayed-torso-e57": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/scaled-delayed-torso.e57.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/scaled-delayed-torso.e57.json"
+      ]
+    },
+    "startup-repeatability-e17": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/startup-repeatability.e17.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/startup-repeatability.e17.json"
+      ]
+    },
+    "upper-action-subset-ablation-e23": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/upper-action-subset-ablation.e23.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/upper-action-subset-ablation.e23.json"
+      ]
+    },
+    "upper-body-distal-hands-restoration-e41": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/upper-body-distal-hands-restoration.e41.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/upper-body-distal-hands-restoration.e41.json"
+      ]
+    },
+    "upper-body-head-active-only-e37": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/upper-body-head-active-only.e37.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/upper-body-head-active-only.e37.json"
+      ]
+    },
+    "upper-body-head-after-first-policy-e38": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/upper-body-head-after-first-policy.e38.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/upper-body-head-after-first-policy.e38.json"
+      ]
+    },
+    "upper-body-head-restoration-e36": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/upper-body-head-restoration.e36.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/upper-body-head-restoration.e36.json"
+      ]
+    },
+    "upper-body-neck-head-restoration-e34": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/upper-body-neck-head-restoration.e34.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/upper-body-neck-head-restoration.e34.json"
+      ]
+    },
+    "upper-body-neck-restoration-e35": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/upper-body-neck-restoration.e35.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/upper-body-neck-restoration.e35.json"
+      ]
+    },
+    "upper-body-spine-chest-restoration-e39": {
+      "has_preregistration": true,
+      "has_result": true,
+      "preregistrations": [
+        "experiments/stage1/upper-body-spine-chest-restoration.e39.preregister.json"
+      ],
+      "results": [
+        "experiments/stage1/upper-body-spine-chest-restoration.e39.json"
+      ]
+    }
+  },
+  "issues": [
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "E58",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/production-all-joints.e58.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "E59",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage2/scripted-locomotion-runtime.e59.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "E60",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage2/scripted-causal-locomotion.e60.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "E61",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage2/production-locomotion-gate-alignment.e61.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "E62",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage2/production-locomotion-shell-seed.e62.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "E63",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage2/production-locomotion-policy-continuity.e63.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "E64",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage2/locomotion-trajectory-pose-search.e64.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "E65",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage2/locomotion-pose-search-routing.e65.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "E66",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage2/active-shell-locomotion-authority-preservation.e66.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "E67",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage2/pose-search-query-velocity-regression.e67.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "E69",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage2/scripted-locomotion-speed-coherent-schedule.e69.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "E77",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage2/pose-search-mesh-facing-basis.e77.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "active-standing-action-axis-frame-e16",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage1/active-standing-action-axis-frame.e16.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "active-standing-action-axis-frame-e16-attempt1",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/active-standing-action-axis-frame.e16.attempt1.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "active-standing-action-semantics-e3",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/active-standing-action-semantics.e3.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "active-standing-constraint-range-remap-bypass-e4",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/active-standing-constraint-range-remap-bypass.e4.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "active-standing-root-frame-alignment-e2",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/active-standing-root-frame-alignment.e2.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "active-standing-root-frame-observation-e1",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/active-standing-root-frame-observation.e1.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "checkpoint-torque-ceiling-e21",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage1/checkpoint-torque-ceiling.e21.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "checkpoint-torque-ceiling-e21-attempt1",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/checkpoint-torque-ceiling.e21.attempt1.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_result",
+      "experiment_id": "production-scaled-delayed-torso-e58",
+      "message": "Preregistration has no recorded result.",
+      "path": "experiments/stage1/production-scaled-delayed-torso.e58.preregister.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "real-onnx-first-policy-delay-e7",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/real-onnx-first-policy-delay.e7.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "real-onnx-ground-reference-e11",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/real-onnx-ground-reference.e11.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "real-onnx-policy-input-provenance-e6",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/real-onnx-policy-input-provenance.e6.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "real-onnx-preintervention-determinism-e5",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/real-onnx-preintervention-determinism.e5.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "real-onnx-prior-body-replay-e10",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/real-onnx-prior-body-replay.e10.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "real-onnx-startup-chronology-e8",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/real-onnx-startup-chronology.e8.json",
+      "severity": "error"
+    },
+    {
+      "code": "experiment_missing_preregistration",
+      "experiment_id": "real-onnx-waiting-chronology-e9",
+      "message": "Result has no matching preregistration.",
+      "path": "experiments/stage1/real-onnx-waiting-chronology.e9.json",
+      "severity": "error"
+    },
+    {
+      "code": "locked_protocol_schedule_mismatch",
+      "message": "Runtime scripted phase boundaries differ from locked protocol v1: acceleration, cruise, deceleration, moving_turn",
+      "path": "PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimCausalStanding.Tests.cpp",
+      "severity": "error"
+    }
+  ],
+  "manifests": [],
+  "root": "F:\\NewEngine-AgentB\\.worktrees\\evidence-audit",
+  "schema_version": "physanim-experiment-evidence-audit/v1",
+  "scripted_schedule": {
+    "mismatched_phases": [
+      "acceleration",
+      "cruise",
+      "deceleration",
+      "moving_turn"
+    ],
+    "missing_from_protocol": [],
+    "missing_from_runtime": [],
+    "protocol_phase_end_sec": {
+      "acceleration": 2.0,
+      "cruise": 4.0,
+      "deceleration": 6.0,
+      "moving_turn": 5.0,
+      "standing_hold": 1.0
+    },
+    "runtime_phase_end_sec": {
+      "acceleration": 1.6,
+      "cruise": 2.1,
+      "deceleration": 3.0,
+      "moving_turn": 2.4,
+      "standing_hold": 1.0
+    },
+    "status": "MISMATCH"
+  },
+  "summary": {
+    "error_count": 29,
+    "experiment_count": 82,
+    "manifest_count": 0,
+    "status": "FAIL",
+    "warning_count": 0
+  }
+}
