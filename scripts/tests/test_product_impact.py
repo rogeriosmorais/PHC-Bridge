@@ -1,11 +1,27 @@
 from __future__ import annotations
 
+import hashlib
 import unittest
 
-from scripts.product_impact import ProductImpactConfigurationError, classify_product_impact
+from scripts.product_impact import (
+    EXPECTED_POLICY_SHA256,
+    ProductImpactConfigurationError,
+    canonicalize_locked_policy_bytes,
+    classify_product_impact,
+)
 
 
 class ProductImpactTests(unittest.TestCase):
+    def test_locked_policy_digest_is_platform_line_ending_invariant(self) -> None:
+        lf = b'{\n  "status": "LOCKED"\n}\n'
+        crlf = lf.replace(b"\n", b"\r\n")
+
+        self.assertEqual(
+            hashlib.sha256(canonicalize_locked_policy_bytes(lf)).hexdigest(),
+            hashlib.sha256(canonicalize_locked_policy_bytes(crlf)).hexdigest(),
+        )
+        self.assertEqual(len(EXPECTED_POLICY_SHA256), 64)
+
     def test_runtime_source_change_is_product_impacting(self) -> None:
         result = classify_product_impact(
             ["PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.cpp"]

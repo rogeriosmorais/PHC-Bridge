@@ -18,6 +18,11 @@ class ProductImpactConfigurationError(RuntimeError):
     pass
 
 
+def canonicalize_locked_policy_bytes(policy_bytes: bytes) -> bytes:
+    """Normalize only platform line endings before verifying a locked text policy."""
+    return policy_bytes.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
 @dataclass(frozen=True)
 class ProductImpactResult:
     changed_paths: tuple[str, ...]
@@ -40,7 +45,7 @@ def _reject_duplicate_keys(pairs: Sequence[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _load_policy() -> tuple[Mapping[str, Any], str]:
-    policy_bytes = POLICY_PATH.read_bytes()
+    policy_bytes = canonicalize_locked_policy_bytes(POLICY_PATH.read_bytes())
     digest = hashlib.sha256(policy_bytes).hexdigest()
     if digest != EXPECTED_POLICY_SHA256:
         raise ProductImpactConfigurationError(
