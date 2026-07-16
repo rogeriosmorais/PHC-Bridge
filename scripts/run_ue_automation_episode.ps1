@@ -105,11 +105,13 @@ if ($SourceTreeDirty -and -not $AllowDirty) {
     exit 2
 }
 
-$RunningUnreal = @(Get-Process -Name "UnrealEditor", "UnrealEditor-Cmd" -ErrorAction SilentlyContinue)
-if ($RunningUnreal.Count -gt 0) {
-    $ProcessSummary = ($RunningUnreal | ForEach-Object { "$($_.ProcessName):$($_.Id)" }) -join ", "
-    Write-Error "BLOCKED: an Unreal process is already running; refusing to start a duplicate episode: $ProcessSummary"
-    exit 3
+if (-not $DryRun) {
+    $RunningUnreal = @(Get-Process -Name "UnrealEditor", "UnrealEditor-Cmd" -ErrorAction SilentlyContinue)
+    if ($RunningUnreal.Count -gt 0) {
+        $ProcessSummary = ($RunningUnreal | ForEach-Object { "$($_.ProcessName):$($_.Id)" }) -join ", "
+        Write-Error "BLOCKED: an Unreal process is already running; refusing to start a duplicate episode: $ProcessSummary"
+        exit 3
+    }
 }
 
 if (-not $OutputRoot) {
