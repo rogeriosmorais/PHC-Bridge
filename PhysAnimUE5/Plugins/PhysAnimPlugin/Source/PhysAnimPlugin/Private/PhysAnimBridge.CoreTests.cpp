@@ -1977,4 +1977,112 @@ namespace
 #endif
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimLocomotionFrameReplayContractTest,
+		"PhysAnim.Bridge.LocomotionFrameReplayContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimLocomotionFrameReplayContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<FTransform> QueryTrajectoryWorldTransformsCm;
+		QueryTrajectoryWorldTransformsCm.Reserve(NumFutureSteps + 1);
+		for (int32 SampleIndex = 0; SampleIndex <= NumFutureSteps; ++SampleIndex)
+		{
+			QueryTrajectoryWorldTransformsCm.Add(FTransform(
+				FQuat(FVector::UpVector, FMath::DegreesToRadians(2.0 * SampleIndex)),
+				FVector(16.0 * SampleIndex, 0.0, 90.0)));
+		}
+
+		TArray<FPhysAnimBodySample> LiveBodySamples;
+		TArray<FPhysAnimBodySample> PhysicalBodySamples;
+		TArray<FPhysAnimBodySample> CanonicalBodySamples;
+		LiveBodySamples.SetNum(NumSmplBodies);
+		PhysicalBodySamples.SetNum(NumSmplBodies);
+		CanonicalBodySamples.SetNum(NumSmplBodies);
+		for (int32 BodyIndex = 0; BodyIndex < NumSmplBodies; ++BodyIndex)
+		{
+			const FVector Position(0.01 * BodyIndex, 0.0, 0.9 + 0.01 * BodyIndex);
+			LiveBodySamples[BodyIndex] = FPhysAnimBodySample(Position, FQuat::Identity, FVector::ZeroVector, FVector::ZeroVector);
+			PhysicalBodySamples[BodyIndex] = LiveBodySamples[BodyIndex];
+			CanonicalBodySamples[BodyIndex] = LiveBodySamples[BodyIndex];
+		}
+
+		TArray<FPhysAnimFuturePoseSample> RawFutureSamples;
+		TArray<FPhysAnimFuturePoseSample> PlacedFutureSamples;
+		for (int32 FutureIndex = 0; FutureIndex < NumFutureSteps; ++FutureIndex)
+		{
+			FPhysAnimFuturePoseSample Raw;
+			Raw.FutureTimeSeconds = (FutureIndex + 1) * FutureStepSeconds;
+			FPhysAnimFuturePoseSample Placed;
+			Placed.FutureTimeSeconds = Raw.FutureTimeSeconds;
+			for (int32 BodyIndex = 0; BodyIndex < NumSmplBodies; ++BodyIndex)
+			{
+				Raw.BodyTransforms.Add(FTransform(FQuat::Identity, FVector(0.0, 0.03 * (FutureIndex + 1), 0.9)));
+				Placed.BodyTransforms.Add(FTransform(FQuat::Identity, FVector(0.16 * (FutureIndex + 1), 0.0, 0.9)));
+			}
+			RawFutureSamples.Add(MoveTemp(Raw));
+			PlacedFutureSamples.Add(MoveTemp(Placed));
+		}
+
+		TArray<float> SelfObservation;
+		TArray<float> MimicTarget;
+		TArray<float> Terrain;
+		TArray<float> ConditionedActions;
+		SelfObservation.Init(0.0f, SelfObsSize);
+		MimicTarget.Init(0.0f, MimicTargetPosesSize);
+		Terrain.Init(0.0f, TerrainSize);
+		ConditionedActions.Init(0.0f, NumActionFloats);
+		ConditionedActions[0] = 0.25f;
+
+		FPhysAnimLocomotionFrameReplaySnapshot Snapshot;
+		TestTrue(
+			TEXT("A complete E80 locomotion step is captured once"),
+			Snapshot.CaptureFirstIf(
+				true,
+				TEXT("LocomotionActiveShell"),
+				12.5,
+				42,
+				TEXT("MF_Unarmed_Walk_Fwd"),
+				0.4f,
+				false,
+				FTransform::Identity,
+				FTransform(FQuat(FVector::UpVector, -PI * 0.5), FVector::ZeroVector),
+				FTransform::Identity,
+				FTransform::Identity,
+				QueryTrajectoryWorldTransformsCm,
+				LiveBodySamples,
+				PhysicalBodySamples,
+				CanonicalBodySamples,
+				RawFutureSamples,
+				PlacedFutureSamples,
+				SelfObservation,
+				MimicTarget,
+				Terrain,
+				ConditionedActions));
+
+		FString Error;
+		TestTrue(
+			TEXT("The complete E80 replay satisfies its deterministic contract"),
+			ValidateLocomotionFrameReplaySnapshot(Snapshot, Error));
+		TestTrue(TEXT("A valid E80 replay has no validation error"), Error.IsEmpty());
+		TestEqual(TEXT("The replay records current plus fifteen future query roots"), Snapshot.QueryTrajectoryWorldTransformsCm.Num(), NumFutureSteps + 1);
+		TestEqual(TEXT("The replay records the final action width"), Snapshot.ConditionedActions.Num(), NumActionFloats);
+		TestTrue(TEXT("The replay records a nonzero action signature"), Snapshot.ConditionedActionCrc32 != 0u);
+
+		FPhysAnimLocomotionFrameReplaySnapshot MissingTrajectory = Snapshot;
+		MissingTrajectory.QueryTrajectoryWorldTransformsCm.Pop();
+		TestFalse(
+			TEXT("A replay with a truncated query horizon is rejected"),
+			ValidateLocomotionFrameReplaySnapshot(MissingTrajectory, Error));
+		TestTrue(TEXT("The truncated query failure is explicit"), Error.Contains(TEXT("trajectory")));
+
+		FPhysAnimLocomotionFrameReplaySnapshot CorruptActionSignature = Snapshot;
+		++CorruptActionSignature.ConditionedActionCrc32;
+		TestFalse(
+			TEXT("A replay with an action-signature mismatch is rejected"),
+			ValidateLocomotionFrameReplaySnapshot(CorruptActionSignature, Error));
+		TestTrue(TEXT("The action-signature failure is explicit"), Error.Contains(TEXT("signature")));
+		return true;
+	}
 }

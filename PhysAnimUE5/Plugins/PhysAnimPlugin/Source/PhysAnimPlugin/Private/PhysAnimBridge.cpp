@@ -3,6 +3,7 @@
 #include "Algo/AllOf.h"
 #include "Algo/Find.h"
 #include "Containers/StaticArray.h"
+#include "Misc/Crc.h"
 
 namespace PhysAnimBridge
 {
@@ -820,6 +821,280 @@ namespace PhysAnimBridge
 
 
 #if WITH_DEV_AUTOMATION_TESTS
+	bool FPhysAnimLocomotionFrameReplaySnapshot::CaptureFirstIf(
+		bool bCondition,
+		const FString& InRuntimeState,
+		double InWorldTimeSeconds,
+		int32 InPolicyControlTick,
+		const FString& InPoseSearchAnimation,
+		float InPoseSearchSelectedTime,
+		bool bInPoseSearchMirrored,
+		const FTransform& InOwnerActorWorldTransform,
+		const FTransform& InMeshWorldTransform,
+		const FTransform& InSelectedAnimationWorldRootProtoMeters,
+		const FTransform& InSelectedAnimationDataRootProtoMeters,
+		TConstArrayView<FTransform> InQueryTrajectoryWorldTransformsCm,
+		TConstArrayView<FPhysAnimBodySample> InLiveBodySamplesProtoWorldMeters,
+		TConstArrayView<FPhysAnimBodySample> InPhysicalBodySamplesProtoWorldMeters,
+		TConstArrayView<FPhysAnimBodySample> InCanonicalBodySamplesProtoMeters,
+		TConstArrayView<FPhysAnimFuturePoseSample> InRawCanonicalFuturePoseSamples,
+		TConstArrayView<FPhysAnimFuturePoseSample> InPlacedCanonicalFuturePoseSamples,
+		TConstArrayView<float> InSelfObservation,
+		TConstArrayView<float> InMimicTarget,
+		TConstArrayView<float> InTerrain,
+		TConstArrayView<float> InConditionedActions)
+	{
+		if (!bCondition || bCaptured)
+		{
+			return false;
+		}
+
+		Reset();
+		CaptureScope = TEXT("first_locomotion_policy_step_post_conditioning");
+		RuntimeState = InRuntimeState;
+		WorldTimeSeconds = InWorldTimeSeconds;
+		PolicyControlTick = InPolicyControlTick;
+		PoseSearchAnimation = InPoseSearchAnimation;
+		PoseSearchSelectedTime = InPoseSearchSelectedTime;
+		bPoseSearchMirrored = bInPoseSearchMirrored;
+		OwnerActorWorldTransform = InOwnerActorWorldTransform;
+		MeshWorldTransform = InMeshWorldTransform;
+		SelectedAnimationWorldRootProtoMeters = InSelectedAnimationWorldRootProtoMeters;
+		SelectedAnimationDataRootProtoMeters = InSelectedAnimationDataRootProtoMeters;
+		QueryTrajectoryWorldTransformsCm.Append(
+			InQueryTrajectoryWorldTransformsCm.GetData(),
+			InQueryTrajectoryWorldTransformsCm.Num());
+		LiveBodySamplesProtoWorldMeters.Append(
+			InLiveBodySamplesProtoWorldMeters.GetData(),
+			InLiveBodySamplesProtoWorldMeters.Num());
+		PhysicalBodySamplesProtoWorldMeters.Append(
+			InPhysicalBodySamplesProtoWorldMeters.GetData(),
+			InPhysicalBodySamplesProtoWorldMeters.Num());
+		CanonicalBodySamplesProtoMeters.Append(
+			InCanonicalBodySamplesProtoMeters.GetData(),
+			InCanonicalBodySamplesProtoMeters.Num());
+		RawCanonicalFuturePoseSamples.Append(
+			InRawCanonicalFuturePoseSamples.GetData(),
+			InRawCanonicalFuturePoseSamples.Num());
+		PlacedCanonicalFuturePoseSamples.Append(
+			InPlacedCanonicalFuturePoseSamples.GetData(),
+			InPlacedCanonicalFuturePoseSamples.Num());
+		SelfObservation.Append(InSelfObservation.GetData(), InSelfObservation.Num());
+		MimicTarget.Append(InMimicTarget.GetData(), InMimicTarget.Num());
+		Terrain.Append(InTerrain.GetData(), InTerrain.Num());
+		ConditionedActions.Append(InConditionedActions.GetData(), InConditionedActions.Num());
+		ConditionedActionSignatureAlgorithm = LocomotionFrameReplayActionSignatureAlgorithm;
+		ConditionedActionCrc32 = InConditionedActions.IsEmpty()
+			? 0u
+			: FCrc::MemCrc32(
+				InConditionedActions.GetData(),
+				InConditionedActions.Num() * static_cast<int32>(sizeof(float)));
+		bCaptured = true;
+		return true;
+	}
+
+	void FPhysAnimLocomotionFrameReplaySnapshot::Reset()
+	{
+		bCaptured = false;
+		CaptureScope.Reset();
+		RuntimeState.Reset();
+		WorldTimeSeconds = 0.0;
+		PolicyControlTick = 0;
+		PoseSearchAnimation.Reset();
+		PoseSearchSelectedTime = 0.0f;
+		bPoseSearchMirrored = false;
+		OwnerActorWorldTransform = FTransform::Identity;
+		MeshWorldTransform = FTransform::Identity;
+		SelectedAnimationWorldRootProtoMeters = FTransform::Identity;
+		SelectedAnimationDataRootProtoMeters = FTransform::Identity;
+		QueryTrajectoryWorldTransformsCm.Reset();
+		LiveBodySamplesProtoWorldMeters.Reset();
+		PhysicalBodySamplesProtoWorldMeters.Reset();
+		CanonicalBodySamplesProtoMeters.Reset();
+		RawCanonicalFuturePoseSamples.Reset();
+		PlacedCanonicalFuturePoseSamples.Reset();
+		SelfObservation.Reset();
+		MimicTarget.Reset();
+		Terrain.Reset();
+		ConditionedActions.Reset();
+		ConditionedActionSignatureAlgorithm.Reset();
+		ConditionedActionCrc32 = 0u;
+	}
+
+	bool ValidateLocomotionFrameReplaySnapshot(
+		const FPhysAnimLocomotionFrameReplaySnapshot& Snapshot,
+		FString& OutError)
+	{
+		auto IsFiniteVector = [](const FVector& Value)
+		{
+			return FMath::IsFinite(Value.X) && FMath::IsFinite(Value.Y) && FMath::IsFinite(Value.Z);
+		};
+		auto IsFiniteNormalizedQuat = [](const FQuat& Value)
+		{
+			return FMath::IsFinite(Value.X) &&
+				FMath::IsFinite(Value.Y) &&
+				FMath::IsFinite(Value.Z) &&
+				FMath::IsFinite(Value.W) &&
+				Value.IsNormalized();
+		};
+		auto IsFiniteTransform = [&](const FTransform& Value)
+		{
+			return IsFiniteVector(Value.GetLocation()) &&
+				IsFiniteNormalizedQuat(Value.GetRotation()) &&
+				IsFiniteVector(Value.GetScale3D());
+		};
+		auto IsFiniteBodySample = [&](const FPhysAnimBodySample& Sample)
+		{
+			return IsFiniteVector(Sample.Position) &&
+				IsFiniteNormalizedQuat(Sample.Rotation) &&
+				IsFiniteVector(Sample.LinearVelocity) &&
+				IsFiniteVector(Sample.AngularVelocity);
+		};
+		auto ValidateBodySamples = [&](TConstArrayView<FPhysAnimBodySample> Samples, const TCHAR* Label)
+		{
+			if (Samples.Num() != NumSmplBodies)
+			{
+				OutError = FString::Printf(TEXT("%s has %d bodies instead of %d."), Label, Samples.Num(), NumSmplBodies);
+				return false;
+			}
+			for (int32 BodyIndex = 0; BodyIndex < Samples.Num(); ++BodyIndex)
+			{
+				if (!IsFiniteBodySample(Samples[BodyIndex]))
+				{
+					OutError = FString::Printf(TEXT("%s body %d is invalid."), Label, BodyIndex);
+					return false;
+				}
+			}
+			return true;
+		};
+		auto ValidateFutureSamples = [&](TConstArrayView<FPhysAnimFuturePoseSample> Samples, const TCHAR* Label)
+		{
+			if (Samples.Num() != NumFutureSteps)
+			{
+				OutError = FString::Printf(TEXT("%s has %d future samples instead of %d."), Label, Samples.Num(), NumFutureSteps);
+				return false;
+			}
+			float PreviousTimeSeconds = 0.0f;
+			for (int32 FutureIndex = 0; FutureIndex < Samples.Num(); ++FutureIndex)
+			{
+				const FPhysAnimFuturePoseSample& Sample = Samples[FutureIndex];
+				if (!FMath::IsFinite(Sample.FutureTimeSeconds) ||
+					Sample.FutureTimeSeconds <= PreviousTimeSeconds ||
+					Sample.BodyTransforms.Num() != NumSmplBodies)
+				{
+					OutError = FString::Printf(TEXT("%s future sample %d has an invalid time or body count."), Label, FutureIndex);
+					return false;
+				}
+				for (int32 BodyIndex = 0; BodyIndex < Sample.BodyTransforms.Num(); ++BodyIndex)
+				{
+					if (!IsFiniteTransform(Sample.BodyTransforms[BodyIndex]))
+					{
+						OutError = FString::Printf(TEXT("%s future sample %d body %d is invalid."), Label, FutureIndex, BodyIndex);
+						return false;
+					}
+				}
+				PreviousTimeSeconds = Sample.FutureTimeSeconds;
+			}
+			return true;
+		};
+		auto ValidateFloatVector = [&](TConstArrayView<float> Values, int32 ExpectedCount, const TCHAR* Label)
+		{
+			if (Values.Num() != ExpectedCount)
+			{
+				OutError = FString::Printf(TEXT("%s has %d values instead of %d."), Label, Values.Num(), ExpectedCount);
+				return false;
+			}
+			for (const float Value : Values)
+			{
+				if (!FMath::IsFinite(Value))
+				{
+					OutError = FString::Printf(TEXT("%s contains a non-finite value."), Label);
+					return false;
+				}
+			}
+			return true;
+		};
+
+		OutError.Reset();
+		if (!Snapshot.bCaptured || Snapshot.CaptureScope.IsEmpty())
+		{
+			OutError = TEXT("Locomotion frame replay was not captured.");
+			return false;
+		}
+		if (Snapshot.RuntimeState != TEXT("LocomotionActiveShell") ||
+			Snapshot.PoseSearchAnimation.IsEmpty() ||
+			!FMath::IsFinite(Snapshot.WorldTimeSeconds) ||
+			!FMath::IsFinite(Snapshot.PoseSearchSelectedTime) ||
+			Snapshot.PolicyControlTick < 1)
+		{
+			OutError = TEXT("Locomotion frame replay identity or scalar fields are invalid.");
+			return false;
+		}
+		if (!IsFiniteTransform(Snapshot.OwnerActorWorldTransform) ||
+			!IsFiniteTransform(Snapshot.MeshWorldTransform) ||
+			!IsFiniteTransform(Snapshot.SelectedAnimationWorldRootProtoMeters) ||
+			!IsFiniteTransform(Snapshot.SelectedAnimationDataRootProtoMeters))
+		{
+			OutError = TEXT("Locomotion frame replay contains an invalid frame transform.");
+			return false;
+		}
+		if (Snapshot.QueryTrajectoryWorldTransformsCm.Num() != NumFutureSteps + 1)
+		{
+			OutError = FString::Printf(
+				TEXT("Query trajectory replay has %d transforms instead of %d."),
+				Snapshot.QueryTrajectoryWorldTransformsCm.Num(),
+				NumFutureSteps + 1);
+			return false;
+		}
+		for (int32 SampleIndex = 0; SampleIndex < Snapshot.QueryTrajectoryWorldTransformsCm.Num(); ++SampleIndex)
+		{
+			if (!IsFiniteTransform(Snapshot.QueryTrajectoryWorldTransformsCm[SampleIndex]))
+			{
+				OutError = FString::Printf(TEXT("Query trajectory transform %d is invalid."), SampleIndex);
+				return false;
+			}
+		}
+		if (!ValidateBodySamples(Snapshot.LiveBodySamplesProtoWorldMeters, TEXT("Live body replay")) ||
+			!ValidateBodySamples(Snapshot.PhysicalBodySamplesProtoWorldMeters, TEXT("Physical body replay")) ||
+			!ValidateBodySamples(Snapshot.CanonicalBodySamplesProtoMeters, TEXT("Canonical body replay")) ||
+			!ValidateFutureSamples(Snapshot.RawCanonicalFuturePoseSamples, TEXT("Raw canonical future replay")) ||
+			!ValidateFutureSamples(Snapshot.PlacedCanonicalFuturePoseSamples, TEXT("Placed canonical future replay")) ||
+			!ValidateFloatVector(Snapshot.SelfObservation, SelfObsSize, TEXT("Self observation replay")) ||
+			!ValidateFloatVector(Snapshot.MimicTarget, MimicTargetPosesSize, TEXT("Mimic target replay")) ||
+			!ValidateFloatVector(Snapshot.Terrain, TerrainSize, TEXT("Terrain replay")) ||
+			!ValidateFloatVector(Snapshot.ConditionedActions, NumActionFloats, TEXT("Conditioned action replay")))
+		{
+			return false;
+		}
+		for (int32 FutureIndex = 0; FutureIndex < NumFutureSteps; ++FutureIndex)
+		{
+			if (!FMath::IsNearlyEqual(
+				Snapshot.RawCanonicalFuturePoseSamples[FutureIndex].FutureTimeSeconds,
+				Snapshot.PlacedCanonicalFuturePoseSamples[FutureIndex].FutureTimeSeconds,
+				UE_SMALL_NUMBER))
+			{
+				OutError = FString::Printf(TEXT("Raw and placed future replay sample %d use different times."), FutureIndex);
+				return false;
+			}
+		}
+		if (Snapshot.ConditionedActionSignatureAlgorithm != LocomotionFrameReplayActionSignatureAlgorithm)
+		{
+			OutError = TEXT("Conditioned action signature algorithm is invalid.");
+			return false;
+		}
+		const uint32 ExpectedCrc32 = Snapshot.ConditionedActions.IsEmpty()
+			? 0u
+			: FCrc::MemCrc32(
+				Snapshot.ConditionedActions.GetData(),
+				Snapshot.ConditionedActions.Num() * static_cast<int32>(sizeof(float)));
+		if (Snapshot.ConditionedActionCrc32 != ExpectedCrc32)
+		{
+			OutError = TEXT("Conditioned action signature does not match the captured action vector.");
+			return false;
+		}
+		return true;
+	}
+
 	bool ValidatePolicyInputProvenanceSnapshot(
 		const FPhysAnimPolicyInputProvenanceSnapshot& Snapshot,
 		FString& OutError)

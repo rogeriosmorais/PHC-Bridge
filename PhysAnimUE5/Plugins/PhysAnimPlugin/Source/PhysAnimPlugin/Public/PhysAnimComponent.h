@@ -1757,6 +1757,10 @@ public:
 	{
 		return FirstPolicyInputProvenanceSnapshot;
 	}
+	const PhysAnimBridge::FPhysAnimLocomotionFrameReplaySnapshot& GetLocomotionFrameReplaySnapshotForTesting() const
+	{
+		return FirstLocomotionFrameReplaySnapshot;
+	}
 	const PhysAnimBridge::FPhysAnimStartupChronologyTrace& GetStartupChronologyTraceForTesting() const
 	{
 		return StartupChronologyTrace;
@@ -2512,6 +2516,9 @@ private:
 	bool QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	bool GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& OutBodySamples, FString& OutError) const;
 #if WITH_DEV_AUTOMATION_TESTS
+	bool GatherCurrentPhysicalBodySamplesForReplay(
+		TArray<FPhysAnimBodySample>& OutBodySamples,
+		FString& OutError) const;
 	void CaptureStartupChronologySampleForTesting(const TCHAR* Stage);
 #endif
 	bool SampleFuturePoses(const FPoseSearchBlueprintResult& SearchResult, TArray<FPhysAnimFuturePoseSample>& OutFutureSamples, FString& OutError) const;
@@ -2776,6 +2783,7 @@ private:
 	PhysAnimBridge::FPhysAnimActionSemanticTrace FirstActiveStandingActionSemanticTrace;
 	PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace FirstActiveStandingMannyLocalFrameRoundtripTrace;
 	PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot FirstPolicyInputProvenanceSnapshot;
+	PhysAnimBridge::FPhysAnimLocomotionFrameReplaySnapshot FirstLocomotionFrameReplaySnapshot;
 	PhysAnimBridge::FPhysAnimStartupChronologyTrace StartupChronologyTrace;
 	PhysAnimBridge::FPhysAnimFirstPolicyBodySourceTrace FirstPolicyBodySourceTrace;
 	PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceTrace FirstPolicyGroundReferenceTrace;

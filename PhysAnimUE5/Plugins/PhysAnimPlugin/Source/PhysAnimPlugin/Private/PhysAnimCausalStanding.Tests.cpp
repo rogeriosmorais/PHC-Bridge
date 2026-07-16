@@ -2476,6 +2476,87 @@ namespace
 		return Root;
 	}
 
+	TSharedRef<FJsonObject> BuildLocomotionFrameReplayJson(
+		const PhysAnimBridge::FPhysAnimLocomotionFrameReplaySnapshot& Snapshot,
+		const bool bEnabled)
+	{
+		FString ValidationError;
+		const bool bValid = bEnabled &&
+			PhysAnimBridge::ValidateLocomotionFrameReplaySnapshot(Snapshot, ValidationError);
+		if (!bEnabled)
+		{
+			ValidationError.Reset();
+		}
+
+		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("schema_version"), TEXT("physanim-locomotion-frame-replay/v1"));
+		Root->SetStringField(TEXT("authority"), TEXT("E80_DETERMINISTIC_REPLAY"));
+		Root->SetBoolField(TEXT("enabled"), bEnabled);
+		Root->SetBoolField(TEXT("captured"), Snapshot.bCaptured);
+		Root->SetBoolField(TEXT("valid"), bValid);
+		Root->SetStringField(TEXT("validation_error"), ValidationError);
+		Root->SetStringField(TEXT("capture_scope"), Snapshot.CaptureScope);
+		Root->SetStringField(TEXT("runtime_state"), Snapshot.RuntimeState);
+		Root->SetNumberField(TEXT("world_time_seconds"), Snapshot.WorldTimeSeconds);
+		Root->SetNumberField(TEXT("policy_control_tick"), Snapshot.PolicyControlTick);
+		Root->SetStringField(TEXT("pose_search_animation"), Snapshot.PoseSearchAnimation);
+		Root->SetNumberField(TEXT("pose_search_selected_time"), Snapshot.PoseSearchSelectedTime);
+		Root->SetBoolField(TEXT("pose_search_mirrored"), Snapshot.bPoseSearchMirrored);
+		Root->SetObjectField(
+			TEXT("owner_actor_world_transform_cm"),
+			BuildPolicyInputProvenanceTransformJson(Snapshot.OwnerActorWorldTransform));
+		Root->SetObjectField(
+			TEXT("mesh_world_transform_cm"),
+			BuildPolicyInputProvenanceTransformJson(Snapshot.MeshWorldTransform));
+		Root->SetObjectField(
+			TEXT("selected_animation_world_root_proto_meters"),
+			BuildPolicyInputProvenanceTransformJson(Snapshot.SelectedAnimationWorldRootProtoMeters));
+		Root->SetObjectField(
+			TEXT("selected_animation_data_root_proto_meters"),
+			BuildPolicyInputProvenanceTransformJson(Snapshot.SelectedAnimationDataRootProtoMeters));
+
+		TArray<TSharedPtr<FJsonValue>> QueryTrajectory;
+		QueryTrajectory.Reserve(Snapshot.QueryTrajectoryWorldTransformsCm.Num());
+		for (int32 SampleIndex = 0; SampleIndex < Snapshot.QueryTrajectoryWorldTransformsCm.Num(); ++SampleIndex)
+		{
+			const TSharedRef<FJsonObject> Sample = BuildPolicyInputProvenanceTransformJson(
+				Snapshot.QueryTrajectoryWorldTransformsCm[SampleIndex]);
+			Sample->SetNumberField(
+				TEXT("sample_time_seconds"),
+				SampleIndex == 0
+					? 0.0
+					: static_cast<double>(SampleIndex) * PhysAnimBridge::FutureStepSeconds);
+			QueryTrajectory.Add(MakeShared<FJsonValueObject>(Sample));
+		}
+		Root->SetArrayField(TEXT("query_trajectory_world_transforms_cm"), QueryTrajectory);
+		Root->SetArrayField(
+			TEXT("live_body_samples_proto_world_meters"),
+			BuildPolicyInputProvenanceBodySamplesJson(Snapshot.LiveBodySamplesProtoWorldMeters));
+		Root->SetArrayField(
+			TEXT("physical_body_samples_proto_world_meters"),
+			BuildPolicyInputProvenanceBodySamplesJson(Snapshot.PhysicalBodySamplesProtoWorldMeters));
+		Root->SetArrayField(
+			TEXT("canonical_body_samples_proto_meters"),
+			BuildPolicyInputProvenanceBodySamplesJson(Snapshot.CanonicalBodySamplesProtoMeters));
+		Root->SetArrayField(
+			TEXT("raw_canonical_future_pose_samples"),
+			BuildPolicyInputProvenanceFutureSamplesJson(Snapshot.RawCanonicalFuturePoseSamples));
+		Root->SetArrayField(
+			TEXT("placed_canonical_future_pose_samples"),
+			BuildPolicyInputProvenanceFutureSamplesJson(Snapshot.PlacedCanonicalFuturePoseSamples));
+		Root->SetArrayField(TEXT("self_observation"), BuildPolicyActionJsonArray(Snapshot.SelfObservation));
+		Root->SetArrayField(TEXT("mimic_target"), BuildPolicyActionJsonArray(Snapshot.MimicTarget));
+		Root->SetArrayField(TEXT("terrain"), BuildPolicyActionJsonArray(Snapshot.Terrain));
+		Root->SetArrayField(TEXT("conditioned_actions"), BuildPolicyActionJsonArray(Snapshot.ConditionedActions));
+		Root->SetStringField(
+			TEXT("conditioned_action_signature_algorithm"),
+			Snapshot.ConditionedActionSignatureAlgorithm);
+		Root->SetNumberField(
+			TEXT("conditioned_action_crc32"),
+			static_cast<double>(Snapshot.ConditionedActionCrc32));
+		return Root;
+	}
+
 	TSharedRef<FJsonObject> BuildStartupChronologyJson(
 		const PhysAnimBridge::FPhysAnimStartupChronologyTrace& Trace,
 		const bool bEnabled)
@@ -3531,6 +3612,7 @@ namespace
 			bool bActionSemanticTraceWritten = true;
 			bool bMannyLocalFrameRoundtripTraceWritten = true;
 			bool bPolicyInputProvenanceWritten = true;
+			bool bLocomotionFrameReplayWritten = true;
 			bool bStartupChronologyWritten = true;
 			bool bFirstPolicyBodySourceWritten = true;
 			bool bFirstPolicyGroundReferenceWritten = true;
@@ -3642,6 +3724,24 @@ namespace
 							Component->GetPolicyInputProvenanceSnapshotForTesting(),
 							true)) + TEXT("\n"),
 						*PolicyInputProvenancePath);
+
+					if (Config.bScriptedLocomotionRun)
+					{
+						const PhysAnimBridge::FPhysAnimLocomotionFrameReplaySnapshot& Replay =
+							Component->GetLocomotionFrameReplaySnapshotForTesting();
+						FString ReplayValidationError;
+						const bool bReplayValid =
+							PhysAnimBridge::ValidateLocomotionFrameReplaySnapshot(
+								Replay,
+								ReplayValidationError);
+						const FString LocomotionFrameReplayPath = FPaths::Combine(
+							Config.RunRoot,
+							TEXT("locomotion-frame-replay.json"));
+						bLocomotionFrameReplayWritten = bReplayValid &&
+							FFileHelper::SaveStringToFile(
+								SerializeJson(BuildLocomotionFrameReplayJson(Replay, true)) + TEXT("\n"),
+								*LocomotionFrameReplayPath);
+					}
 				}
 
 				const bool bStartupChronologyEnabled =
@@ -3918,6 +4018,14 @@ namespace
 			Manifest->SetStringField(
 				TEXT("first_active_conditioned_actions"),
 				TEXT("first-active-conditioned-actions.json"));
+			if (Config.bScriptedLocomotionRun &&
+				Component &&
+				Component->IsPolicyInputProvenanceTraceEnabledForTesting())
+			{
+				Manifest->SetStringField(
+					TEXT("locomotion_frame_replay"),
+					TEXT("locomotion-frame-replay.json"));
+			}
 			Manifest->SetStringField(TEXT("render_capture"), TEXT("render.png"));
 			Manifest->SetNumberField(TEXT("render_nonblank_pixel_count"), NonblankPixels);
 			const bool bManifestWritten = FFileHelper::SaveStringToFile(SerializeJson(Manifest) + TEXT("\n"), *ManifestPath);
@@ -3929,6 +4037,7 @@ namespace
 				bActionSemanticTraceWritten &&
 				bMannyLocalFrameRoundtripTraceWritten &&
 				bPolicyInputProvenanceWritten &&
+				bLocomotionFrameReplayWritten &&
 				bStartupChronologyWritten &&
 				bFirstPolicyBodySourceWritten &&
 				bFirstPolicyGroundReferenceWritten &&

@@ -38,6 +38,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	FirstActiveStandingActionSemanticTrace.Reset();
 	FirstActiveStandingMannyLocalFrameRoundtripTrace.Reset();
 	FirstPolicyInputProvenanceSnapshot.Reset();
+	FirstLocomotionFrameReplaySnapshot.Reset();
 	StartupChronologyTrace.Reset();
 	FirstPolicyBodySourceTrace.Reset();
 	FirstPolicyGroundReferenceTrace.Reset();

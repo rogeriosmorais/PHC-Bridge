@@ -2,7 +2,9 @@
   "schema_version": "physanim-experiment-preregistration/v1",
   "experiment_id": "E80",
   "title": "Place locomotion mimic futures on the authoritative query trajectory root",
-  "status": "PREREGISTERED",
+  "status": "SUPERSEDED_BEFORE_IMPLEMENTATION",
+  "superseded_by": "experiments/stage2/query-trajectory-future-root-placement.e80.preregister.json",
+  "supersession_reason": "Parallel orchestration produced two E80 preregistrations. The successor was committed before the behavior change, uses the immediately preceding clean baseline, adds the deterministic replay requirement, and is the sole protocol authority for E80.",
   "baseline_commit": "c62425af539f1bf4687509ad63767da2a0392b4e",
   "single_change": "During LocomotionActiveShell only, preserve every selected animation body's transform relative to its sampled canonical root, but rigidly place that root on the corresponding BridgePoseSearchTrajectory sample before BuildMimicTargetPoses. Standing and all non-locomotion states keep the raw sampled futures.",
   "locked_invariants": [

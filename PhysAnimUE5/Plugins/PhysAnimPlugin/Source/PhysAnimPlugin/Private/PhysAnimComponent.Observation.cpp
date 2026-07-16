@@ -116,6 +116,47 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 }
 
 #if WITH_DEV_AUTOMATION_TESTS
+bool UPhysAnimComponent::GatherCurrentPhysicalBodySamplesForReplay(
+	TArray<FPhysAnimBodySample>& OutBodySamples,
+	FString& OutError) const
+{
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		OutError = TEXT("Skeletal mesh component was not resolved for physical-body replay capture.");
+		return false;
+	}
+
+	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
+	OutBodySamples.Reset();
+	OutBodySamples.Reserve(BoneNames.Num());
+	for (const FName& BoneName : BoneNames)
+	{
+		const FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName);
+		if (!BodyInstance || !BodyInstance->IsValidBodyInstance())
+		{
+			OutBodySamples.Reset();
+			OutError = FString::Printf(
+				TEXT("Missing synchronized physical body '%s' during locomotion replay capture."),
+				*BoneName.ToString());
+			return false;
+		}
+
+		const FTransform PhysicalBodyWorldTransform = BodyInstance->GetUnrealWorldTransform();
+		OutBodySamples.Add(FPhysAnimBodySample(
+			PhysAnimBridge::UeWorldPositionToProtoRuntime(PhysicalBodyWorldTransform.GetLocation()),
+			PhysAnimBridge::UeWorldQuaternionToProtoRuntime(
+				PhysicalBodyWorldTransform.GetRotation().GetNormalized()),
+			PhysAnimBridge::UeWorldVelocityToProtoRuntime(
+				SkeletalMesh->GetPhysicsLinearVelocity(BoneName)),
+			PhysAnimBridge::UeWorldRotationVectorToProtoRuntime(
+				SkeletalMesh->GetPhysicsAngularVelocityInRadians(BoneName))));
+	}
+
+	OutError.Reset();
+	return true;
+}
+
 void UPhysAnimComponent::CaptureStartupChronologySampleForTesting(const TCHAR* Stage)
 {
 	const bool bRealOnnxPolicy = StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy;

@@ -462,6 +462,66 @@ namespace PhysAnimBridge
 		const FPhysAnimPolicyInputProvenanceSnapshot& Snapshot,
 		FString& OutError);
 
+	inline constexpr const TCHAR* LocomotionFrameReplayActionSignatureAlgorithm =
+		TEXT("crc32-ieee754-f32-le-v1");
+
+	struct PHYSANIMPLUGIN_API FPhysAnimLocomotionFrameReplaySnapshot
+	{
+		bool CaptureFirstIf(
+			bool bCondition,
+			const FString& InRuntimeState,
+			double InWorldTimeSeconds,
+			int32 InPolicyControlTick,
+			const FString& InPoseSearchAnimation,
+			float InPoseSearchSelectedTime,
+			bool bInPoseSearchMirrored,
+			const FTransform& InOwnerActorWorldTransform,
+			const FTransform& InMeshWorldTransform,
+			const FTransform& InSelectedAnimationWorldRootProtoMeters,
+			const FTransform& InSelectedAnimationDataRootProtoMeters,
+			TConstArrayView<FTransform> InQueryTrajectoryWorldTransformsCm,
+			TConstArrayView<FPhysAnimBodySample> InLiveBodySamplesProtoWorldMeters,
+			TConstArrayView<FPhysAnimBodySample> InPhysicalBodySamplesProtoWorldMeters,
+			TConstArrayView<FPhysAnimBodySample> InCanonicalBodySamplesProtoMeters,
+			TConstArrayView<FPhysAnimFuturePoseSample> InRawCanonicalFuturePoseSamples,
+			TConstArrayView<FPhysAnimFuturePoseSample> InPlacedCanonicalFuturePoseSamples,
+			TConstArrayView<float> InSelfObservation,
+			TConstArrayView<float> InMimicTarget,
+			TConstArrayView<float> InTerrain,
+			TConstArrayView<float> InConditionedActions);
+
+		void Reset();
+
+		bool bCaptured = false;
+		FString CaptureScope;
+		FString RuntimeState;
+		double WorldTimeSeconds = 0.0;
+		int32 PolicyControlTick = 0;
+		FString PoseSearchAnimation;
+		float PoseSearchSelectedTime = 0.0f;
+		bool bPoseSearchMirrored = false;
+		FTransform OwnerActorWorldTransform = FTransform::Identity;
+		FTransform MeshWorldTransform = FTransform::Identity;
+		FTransform SelectedAnimationWorldRootProtoMeters = FTransform::Identity;
+		FTransform SelectedAnimationDataRootProtoMeters = FTransform::Identity;
+		TArray<FTransform> QueryTrajectoryWorldTransformsCm;
+		TArray<FPhysAnimBodySample> LiveBodySamplesProtoWorldMeters;
+		TArray<FPhysAnimBodySample> PhysicalBodySamplesProtoWorldMeters;
+		TArray<FPhysAnimBodySample> CanonicalBodySamplesProtoMeters;
+		TArray<FPhysAnimFuturePoseSample> RawCanonicalFuturePoseSamples;
+		TArray<FPhysAnimFuturePoseSample> PlacedCanonicalFuturePoseSamples;
+		TArray<float> SelfObservation;
+		TArray<float> MimicTarget;
+		TArray<float> Terrain;
+		TArray<float> ConditionedActions;
+		FString ConditionedActionSignatureAlgorithm;
+		uint32 ConditionedActionCrc32 = 0;
+	};
+
+	PHYSANIMPLUGIN_API bool ValidateLocomotionFrameReplaySnapshot(
+		const FPhysAnimLocomotionFrameReplaySnapshot& Snapshot,
+		FString& OutError);
+
 	inline constexpr const TCHAR* FirstPolicyBodySourceFingerprintAlgorithm =
 		TEXT("fnv1a64-ieee754-f64-le-v1");
 

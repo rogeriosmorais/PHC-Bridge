@@ -247,6 +247,10 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		{
 			return;
 		}
+#if WITH_DEV_AUTOMATION_TESTS
+		const TArray<FPhysAnimFuturePoseSample> RawCanonicalFuturePoseSamplesForReplay = FuturePoseSamples;
+		TArray<FTransform> QueryTrajectoryWorldTransformsCmForReplay;
+#endif
 
 		FTransform MimicTargetReferenceWorldRoot = FTransform::Identity;
 		FTransform MimicTargetReferenceDataRoot = FTransform::Identity;
@@ -270,6 +274,10 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 				BridgePoseSearchTrajectory.GetSampleAtTime(0.0f, true);
 			const PhysAnimFrameContract::FWorldTransformCm CurrentQueryWorldRoot(
 				CurrentTrajectorySample.GetTransform());
+#if WITH_DEV_AUTOMATION_TESTS
+			QueryTrajectoryWorldTransformsCmForReplay.Reserve(FuturePoseSamples.Num() + 1);
+			QueryTrajectoryWorldTransformsCmForReplay.Add(CurrentTrajectorySample.GetTransform());
+#endif
 			TArray<PhysAnimFrameContract::FWorldTransformCm> FutureQueryWorldRoots;
 			FutureQueryWorldRoots.Reserve(FuturePoseSamples.Num());
 			for (const FPhysAnimFuturePoseSample& FuturePose : FuturePoseSamples)
@@ -281,6 +289,9 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 				FutureQueryWorldRoots.Add(
 					PhysAnimFrameContract::FWorldTransformCm(
 						FutureTrajectorySample.GetTransform()));
+#if WITH_DEV_AUTOMATION_TESTS
+				QueryTrajectoryWorldTransformsCmForReplay.Add(FutureTrajectorySample.GetTransform());
+#endif
 			}
 
 			TArray<FPhysAnimFuturePoseSample> TrajectoryPlacedFuturePoses;
@@ -423,6 +434,65 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		{
 			return;
 		}
+#if WITH_DEV_AUTOMATION_TESTS
+		const bool bCaptureLocomotionFrameReplayThisStep =
+			bPolicyInputProvenanceTraceEnabledForTesting &&
+			StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+			bEnablePolicyInference &&
+			bStandingVariantUsesPolicyInference &&
+			ShouldUseBridgeTrajectoryPoseSearchState(RuntimeState) &&
+			!FirstLocomotionFrameReplaySnapshot.bCaptured;
+		if (bCaptureLocomotionFrameReplayThisStep)
+		{
+			TArray<FPhysAnimBodySample> PhysicalBodySamplesForReplay;
+			if (!GatherCurrentPhysicalBodySamplesForReplay(
+				PhysicalBodySamplesForReplay,
+				OutError))
+			{
+				return;
+			}
+
+			const AActor* const OwnerActor = GetOwner();
+			const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+			const UWorld* const World = GetWorld();
+			if (!FirstLocomotionFrameReplaySnapshot.CaptureFirstIf(
+				true,
+				GetRuntimeStateName(RuntimeState),
+				World ? World->GetTimeSeconds() : 0.0,
+				PolicyControlTicksExecuted,
+				GetNameSafe(SearchResult.SelectedAnim),
+				SearchResult.SelectedTime,
+				SearchResult.bIsMirrored,
+				OwnerActor ? OwnerActor->GetActorTransform() : FTransform::Identity,
+				SkeletalMesh ? SkeletalMesh->GetComponentTransform() : FTransform::Identity,
+				MimicTargetReferenceWorldRoot,
+				MimicTargetReferenceDataRoot,
+				QueryTrajectoryWorldTransformsCmForReplay,
+				MannyCurrentBodySamples,
+				PhysicalBodySamplesForReplay,
+				CurrentBodySamples,
+				RawCanonicalFuturePoseSamplesForReplay,
+				FuturePoseSamples,
+				SelfObservationBuffer,
+				MimicTargetPosesBuffer,
+				TerrainBuffer,
+				ConditionedActionBuffer))
+			{
+				OutError = TEXT("Could not capture the first locomotion frame replay step.");
+				return;
+			}
+			FString ReplayValidationError;
+			if (!PhysAnimBridge::ValidateLocomotionFrameReplaySnapshot(
+				FirstLocomotionFrameReplaySnapshot,
+				ReplayValidationError))
+			{
+				OutError = FString::Printf(
+					TEXT("Locomotion frame replay validation failed: %s"),
+					*ReplayValidationError);
+				return;
+			}
+		}
+#endif
 	}
 
 	// Standing topology and gains are published and read back by TickRuntimeStateMachine
