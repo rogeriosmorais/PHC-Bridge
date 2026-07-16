@@ -25,9 +25,9 @@ namespace
 			ResolveFutureTargetTimeSeconds(0.5f, 0.2f, 2.0f),
 			0.2f);
 		TestEqual(
-			TEXT("Clamped future target time shrinks at animation end"),
+			TEXT("The policy future horizon remains fixed when animation sampling reaches the clip end"),
 			ResolveFutureTargetTimeSeconds(1.9f, 0.4f, 2.0f),
-			0.1f);
+			0.4f);
 		return true;
 	}
 

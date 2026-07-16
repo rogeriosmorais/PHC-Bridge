@@ -473,10 +473,18 @@ namespace PhysAnimBridge
 
 	float ResolveFutureTargetTimeSeconds(float CurrentTimeSeconds, float RequestedFutureOffsetSeconds, float AnimationLengthSeconds)
 	{
-		const float ClampedCurrentTime = FMath::Clamp(CurrentTimeSeconds, 0.0f, AnimationLengthSeconds);
-		const float RequestedSampleTime = ClampedCurrentTime + FMath::Max(RequestedFutureOffsetSeconds, 0.0f);
-		const float ClampedSampleTime = FMath::Clamp(RequestedSampleTime, 0.0f, AnimationLengthSeconds);
-		return FMath::Max(ClampedSampleTime - ClampedCurrentTime, 0.0f);
+		if (!FMath::IsFinite(CurrentTimeSeconds) ||
+			!FMath::IsFinite(RequestedFutureOffsetSeconds) ||
+			!FMath::IsFinite(AnimationLengthSeconds) ||
+			AnimationLengthSeconds < 0.0f)
+		{
+			return 0.0f;
+		}
+
+		// The sampled animation pose may clamp at the end of a clip, but the policy
+		// time channel must retain its fixed future horizon. Query-trajectory placement
+		// and the model input both consume this relative schedule.
+		return FMath::Max(RequestedFutureOffsetSeconds, 0.0f);
 	}
 
 	FVector SmplVectorToUe(const FVector& SmplVector)
