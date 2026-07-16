@@ -2557,6 +2557,22 @@ namespace
 		return Root;
 	}
 
+	struct FPolicyInputProvenanceArtifactPlan
+	{
+		bool bWritePolicyInputProvenance = false;
+		bool bWriteLocomotionFrameReplay = false;
+	};
+
+	FPolicyInputProvenanceArtifactPlan ResolvePolicyInputProvenanceArtifactPlan(
+		const bool bTraceEnabled,
+		const bool bScriptedLocomotionRun)
+	{
+		FPolicyInputProvenanceArtifactPlan Plan;
+		Plan.bWritePolicyInputProvenance = bTraceEnabled;
+		Plan.bWriteLocomotionFrameReplay = bTraceEnabled && bScriptedLocomotionRun;
+		return Plan;
+	}
+
 	TSharedRef<FJsonObject> BuildStartupChronologyJson(
 		const PhysAnimBridge::FPhysAnimStartupChronologyTrace& Trace,
 		const bool bEnabled)
@@ -2774,6 +2790,42 @@ namespace
 			TEXT("Previous-action publication preserves checkpoint width"),
 			Json->GetArrayField(TEXT("previous_actions")).Num(),
 			PhysAnimBridge::NumActionFloats);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyInputProvenanceArtifactPlanContractTest,
+		"PhysAnim.ProductHarness.PolicyInputProvenanceArtifactPlanContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPolicyInputProvenanceArtifactPlanContractTest::RunTest(const FString& Parameters)
+	{
+		const FPolicyInputProvenanceArtifactPlan ScriptedPlan =
+			ResolvePolicyInputProvenanceArtifactPlan(true, true);
+		TestTrue(
+			TEXT("A traced scripted-locomotion run writes policy-input provenance"),
+			ScriptedPlan.bWritePolicyInputProvenance);
+		TestTrue(
+			TEXT("A traced scripted-locomotion run writes the locomotion replay"),
+			ScriptedPlan.bWriteLocomotionFrameReplay);
+
+		const FPolicyInputProvenanceArtifactPlan NonScriptedPlan =
+			ResolvePolicyInputProvenanceArtifactPlan(true, false);
+		TestTrue(
+			TEXT("A traced non-scripted run still writes policy-input provenance"),
+			NonScriptedPlan.bWritePolicyInputProvenance);
+		TestFalse(
+			TEXT("A non-scripted run does not advertise a locomotion replay"),
+			NonScriptedPlan.bWriteLocomotionFrameReplay);
+
+		const FPolicyInputProvenanceArtifactPlan DisabledPlan =
+			ResolvePolicyInputProvenanceArtifactPlan(false, true);
+		TestFalse(
+			TEXT("A run without trace authority writes no policy-input provenance"),
+			DisabledPlan.bWritePolicyInputProvenance);
+		TestFalse(
+			TEXT("A run without trace authority writes no locomotion replay"),
+			DisabledPlan.bWriteLocomotionFrameReplay);
 		return true;
 	}
 
@@ -3654,6 +3706,13 @@ namespace
 				SerializeJson(FirstActiveConditionedActionsJson) + TEXT("\n"),
 				*FirstActiveConditionedActionsPath);
 
+			const bool bPolicyInputProvenanceEnabled =
+				Component && Component->IsPolicyInputProvenanceTraceEnabledForTesting();
+			const FPolicyInputProvenanceArtifactPlan PolicyInputProvenanceArtifactPlan =
+				ResolvePolicyInputProvenanceArtifactPlan(
+					bPolicyInputProvenanceEnabled,
+					Config.bScriptedLocomotionRun);
+
 			if (Config.bPlantRun)
 			{
 				const FString ActiveStandingSnapshotPath = FPaths::Combine(
@@ -3712,37 +3771,6 @@ namespace
 						bMannyLocalFrameRoundtripTraceEnabled)) + TEXT("\n"),
 					*MannyLocalFrameRoundtripTracePath);
 
-				const bool bPolicyInputProvenanceEnabled =
-					Component && Component->IsPolicyInputProvenanceTraceEnabledForTesting();
-				if (bPolicyInputProvenanceEnabled)
-				{
-					const FString PolicyInputProvenancePath = FPaths::Combine(
-						Config.RunRoot,
-						TEXT("policy-input-provenance.json"));
-					bPolicyInputProvenanceWritten = FFileHelper::SaveStringToFile(
-						SerializeJson(BuildPolicyInputProvenanceJson(
-							Component->GetPolicyInputProvenanceSnapshotForTesting(),
-							true)) + TEXT("\n"),
-						*PolicyInputProvenancePath);
-
-					if (Config.bScriptedLocomotionRun)
-					{
-						const PhysAnimBridge::FPhysAnimLocomotionFrameReplaySnapshot& Replay =
-							Component->GetLocomotionFrameReplaySnapshotForTesting();
-						FString ReplayValidationError;
-						const bool bReplayValid =
-							PhysAnimBridge::ValidateLocomotionFrameReplaySnapshot(
-								Replay,
-								ReplayValidationError);
-						const FString LocomotionFrameReplayPath = FPaths::Combine(
-							Config.RunRoot,
-							TEXT("locomotion-frame-replay.json"));
-						bLocomotionFrameReplayWritten = bReplayValid &&
-							FFileHelper::SaveStringToFile(
-								SerializeJson(BuildLocomotionFrameReplayJson(Replay, true)) + TEXT("\n"),
-								*LocomotionFrameReplayPath);
-					}
-				}
 
 				const bool bStartupChronologyEnabled =
 					Component && Component->IsStartupChronologyTraceEnabledForTesting();
@@ -3809,6 +3837,37 @@ namespace
 					SerializeJson(ObservationPositionTrace) + TEXT("\n"),
 					*ObservationPositionTracePath);
 			}
+
+			if (PolicyInputProvenanceArtifactPlan.bWritePolicyInputProvenance)
+			{
+				const FString PolicyInputProvenancePath = FPaths::Combine(
+					Config.RunRoot,
+					TEXT("policy-input-provenance.json"));
+				bPolicyInputProvenanceWritten = FFileHelper::SaveStringToFile(
+					SerializeJson(BuildPolicyInputProvenanceJson(
+						Component->GetPolicyInputProvenanceSnapshotForTesting(),
+						true)) + TEXT("\n"),
+					*PolicyInputProvenancePath);
+			}
+
+			if (PolicyInputProvenanceArtifactPlan.bWriteLocomotionFrameReplay)
+			{
+				const PhysAnimBridge::FPhysAnimLocomotionFrameReplaySnapshot& Replay =
+					Component->GetLocomotionFrameReplaySnapshotForTesting();
+				FString ReplayValidationError;
+				const bool bReplayValid =
+					PhysAnimBridge::ValidateLocomotionFrameReplaySnapshot(
+						Replay,
+						ReplayValidationError);
+				const FString LocomotionFrameReplayPath = FPaths::Combine(
+					Config.RunRoot,
+					TEXT("locomotion-frame-replay.json"));
+				bLocomotionFrameReplayWritten = bReplayValid &&
+					FFileHelper::SaveStringToFile(
+						SerializeJson(BuildLocomotionFrameReplayJson(Replay, true)) + TEXT("\n"),
+						*LocomotionFrameReplayPath);
+			}
+
 			if (!Config.bPlantRun)
 			{
 				const FString ObservationPositionTracePath = FPaths::Combine(
@@ -4018,9 +4077,7 @@ namespace
 			Manifest->SetStringField(
 				TEXT("first_active_conditioned_actions"),
 				TEXT("first-active-conditioned-actions.json"));
-			if (Config.bScriptedLocomotionRun &&
-				Component &&
-				Component->IsPolicyInputProvenanceTraceEnabledForTesting())
+			if (PolicyInputProvenanceArtifactPlan.bWriteLocomotionFrameReplay)
 			{
 				Manifest->SetStringField(
 					TEXT("locomotion_frame_replay"),
