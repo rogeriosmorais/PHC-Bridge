@@ -1008,7 +1008,8 @@ float UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
 {
 	return bStandingPolicyMode &&
 		bFirstActiveStandingPolicyCaptured &&
-		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing
+		(InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		 InRuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell)
 			? 1.5f
 			: 1.0f;
 }
