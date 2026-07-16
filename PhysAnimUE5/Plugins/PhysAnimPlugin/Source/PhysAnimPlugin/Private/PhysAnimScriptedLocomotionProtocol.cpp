@@ -478,7 +478,9 @@ namespace PhysAnimScriptedLocomotion
 		}
 
 		OutProtocol.SourcePath = SourcePath;
-		OutProtocol.Sha256 = HashUtf8Text(JsonText);
+		FString NormalizedJsonText = JsonText.Replace(TEXT("\r\n"), TEXT("\n"));
+		NormalizedJsonText.ReplaceInline(TEXT("\r"), TEXT("\n"));
+		OutProtocol.Sha256 = HashUtf8Text(NormalizedJsonText);
 		if (OutProtocol.Sha256.IsEmpty())
 		{
 			return Fail(OutError, TEXT("Unable to compute protocol SHA-256"));
@@ -617,21 +619,14 @@ namespace PhysAnimScriptedLocomotion
 
 	bool LoadProtocolFromFile(const FString& ProtocolPath, FProtocol& OutProtocol, FString& OutError)
 	{
-		TArray<uint8> Bytes;
 		FString JsonText;
-		if (!FFileHelper::LoadFileToArray(Bytes, *ProtocolPath) ||
-			!FFileHelper::LoadFileToString(JsonText, *ProtocolPath))
+		if (!FFileHelper::LoadFileToString(JsonText, *ProtocolPath))
 		{
 			return Fail(OutError, FString::Printf(TEXT("Unable to read scripted-locomotion protocol: %s"), *ProtocolPath));
 		}
 		if (!LoadProtocolFromJsonText(JsonText, FPaths::ConvertRelativePathToFull(ProtocolPath), OutProtocol, OutError))
 		{
 			return false;
-		}
-		OutProtocol.Sha256 = HashBytes(Bytes);
-		if (OutProtocol.Sha256.IsEmpty())
-		{
-			return Fail(OutError, TEXT("Unable to compute protocol file SHA-256"));
 		}
 		return OutProtocol.Validate(OutError);
 	}

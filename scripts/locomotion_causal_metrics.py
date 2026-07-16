@@ -28,9 +28,16 @@ def _xy(row: dict, prefix: str, index: int) -> tuple[float, float]:
             _finite(row.get("actor_location_y_cm"), f"row {index} shell y"),
         )
     root = row.get("physical_root_location_xyz_cm")
-    if not isinstance(root, Sequence) or isinstance(root, (str, bytes)) or len(root) < 2:
-        raise CausalMetricError(f"row {index} physical_root_location_xyz_cm must contain at least x and y")
-    return (_finite(root[0], f"row {index} root x"), _finite(root[1], f"row {index} root y"))
+    if isinstance(root, Sequence) and not isinstance(root, (str, bytes)) and len(root) >= 2:
+        return (_finite(root[0], f"row {index} root x"), _finite(root[1], f"row {index} root y"))
+    if "physical_root_location_x_cm" in row or "physical_root_location_y_cm" in row:
+        return (
+            _finite(row.get("physical_root_location_x_cm"), f"row {index} root x"),
+            _finite(row.get("physical_root_location_y_cm"), f"row {index} root y"),
+        )
+    raise CausalMetricError(
+        f"row {index} must contain physical_root_location_xyz_cm or separate physical root x/y fields"
+    )
 
 
 def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -116,6 +123,118 @@ def analyze_trace(
         "assistance_clean": not forbidden,
         "forbidden_assistance_observed": sorted(forbidden),
         "note": "These are interpretable endpoints, not product thresholds or a weighted acceptance score.",
+    }
+
+
+def evaluate_metric_contract(metrics: dict, contract: dict) -> dict:
+    if not isinstance(metrics, dict):
+        raise CausalMetricError("metrics must be an object")
+    if not isinstance(contract, dict):
+        raise CausalMetricError("metric contract must be an object")
+
+    criteria: list[dict] = []
+
+    def add(name: str, actual: object, operator: str, threshold: object, passed: bool) -> None:
+        criteria.append(
+            {
+                "name": name,
+                "actual": actual,
+                "operator": operator,
+                "threshold": threshold,
+                "passed": bool(passed),
+            }
+        )
+
+    if "required_classification" in contract:
+        required = contract["required_classification"]
+        if not isinstance(required, str) or not required:
+            raise CausalMetricError("required_classification must be a nonempty string")
+        actual = metrics.get("classification")
+        add("classification", actual, "==", required, actual == required)
+
+    numeric_rules = (
+        (
+            "minimum_root_route_projected_progress_cm",
+            "root_route_projected_progress_cm",
+            "root_route_projected_progress_cm",
+            ">=",
+            lambda actual, threshold: actual >= threshold,
+        ),
+        (
+            "minimum_root_to_shell_progress_ratio",
+            "root_to_shell_progress_ratio",
+            "root_to_shell_progress_ratio_min",
+            ">=",
+            lambda actual, threshold: actual >= threshold,
+        ),
+        (
+            "maximum_root_to_shell_progress_ratio",
+            "root_to_shell_progress_ratio",
+            "root_to_shell_progress_ratio_max",
+            "<=",
+            lambda actual, threshold: actual <= threshold,
+        ),
+        (
+            "maximum_tracking_error_time_average_cm",
+            "tracking_error_time_average_cm",
+            "tracking_error_time_average_cm",
+            "<=",
+            lambda actual, threshold: actual <= threshold,
+        ),
+        (
+            "maximum_final_tracking_error_cm",
+            "final_tracking_error_cm",
+            "final_tracking_error_cm",
+            "<=",
+            lambda actual, threshold: actual <= threshold,
+        ),
+        (
+            "maximum_tracking_error_cm",
+            "max_tracking_error_cm",
+            "max_tracking_error_cm",
+            "<=",
+            lambda actual, threshold: actual <= threshold,
+        ),
+    )
+    for contract_field, metric_field, criterion_name, operator, predicate in numeric_rules:
+        if contract_field not in contract:
+            continue
+        threshold = _finite(contract[contract_field], contract_field)
+        actual = _finite(metrics.get(metric_field), metric_field)
+        add(criterion_name, actual, operator, threshold, predicate(actual, threshold))
+
+    if "maximum_abs_root_route_lateral_displacement_cm" in contract:
+        threshold = _finite(
+            contract["maximum_abs_root_route_lateral_displacement_cm"],
+            "maximum_abs_root_route_lateral_displacement_cm",
+        )
+        actual = abs(
+            _finite(
+                metrics.get("root_route_lateral_displacement_cm"),
+                "root_route_lateral_displacement_cm",
+            )
+        )
+        add(
+            "root_route_lateral_displacement_cm",
+            actual,
+            "abs<=",
+            threshold,
+            actual <= threshold,
+        )
+
+    if contract.get("require_assistance_clean") is True:
+        actual = metrics.get("assistance_clean")
+        add("assistance_clean", actual, "==", True, actual is True)
+    elif "require_assistance_clean" in contract and contract["require_assistance_clean"] is not False:
+        raise CausalMetricError("require_assistance_clean must be Boolean")
+
+    failed = [criterion["name"] for criterion in criteria if not criterion["passed"]]
+    return {
+        "schema_version": "physanim-locomotion-causal-metric-evaluation/v1",
+        "verdict": "PASS" if not failed else "FAIL",
+        "failed_criteria": failed,
+        "criteria": criteria,
+        "metrics": metrics,
     }
 
 

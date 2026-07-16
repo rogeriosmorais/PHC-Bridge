@@ -93,9 +93,17 @@ The joint order begins with left leg, right leg, torso/spine/chest, neck/head, t
 
 `Training/physanim/policy_tensor_reference.py` is an independent, pure-Python transcription of the current tensor packing. It is intentionally free of Unreal types and supports synthetic frame tests. It is a runtime-parity oracle, not evidence that the current runtime matches the missing original training preprocessing.
 
-## Required next proof
+## Runtime parity enforcement
 
-Capture one UE policy-input provenance snapshot containing current canonical bodies and all 15 canonical future poses. Rebuild both tensors with the Python reference and require element-wise equality within a locked floating-point tolerance. Then repeat with synthetic actor-forward, lateral, and 30-degree-turn trajectories. This will localize any remaining defect to either:
+`scripts/validate_policy_tensor_parity.py` consumes the UE `policy-input-provenance.json` and `policy-input-snapshot.json` artifacts. It independently rebuilds `self_observation`, `mimic_target_poses`, and `terrain` with the Python reference and reports per-tensor maximum and mean absolute error, mismatch count, and the worst element index. The locked default tolerance is `1e-5`.
+
+The validator intentionally uses `mimic_reference_body_samples`, not the live canonical world samples, as the current reference for `mimic_target_poses`. That distinction is required by the data-frame contract and is covered by regression tests.
+
+Synthetic tests lock actor-forward, lateral, and 30-degree-turn behavior. A fresh authoritative UE capture and its parity report must be retained as evidence for any runtime revision that changes observation construction, Pose Search adaptation, or frame placement.
+
+This runtime parity proof localizes remaining disagreement to either:
 
 - Pose Search sampling/canonical adaptation before the builder, or
 - the builder itself.
+
+It still does not prove identity with missing original training preprocessing or checkpoint configuration.

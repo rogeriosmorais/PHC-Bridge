@@ -96,16 +96,27 @@ def test_orchestration_uses_version_scoped_process_checks_and_timeout_cleanup() 
     assert "Assert-UnrealEngineVersion" in text
     assert "Get-EngineOwnedUnrealProcesses" in text
     assert "Stop-ValidatedUnrealProcessTree" in text
+    assert "[switch]$PolicyInputProvenanceTrace" in text
+    assert "PolicyInputProvenanceTrace = $PolicyInputProvenanceTraceLiteral" in text
+    assert "policy_input_provenance_trace = [bool]$PolicyInputProvenanceTrace" in text
+    assert "ProductProtocolPath = '$EscapedProtocolPath'" in text
+    assert "child-exit-code.txt" in text
+    assert "[int]::TryParse($RawChildExitCode" in text
+    assert "CHILD_EXIT_UNKNOWN" in text
     assert "taskkill" not in text.casefold()
     assert "Stop-Process" not in text
 
 
-def test_orchestration_refreshes_completed_child_before_reading_exit_code() -> None:
+def test_orchestration_synchronizes_child_and_prefers_explicit_exit_marker() -> None:
     text = ORCHESTRATION_SCRIPT.read_text(encoding="utf-8")
     wait_index = text.index("$Process.WaitForExit()")
     refresh_index = text.index("$Process.Refresh()", wait_index)
-    exit_code_index = text.index("$ExitCode = $Process.ExitCode", refresh_index)
-    assert wait_index < refresh_index < exit_code_index
+    marker_index = text.index(
+        "Get-Content -Raw -LiteralPath $ChildExitCodePath", refresh_index
+    )
+    parse_index = text.index("[int]::TryParse($RawChildExitCode", marker_index)
+    fallback_index = text.index("$ExitCode = [int]$Process.ExitCode", parse_index)
+    assert wait_index < refresh_index < marker_index < parse_index < fallback_index
 
 
 def test_safety_module_refuses_ue58_and_only_stops_ue57_owned_paths(tmp_path: Path) -> None:

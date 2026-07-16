@@ -120,6 +120,9 @@ def validate_run(
                 and int(report.get("notRun", 0)) == 0
                 and successful_test_count >= 1
             )
+            # Unreal categorizes a successful test with captured runtime warnings as
+            # succeededWithWarnings. Fixture validation confirms completion and identity;
+            # warning interpretation belongs to the behavioral evaluator and evidence audit.
             test_completed_successfully = (
                 test.get("state") == "Success"
                 and int(test.get("errors", 0)) == 0
@@ -129,7 +132,7 @@ def validate_run(
                 issues.append(
                     Issue(
                         "automation_not_successful",
-                        "Automation report or exact test did not complete successfully",
+                        "Automation report or exact test is not a successful zero-error completion",
                         str(report_path),
                     )
                 )

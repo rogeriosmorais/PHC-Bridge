@@ -1,6 +1,6 @@
 # Causal Locomotion Metric Endpoints
 
-`locomotion_causal_metrics.py` defines protocol-independent, interpretable measurements for scripted shell locomotion. It intentionally does not assign product thresholds or combine the endpoints into a weighted score.
+`locomotion_causal_metrics.py` defines protocol-independent, interpretable measurements for scripted shell locomotion. The library itself does not hide the endpoints inside a weighted score. Immutable protocol files assign thresholds explicitly.
 
 The endpoint set separates:
 
@@ -23,4 +23,10 @@ Synthetic adversarial tests cover:
 - malformed time ordering;
 - cherry-picked bundles with missing, duplicated, or unexpected runs.
 
-The classifications `STATUE`, `REVERSED`, `LATERAL_DIVERGENCE`, and `FORWARD_TRACKING` are diagnostics. Protocol v2 should preregister numerical gates around the raw endpoints rather than treating the classification alone as acceptance.
+The classifications `STATUE`, `REVERSED`, `LATERAL_DIVERGENCE`, and `FORWARD_TRACKING` remain diagnostics rather than a substitute for the raw measurements.
+
+## Protocol authority
+
+`product-gates/scripted-locomotion.v3.json` preregisters the causal contract for the `Normal` variant. It requires forward tracking and independently gates projected route progress, root-to-shell progress ratio, lateral displacement, time-average tracking error, final tracking error, maximum tracking error, and forbidden assistance.
+
+`evaluate_scripted_locomotion_protocol.py --evaluate-causal` validates protocol linkage before applying those gates. Locked v1 and v2 evidence remains readable and returns `NOT_APPLICABLE`; their meaning is not retroactively changed.

@@ -4,8 +4,14 @@ import argparse
 import hashlib
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any, Iterable
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.locomotion_causal_metrics import analyze_trace, evaluate_metric_contract
 
 
 class ProtocolLinkageError(ValueError):
@@ -66,7 +72,8 @@ def _assert_close(actual: Any, expected: Any, label: str, *, tolerance: float = 
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+    normalized = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return hashlib.sha256(normalized).hexdigest().upper()
 
 
 def _resolve_step(protocol: dict[str, Any], time_sec: float) -> tuple[str, float, bool]:
@@ -276,11 +283,61 @@ def validate_protocol_linkage(manifest_path: Path | str) -> dict[str, Any]:
     return _validate_protocol_linkage_impl(manifest_path, require_complete_streams=True)
 
 
+def evaluate_protocol_causal_metrics(manifest_path: Path | str) -> dict[str, Any]:
+    manifest_path = Path(manifest_path).resolve()
+    linkage = validate_protocol_linkage(manifest_path)
+    manifest = _read_json(manifest_path, "run manifest")
+    protocol_path = Path(str(manifest["protocol_path"])).resolve()
+    protocol = _read_json(protocol_path, "scripted-locomotion protocol")
+    physics_path = (manifest_path.parent / str(manifest["physics_samples"])).resolve()
+    physics_rows = _read_jsonl(physics_path, "physics samples")
+    metrics = analyze_trace(physics_rows)
+
+    contract = protocol.get("causal_metrics")
+    if contract is None:
+        return {
+            "schema_version": "physanim-scripted-locomotion-causal-evaluation/v1",
+            "verdict": "NOT_APPLICABLE",
+            "reason": "The loaded protocol does not declare a causal_metrics contract.",
+            "linkage": linkage,
+            "metrics": metrics,
+        }
+    if not isinstance(contract, dict):
+        raise ProtocolLinkageError("protocol causal_metrics must be an object")
+    variants = contract.get("apply_to_variants")
+    if not isinstance(variants, list) or not all(isinstance(item, str) and item for item in variants):
+        raise ProtocolLinkageError("protocol causal_metrics.apply_to_variants must be an array of variants")
+    if manifest["variant"] not in variants:
+        return {
+            "schema_version": "physanim-scripted-locomotion-causal-evaluation/v1",
+            "verdict": "NOT_APPLICABLE",
+            "reason": f"Variant {manifest['variant']} is outside causal_metrics.apply_to_variants.",
+            "linkage": linkage,
+            "metrics": metrics,
+        }
+
+    evaluation = evaluate_metric_contract(metrics, contract)
+    return {
+        "schema_version": "physanim-scripted-locomotion-causal-evaluation/v1",
+        "verdict": evaluation["verdict"],
+        "linkage": linkage,
+        "contract": contract,
+        "failed_criteria": evaluation["failed_criteria"],
+        "criteria": evaluation["criteria"],
+        "metrics": metrics,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Validate authoritative protocol linkage for one scripted-locomotion product run."
     )
     parser.add_argument("manifest", type=Path)
+    parser.add_argument(
+        "--evaluate-causal",
+        action="store_true",
+        help="Apply the loaded protocol's causal_metrics contract and fail on a behavioral rejection.",
+    )
     args = parser.parse_args()
     try:
         identity_result = validate_protocol_identity_and_observed_schedule(args.manifest)
@@ -311,16 +368,22 @@ def main() -> int:
             )
         )
         return 1
-    print(
-        json.dumps(
-            {
-                "protocol_linkage_valid": True,
-                "evidence_valid": True,
-                "protocol": complete_result,
-            },
-            indent=2,
-        )
-    )
+    output: dict[str, Any] = {
+        "protocol_linkage_valid": True,
+        "evidence_valid": True,
+        "protocol": complete_result,
+    }
+    if args.evaluate_causal:
+        try:
+            causal_result = evaluate_protocol_causal_metrics(args.manifest)
+        except (ProtocolLinkageError, ValueError) as exc:
+            output["causal_evaluation"] = {"verdict": "INVALID", "error": str(exc)}
+            print(json.dumps(output, indent=2))
+            return 1
+        output["causal_evaluation"] = causal_result
+        print(json.dumps(output, indent=2))
+        return 0 if causal_result["verdict"] in {"PASS", "NOT_APPLICABLE"} else 2
+    print(json.dumps(output, indent=2))
     return 0
 
 

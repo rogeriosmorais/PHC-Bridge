@@ -82,12 +82,12 @@ def test_complete_run_is_valid(tmp_path: Path) -> None:
     assert result["checks"]["required_artifacts_present"] is True
 
 
-def test_success_with_warnings_is_valid_when_exact_test_passed(tmp_path: Path) -> None:
+def test_success_with_runtime_warnings_is_valid_fixture_completion(tmp_path: Path) -> None:
     run, report, protocol = _complete_run(tmp_path)
     payload = _success_report("PhysAnim.Product.ScriptedLocomotion.Normal")
     payload["succeeded"] = 0
     payload["succeededWithWarnings"] = 1
-    payload["tests"][0]["warnings"] = 1
+    payload["tests"][0]["warnings"] = 204
     _write_json(report / "index.json", payload)
 
     result = validate_run(

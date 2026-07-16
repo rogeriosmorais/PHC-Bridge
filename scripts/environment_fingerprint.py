@@ -21,6 +21,11 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sha256_locked_text_file(path: Path) -> str:
+    normalized = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return hashlib.sha256(normalized).hexdigest()
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8-sig"))
     if not isinstance(value, dict):
@@ -107,7 +112,7 @@ def build_fingerprint(
         else {}
     )
     artifact_hashes = {
-        "protocol_sha256": sha256_file(protocol_path),
+        "protocol_sha256": sha256_locked_text_file(protocol_path),
         "model_onnx_sha256": sha256_file(model_path),
         "uproject_sha256": _optional_hash(uproject_path),
         "plugin_descriptor_sha256": _optional_hash(plugin_path),

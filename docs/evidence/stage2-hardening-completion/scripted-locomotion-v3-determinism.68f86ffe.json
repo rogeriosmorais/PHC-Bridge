@@ -1,0 +1,319 @@
+{
+  "actual_run_count": 3,
+  "authority_equality": {
+    "authority_digest_sha256": {
+      "passed": true,
+      "required": true,
+      "values": [
+        "627644499390f669fb578f386d84dd79b92ac05cd1c66e6e9ce35d1b0fe5d1f8"
+      ]
+    },
+    "model_sha256": {
+      "passed": true,
+      "required": true,
+      "values": [
+        "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19"
+      ]
+    },
+    "protocol_sha256": {
+      "passed": true,
+      "required": true,
+      "values": [
+        "6ee4989d8d8e08391d50e74d9b673f02c6fa7cc401dfdc10554eb8c449ea4ed3"
+      ]
+    },
+    "source_commit": {
+      "passed": true,
+      "required": true,
+      "values": [
+        "68f86ffe8807424313bc2004021c9c28066cdce7"
+      ]
+    }
+  },
+  "behavioral_failures": [
+    {
+      "code": "causal_metric_contract_failed",
+      "repetition": 1,
+      "verdict": "FAIL"
+    },
+    {
+      "code": "causal_metric_contract_failed",
+      "repetition": 2,
+      "verdict": "FAIL"
+    },
+    {
+      "code": "causal_metric_contract_failed",
+      "repetition": 3,
+      "verdict": "FAIL"
+    }
+  ],
+  "byte_determinism": {
+    "policy-input-snapshot.json": {
+      "hashes": [
+        "aaaf45e77b0d8bfafd231c3e32a2f852cd2cf420128b74eff6651e62fbb316aa",
+        "aaaf45e77b0d8bfafd231c3e32a2f852cd2cf420128b74eff6651e62fbb316aa",
+        "aaaf45e77b0d8bfafd231c3e32a2f852cd2cf420128b74eff6651e62fbb316aa"
+      ],
+      "passed": true
+    }
+  },
+  "campaign": {
+    "byte_identical_artifacts": [
+      "policy-input-snapshot.json"
+    ],
+    "numeric_endpoints": {
+      "final_tracking_error_cm": {
+        "maximum_absolute_spread": 15.0,
+        "maximum_relative_spread": 0.15
+      },
+      "max_tracking_error_cm": {
+        "maximum_absolute_spread": 15.0,
+        "maximum_relative_spread": 0.15
+      },
+      "root_route_lateral_displacement_cm": {
+        "maximum_absolute_spread": 10.0,
+        "maximum_relative_spread": 0.1
+      },
+      "root_route_projected_progress_cm": {
+        "maximum_absolute_spread": 10.0,
+        "maximum_relative_spread": 0.05
+      },
+      "root_to_shell_progress_ratio": {
+        "maximum_absolute_spread": 0.05,
+        "maximum_relative_spread": 0.05
+      },
+      "tracking_error_time_average_cm": {
+        "maximum_absolute_spread": 10.0,
+        "maximum_relative_spread": 0.1
+      }
+    },
+    "repetitions": 3,
+    "require_authority_digest_match": true,
+    "require_clean_source": true,
+    "require_same_model_sha256": true,
+    "require_same_protocol_sha256": true,
+    "require_same_source_commit": true,
+    "scope": "cross_process_same_machine",
+    "variant": "Normal"
+  },
+  "campaign_name": "normal_cross_process_same_machine",
+  "causal_contracts": [
+    {
+      "passed": false,
+      "repetition": 1,
+      "verdict": "FAIL"
+    },
+    {
+      "passed": false,
+      "repetition": 2,
+      "verdict": "FAIL"
+    },
+    {
+      "passed": false,
+      "repetition": 3,
+      "verdict": "FAIL"
+    }
+  ],
+  "expected_run_count": 3,
+  "issues": [],
+  "numeric_determinism": {
+    "final_tracking_error_cm": {
+      "absolute_spread": 0.0,
+      "maximum": 599.7084281748643,
+      "maximum_absolute_spread": 15.0,
+      "maximum_relative_spread": 0.15,
+      "minimum": 599.7084281748643,
+      "passed": true,
+      "relative_spread": 0.0,
+      "values": [
+        599.7084281748643,
+        599.7084281748643,
+        599.7084281748643
+      ]
+    },
+    "max_tracking_error_cm": {
+      "absolute_spread": 0.0,
+      "maximum": 646.4908173630495,
+      "maximum_absolute_spread": 15.0,
+      "maximum_relative_spread": 0.15,
+      "minimum": 646.4908173630495,
+      "passed": true,
+      "relative_spread": 0.0,
+      "values": [
+        646.4908173630495,
+        646.4908173630495,
+        646.4908173630495
+      ]
+    },
+    "root_route_lateral_displacement_cm": {
+      "absolute_spread": 0.0,
+      "maximum": 330.0643880172959,
+      "maximum_absolute_spread": 10.0,
+      "maximum_relative_spread": 0.1,
+      "minimum": 330.0643880172959,
+      "passed": true,
+      "relative_spread": 0.0,
+      "values": [
+        330.0643880172959,
+        330.0643880172959,
+        330.0643880172959
+      ]
+    },
+    "root_route_projected_progress_cm": {
+      "absolute_spread": 0.0,
+      "maximum": 710.1663826456584,
+      "maximum_absolute_spread": 10.0,
+      "maximum_relative_spread": 0.05,
+      "minimum": 710.1663826456584,
+      "passed": true,
+      "relative_spread": 0.0,
+      "values": [
+        710.1663826456584,
+        710.1663826456584,
+        710.1663826456584
+      ]
+    },
+    "root_to_shell_progress_ratio": {
+      "absolute_spread": 0.0,
+      "maximum": 3.4357209339978003,
+      "maximum_absolute_spread": 0.05,
+      "maximum_relative_spread": 0.05,
+      "minimum": 3.4357209339978003,
+      "passed": true,
+      "relative_spread": 0.0,
+      "values": [
+        3.4357209339978003,
+        3.4357209339978003,
+        3.4357209339978003
+      ]
+    },
+    "tracking_error_time_average_cm": {
+      "absolute_spread": 0.0,
+      "maximum": 348.9770847121456,
+      "maximum_absolute_spread": 10.0,
+      "maximum_relative_spread": 0.1,
+      "minimum": 348.9770847121456,
+      "passed": true,
+      "relative_spread": 0.0,
+      "values": [
+        348.9770847121456,
+        348.9770847121456,
+        348.9770847121456
+      ]
+    }
+  },
+  "protocol_path": "../../../product-gates/scripted-locomotion.v3.json",
+  "protocol_sha256": "6ee4989d8d8e08391d50e74d9b673f02c6fa7cc401dfdc10554eb8c449ea4ed3",
+  "runs": [
+    {
+      "artifact_hashes": {
+        "policy-input-snapshot.json": "aaaf45e77b0d8bfafd231c3e32a2f852cd2cf420128b74eff6651e62fbb316aa"
+      },
+      "authority_digest_sha256": "627644499390f669fb578f386d84dd79b92ac05cd1c66e6e9ce35d1b0fe5d1f8",
+      "causal_verdict": "FAIL",
+      "fingerprint_model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+      "fingerprint_protocol_sha256": "6ee4989d8d8e08391d50e74d9b673f02c6fa7cc401dfdc10554eb8c449ea4ed3",
+      "fingerprint_source_commit": "68f86ffe8807424313bc2004021c9c28066cdce7",
+      "fingerprint_source_tree_dirty": false,
+      "metrics": {
+        "assistance_clean": true,
+        "classification": "FORWARD_TRACKING",
+        "final_tracking_error_cm": 599.7084281748643,
+        "forbidden_assistance_observed": [],
+        "max_tracking_error_cm": 646.4908173630495,
+        "note": "These are interpretable endpoints, not product thresholds or a weighted acceptance score.",
+        "root_net_displacement_cm": 783.1211855627785,
+        "root_path_length_cm": 1759.6302405107126,
+        "root_route_lateral_displacement_cm": 330.0643880172959,
+        "root_route_projected_progress_cm": 710.1663826456584,
+        "root_to_shell_progress_ratio": 3.4357209339978003,
+        "schema_version": "physanim-locomotion-causal-metrics/v1",
+        "shell_net_progress_cm": 206.7008340573545,
+        "shell_path_length_cm": 211.80000194907188,
+        "tracking_error_auc_cm_sec": 3489.770847121456,
+        "tracking_error_time_average_cm": 348.9770847121456
+      },
+      "model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+      "protocol_sha256": "6ee4989d8d8e08391d50e74d9b673f02c6fa7cc401dfdc10554eb8c449ea4ed3",
+      "repetition": 1,
+      "run_root": "v3-normal-1-68f86ffe",
+      "source_commit": "68f86ffe8807424313bc2004021c9c28066cdce7",
+      "source_tree_dirty": false,
+      "variant": "Normal"
+    },
+    {
+      "artifact_hashes": {
+        "policy-input-snapshot.json": "aaaf45e77b0d8bfafd231c3e32a2f852cd2cf420128b74eff6651e62fbb316aa"
+      },
+      "authority_digest_sha256": "627644499390f669fb578f386d84dd79b92ac05cd1c66e6e9ce35d1b0fe5d1f8",
+      "causal_verdict": "FAIL",
+      "fingerprint_model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+      "fingerprint_protocol_sha256": "6ee4989d8d8e08391d50e74d9b673f02c6fa7cc401dfdc10554eb8c449ea4ed3",
+      "fingerprint_source_commit": "68f86ffe8807424313bc2004021c9c28066cdce7",
+      "fingerprint_source_tree_dirty": false,
+      "metrics": {
+        "assistance_clean": true,
+        "classification": "FORWARD_TRACKING",
+        "final_tracking_error_cm": 599.7084281748643,
+        "forbidden_assistance_observed": [],
+        "max_tracking_error_cm": 646.4908173630495,
+        "note": "These are interpretable endpoints, not product thresholds or a weighted acceptance score.",
+        "root_net_displacement_cm": 783.1211855627785,
+        "root_path_length_cm": 1759.6302405107126,
+        "root_route_lateral_displacement_cm": 330.0643880172959,
+        "root_route_projected_progress_cm": 710.1663826456584,
+        "root_to_shell_progress_ratio": 3.4357209339978003,
+        "schema_version": "physanim-locomotion-causal-metrics/v1",
+        "shell_net_progress_cm": 206.7008340573545,
+        "shell_path_length_cm": 211.80000194907188,
+        "tracking_error_auc_cm_sec": 3489.770847121456,
+        "tracking_error_time_average_cm": 348.9770847121456
+      },
+      "model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+      "protocol_sha256": "6ee4989d8d8e08391d50e74d9b673f02c6fa7cc401dfdc10554eb8c449ea4ed3",
+      "repetition": 2,
+      "run_root": "v3-normal-2-68f86ffe",
+      "source_commit": "68f86ffe8807424313bc2004021c9c28066cdce7",
+      "source_tree_dirty": false,
+      "variant": "Normal"
+    },
+    {
+      "artifact_hashes": {
+        "policy-input-snapshot.json": "aaaf45e77b0d8bfafd231c3e32a2f852cd2cf420128b74eff6651e62fbb316aa"
+      },
+      "authority_digest_sha256": "627644499390f669fb578f386d84dd79b92ac05cd1c66e6e9ce35d1b0fe5d1f8",
+      "causal_verdict": "FAIL",
+      "fingerprint_model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+      "fingerprint_protocol_sha256": "6ee4989d8d8e08391d50e74d9b673f02c6fa7cc401dfdc10554eb8c449ea4ed3",
+      "fingerprint_source_commit": "68f86ffe8807424313bc2004021c9c28066cdce7",
+      "fingerprint_source_tree_dirty": false,
+      "metrics": {
+        "assistance_clean": true,
+        "classification": "FORWARD_TRACKING",
+        "final_tracking_error_cm": 599.7084281748643,
+        "forbidden_assistance_observed": [],
+        "max_tracking_error_cm": 646.4908173630495,
+        "note": "These are interpretable endpoints, not product thresholds or a weighted acceptance score.",
+        "root_net_displacement_cm": 783.1211855627785,
+        "root_path_length_cm": 1759.6302405107126,
+        "root_route_lateral_displacement_cm": 330.0643880172959,
+        "root_route_projected_progress_cm": 710.1663826456584,
+        "root_to_shell_progress_ratio": 3.4357209339978003,
+        "schema_version": "physanim-locomotion-causal-metrics/v1",
+        "shell_net_progress_cm": 206.7008340573545,
+        "shell_path_length_cm": 211.80000194907188,
+        "tracking_error_auc_cm_sec": 3489.770847121456,
+        "tracking_error_time_average_cm": 348.9770847121456
+      },
+      "model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+      "protocol_sha256": "6ee4989d8d8e08391d50e74d9b673f02c6fa7cc401dfdc10554eb8c449ea4ed3",
+      "repetition": 3,
+      "run_root": "v3-normal-3-68f86ffe",
+      "source_commit": "68f86ffe8807424313bc2004021c9c28066cdce7",
+      "source_tree_dirty": false,
+      "variant": "Normal"
+    }
+  ],
+  "schema_version": "physanim-locomotion-determinism-audit/v1",
+  "verdict": "FAIL"
+}

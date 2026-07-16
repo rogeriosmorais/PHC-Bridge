@@ -1,0 +1,48 @@
+{
+  "actions_rebuilt": false,
+  "capture_scope": "first_policy_input_pre_flattening",
+  "note": "The parity verdict covers self_observation, mimic_target_poses, and terrain. The ONNX action output is not reconstructed by this input-packing oracle.",
+  "policy_control_tick": 1,
+  "provenance_path": "policy-input-provenance.68f86ffe.json",
+  "provenance_sha256": "055E74345E4738065EB6C5B8AE6D4758D91A8A6C4A5E7235EC2C9732F2FFE6B9",
+  "runtime_state": "Standing_Preparation",
+  "schema_version": "physanim-policy-tensor-parity/v1",
+  "snapshot_path": "policy-input-snapshot.68f86ffe.json",
+  "snapshot_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+  "tensors": {
+    "mimic_target_poses": {
+      "captured_at_worst_index": 0.9999999403953552,
+      "max_abs_error": 2.978113367024804e-08,
+      "mean_abs_error": 5.3013587186449116e-09,
+      "mismatch_count": 0,
+      "passed": true,
+      "rebuilt_at_worst_index": 0.9999999701764889,
+      "tolerance": 1e-05,
+      "width": 6495,
+      "worst_index": 4961
+    },
+    "self_observation": {
+      "captured_at_worst_index": 0.9655562043190002,
+      "max_abs_error": 2.9550884073081818e-08,
+      "mean_abs_error": 3.3420005611407576e-09,
+      "mismatch_count": 0,
+      "passed": true,
+      "rebuilt_at_worst_index": 0.9655562338698843,
+      "tolerance": 1e-05,
+      "width": 358,
+      "worst_index": 148
+    },
+    "terrain": {
+      "captured_at_worst_index": 0.9379463195800781,
+      "max_abs_error": 4.997097891035196e-08,
+      "mean_abs_error": 4.997097891035196e-08,
+      "mismatch_count": 0,
+      "passed": true,
+      "rebuilt_at_worst_index": 0.9379462696090992,
+      "tolerance": 1e-05,
+      "width": 256,
+      "worst_index": 0
+    }
+  },
+  "verdict": "PASS"
+}

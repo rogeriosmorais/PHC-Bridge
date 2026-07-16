@@ -28,9 +28,9 @@ param(
         "render_capture"
     ),
 
+    [switch]$PolicyInputProvenanceTrace,
     [switch]$AllowDirty,
     [switch]$SkipCompile,
-    [switch]$PolicyInputProvenanceTrace,
     [switch]$DryRun
 )
 
@@ -226,12 +226,13 @@ $EscapedReportRoot = $ReportRoot.Replace("'", "''")
 $EscapedRunRoot = $RunRoot.Replace("'", "''")
 $EscapedRunId = $RunId.Replace("'", "''")
 $EscapedVariant = $Variant.Replace("'", "''")
+$EscapedProtocolPath = $ProtocolPath.Replace("'", "''")
 $EscapedSourceCommit = $SourceCommit.Replace("'", "''")
 $EscapedModelHash = $ModelHash.Replace("'", "''")
 $EscapedChildExitCodePath = $ChildExitCodePath.Replace("'", "''")
 $SkipBuildLiteral = if ($SkipCompile) { '$true' } else { '$false' }
 $DirtyLiteral = if ($SourceTreeDirty) { '$true' } else { '$false' }
-$PolicyInputProvenanceLiteral = if ($PolicyInputProvenanceTrace) { '$true' } else { '$false' }
+$PolicyInputProvenanceTraceLiteral = if ($PolicyInputProvenanceTrace) { '$true' } else { '$false' }
 
 $Invocation = @"
 `$ErrorActionPreference = 'Stop'
@@ -243,16 +244,21 @@ $Invocation = @"
     ProductRunRoot = '$EscapedRunRoot'
     ProductRunId = '$EscapedRunId'
     ProductVariant = '$EscapedVariant'
+    ProductProtocolPath = '$EscapedProtocolPath'
     ProductRepetition = $Repetition
     SourceCommit = '$EscapedSourceCommit'
     ModelOnnxSha256 = '$EscapedModelHash'
     SourceTreeDirty = $DirtyLiteral
-    PolicyInputProvenanceTrace = $PolicyInputProvenanceLiteral
+    PolicyInputProvenanceTrace = $PolicyInputProvenanceTraceLiteral
 }
 & '$EscapedBuildScript' @Parameters
+`$BuildInvocationSucceeded = `$?
 `$ChildExitCode = `$LASTEXITCODE
-Set-Content -LiteralPath '$EscapedChildExitCodePath' -Value `$ChildExitCode -Encoding ascii
-exit `$ChildExitCode
+if (`$null -eq `$ChildExitCode) {
+    `$ChildExitCode = if (`$BuildInvocationSucceeded) { 0 } else { 1 }
+}
+Set-Content -LiteralPath '$EscapedChildExitCodePath' -Value ([int]`$ChildExitCode) -Encoding ascii
+exit ([int]`$ChildExitCode)
 "@
 $Invocation | Set-Content -LiteralPath $InvocationPath -Encoding utf8
 
@@ -298,23 +304,40 @@ while (-not $Process.HasExited) {
     $Process.Refresh()
 }
 
-# PowerShell can observe HasExited before the managed Process object has
-# populated its cached exit-code state. Synchronize and refresh explicitly
-# before classifying the child result.
+# PowerShell can observe HasExited before redirected streams and managed
+# process state are fully synchronized. The child writes its own integer exit
+# marker; the Process.ExitCode property is only a fallback.
 $Process.WaitForExit()
 $Process.Refresh()
-$ExitCode = if (Test-Path -LiteralPath $ChildExitCodePath -PathType Leaf) {
-    $ParsedExitCode = 0
-    $RawExitCode = (Get-Content -Raw -LiteralPath $ChildExitCodePath).Trim()
-    if ([int]::TryParse($RawExitCode, [ref]$ParsedExitCode)) {
-        $ParsedExitCode
-    } else {
-        1
+$ExitCode = $null
+if (Test-Path -LiteralPath $ChildExitCodePath -PathType Leaf) {
+    $RawChildExitCode = (Get-Content -Raw -LiteralPath $ChildExitCodePath).Trim()
+    $ParsedChildExitCode = 0
+    if ([int]::TryParse($RawChildExitCode, [ref]$ParsedChildExitCode)) {
+        $ExitCode = $ParsedChildExitCode
     }
-} elseif ($null -ne $Process.ExitCode) {
-    [int]$Process.ExitCode
-} else {
-    1
+}
+if ($null -eq $ExitCode) {
+    try {
+        $ExitCode = [int]$Process.ExitCode
+    }
+    catch {
+        $ExitCode = $null
+    }
+}
+if ($null -eq $ExitCode) {
+    Write-OrchestrationResult $OrchestrationPath @{
+        schema_version = "physanim-ue-automation-orchestration/v1"
+        state = "CHILD_EXIT_UNKNOWN"
+        verdict = "INVALID"
+        ended_utc = (Get-Date).ToUniversalTime().ToString("o")
+        plan = $Plan
+        stdout = $StdoutPath
+        stderr = $StderrPath
+        child_exit_code_path = $ChildExitCodePath
+    }
+    Write-Error "INVALID: automation child completed without a readable exit code. Artifacts and logs were retained at $RunRoot"
+    exit 2
 }
 if ($ExitCode -ne 0) {
     $StdoutTail = if (Test-Path $StdoutPath) { (Get-Content $StdoutPath -Tail 80) -join "`n" } else { "" }

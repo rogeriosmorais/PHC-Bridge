@@ -1791,6 +1791,7 @@ namespace
 		FString Variant;
 		FString SourceCommit;
 		FString ModelOnnxSha256;
+		FString ProductProtocolPath;
 		int32 Repetition = 0;
 		bool bSourceTreeDirty = false;
 		bool bPlantRun = false;
@@ -1810,6 +1811,7 @@ namespace
 			FParse::Value(CommandLine, TEXT("PhysAnimProductRunRoot="), RunRoot);
 			FParse::Value(CommandLine, TEXT("PhysAnimProductRunId="), RunId);
 			FParse::Value(CommandLine, TEXT("PhysAnimProductVariant="), Variant);
+			FParse::Value(CommandLine, TEXT("PhysAnimProductProtocolPath="), ProductProtocolPath);
 			FParse::Value(CommandLine, TEXT("PhysAnimProductRepetition="), Repetition);
 			FParse::Value(CommandLine, TEXT("PhysAnimSourceCommit="), SourceCommit);
 			FParse::Value(CommandLine, TEXT("PhysAnimModelOnnxSha256="), ModelOnnxSha256);
@@ -1830,9 +1832,13 @@ namespace
 		{
 			bScriptedLocomotionRun = true;
 			bApplyPerturbation = false;
-			ProtocolRelativePath = TEXT("../product-gates/scripted-locomotion.v2.json");
+			ProtocolRelativePath = ProductProtocolPath.IsEmpty()
+				? TEXT("../product-gates/scripted-locomotion.v2.json")
+				: ProductProtocolPath;
 			const FString ProtocolPath = FPaths::ConvertRelativePathToFull(
-				FPaths::Combine(FPaths::ProjectDir(), ProtocolRelativePath));
+				FPaths::IsRelative(ProtocolRelativePath)
+					? FPaths::Combine(FPaths::ProjectDir(), ProtocolRelativePath)
+					: ProtocolRelativePath);
 			if (!PhysAnimScriptedLocomotion::LoadProtocolFromFile(
 				ProtocolPath,
 				ScriptedLocomotionProtocol,
@@ -3712,38 +3718,6 @@ namespace
 						bMannyLocalFrameRoundtripTraceEnabled)) + TEXT("\n"),
 					*MannyLocalFrameRoundtripTracePath);
 
-				const bool bPolicyInputProvenanceEnabled =
-					Component && Component->IsPolicyInputProvenanceTraceEnabledForTesting();
-				if (bPolicyInputProvenanceEnabled)
-				{
-					const FString PolicyInputProvenancePath = FPaths::Combine(
-						Config.RunRoot,
-						TEXT("policy-input-provenance.json"));
-					bPolicyInputProvenanceWritten = FFileHelper::SaveStringToFile(
-						SerializeJson(BuildPolicyInputProvenanceJson(
-							Component->GetPolicyInputProvenanceSnapshotForTesting(),
-							true)) + TEXT("\n"),
-						*PolicyInputProvenancePath);
-
-					if (Config.bScriptedLocomotionRun)
-					{
-						const PhysAnimBridge::FPhysAnimLocomotionFrameReplaySnapshot& Replay =
-							Component->GetLocomotionFrameReplaySnapshotForTesting();
-						FString ReplayValidationError;
-						const bool bReplayValid =
-							PhysAnimBridge::ValidateLocomotionFrameReplaySnapshot(
-								Replay,
-								ReplayValidationError);
-						const FString LocomotionFrameReplayPath = FPaths::Combine(
-							Config.RunRoot,
-							TEXT("locomotion-frame-replay.json"));
-						bLocomotionFrameReplayWritten = bReplayValid &&
-							FFileHelper::SaveStringToFile(
-								SerializeJson(BuildLocomotionFrameReplayJson(Replay, true)) + TEXT("\n"),
-								*LocomotionFrameReplayPath);
-					}
-				}
-
 				const bool bStartupChronologyEnabled =
 					Component && Component->IsStartupChronologyTraceEnabledForTesting();
 				if (bStartupChronologyEnabled)
@@ -3846,6 +3820,39 @@ namespace
 					SerializeJson(ObservationPositionTrace) + TEXT("\n"),
 					*ObservationPositionTracePath);
 			}
+
+			const bool bPolicyInputProvenanceEnabled =
+				Component && Component->IsPolicyInputProvenanceTraceEnabledForTesting();
+			if (bPolicyInputProvenanceEnabled)
+			{
+				const FString PolicyInputProvenancePath = FPaths::Combine(
+					Config.RunRoot,
+					TEXT("policy-input-provenance.json"));
+				bPolicyInputProvenanceWritten = FFileHelper::SaveStringToFile(
+					SerializeJson(BuildPolicyInputProvenanceJson(
+						Component->GetPolicyInputProvenanceSnapshotForTesting(),
+						true)) + TEXT("\n"),
+					*PolicyInputProvenancePath);
+			}
+
+			if (Config.bScriptedLocomotionRun && Component)
+			{
+				const PhysAnimBridge::FPhysAnimLocomotionFrameReplaySnapshot& Replay =
+					Component->GetLocomotionFrameReplaySnapshotForTesting();
+				FString ReplayValidationError;
+				const bool bReplayValid =
+					PhysAnimBridge::ValidateLocomotionFrameReplaySnapshot(
+						Replay,
+						ReplayValidationError);
+				const FString LocomotionFrameReplayPath = FPaths::Combine(
+					Config.RunRoot,
+					TEXT("locomotion-frame-replay.json"));
+				bLocomotionFrameReplayWritten = bReplayValid &&
+					FFileHelper::SaveStringToFile(
+						SerializeJson(BuildLocomotionFrameReplayJson(Replay, true)) + TEXT("\n"),
+						*LocomotionFrameReplayPath);
+			}
+
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
 			bool bScenarioSummaryWritten = true;
 			if (Config.bScriptedLocomotionRun)
@@ -3909,7 +3916,10 @@ namespace
 				bScenarioSummaryWritten = FFileHelper::SaveStringToFile(SerializeJson(Summary) + TEXT("\n"), *ScenarioSummaryPath);
 			}
 
-			const FString ProtocolPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), Config.ProtocolRelativePath));
+			const FString ProtocolPath = FPaths::ConvertRelativePathToFull(
+				FPaths::IsRelative(Config.ProtocolRelativePath)
+					? FPaths::Combine(FPaths::ProjectDir(), Config.ProtocolRelativePath)
+					: Config.ProtocolRelativePath);
 			const TSharedRef<FJsonObject> Manifest = MakeShared<FJsonObject>();
 			Manifest->SetStringField(TEXT("schema_version"), Config.RunSchemaVersion);
 			Manifest->SetStringField(TEXT("fixture_authority"), Config.FixtureAuthority);

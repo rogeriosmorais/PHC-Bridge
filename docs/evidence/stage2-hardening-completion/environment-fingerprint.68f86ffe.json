@@ -1,0 +1,95 @@
+{
+  "artifacts": {
+    "default_engine_ini_sha256": "7ca53d5f1191efef6f13788daa0ac3d14d4a87616f717928e2cef723436648e7",
+    "default_game_ini_sha256": "de003dc0f0e12f684b321c16f091090a8f46302215d5eb225c27bfad6f6d7f89",
+    "model_onnx_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+    "package_lock_sha256": null,
+    "plugin_descriptor_sha256": "8bcaf8b212437aeff01db891ad2d736344d39c45b8a13eb44ec172c4fc27521f",
+    "protocol_sha256": "6ee4989d8d8e08391d50e74d9b673f02c6fa7cc401dfdc10554eb8c449ea4ed3",
+    "uproject_sha256": "92671777af9fb0af564c755b087fd478ec7c562a20b74bcc9290b3d3d9304d12"
+  },
+  "authority_digest_sha256": "627644499390f669fb578f386d84dd79b92ac05cd1c66e6e9ce35d1b0fe5d1f8",
+  "determinism_levels": {
+    "behavioral": "Identical protocol verdict and bounded endpoint variation.",
+    "byte": "Exact hashes of selected raw evidence streams and authority artifacts.",
+    "numerical": "Element-wise or metric equality within a preregistered tolerance.",
+    "process_scope": "Must state same-process, cross-process, or cross-machine scope."
+  },
+  "device": {
+    "cpu": "Intel(R) Core(TM) i7-14700KF",
+    "device_name": "DESKTOP-79MP8GH",
+    "gpu": "NVIDIA GeForce RTX 4070 SUPER",
+    "os_version": "Windows 10 (22H2) [10.0.19045.5011] ",
+    "platform": "WindowsEditor",
+    "ram_gb": 32,
+    "render_mode": "D3D12_SM6",
+    "rhi": "D3D12 (SM6)",
+    "source": "unreal_automation_report"
+  },
+  "protocol": {
+    "determinism": {
+      "campaigns": {
+        "normal_cross_process_same_machine": {
+          "byte_identical_artifacts": [
+            "policy-input-snapshot.json"
+          ],
+          "numeric_endpoints": {
+            "final_tracking_error_cm": {
+              "maximum_absolute_spread": 15.0,
+              "maximum_relative_spread": 0.15
+            },
+            "max_tracking_error_cm": {
+              "maximum_absolute_spread": 15.0,
+              "maximum_relative_spread": 0.15
+            },
+            "root_route_lateral_displacement_cm": {
+              "maximum_absolute_spread": 10.0,
+              "maximum_relative_spread": 0.1
+            },
+            "root_route_projected_progress_cm": {
+              "maximum_absolute_spread": 10.0,
+              "maximum_relative_spread": 0.05
+            },
+            "root_to_shell_progress_ratio": {
+              "maximum_absolute_spread": 0.05,
+              "maximum_relative_spread": 0.05
+            },
+            "tracking_error_time_average_cm": {
+              "maximum_absolute_spread": 10.0,
+              "maximum_relative_spread": 0.1
+            }
+          },
+          "repetitions": 3,
+          "require_authority_digest_match": true,
+          "require_clean_source": true,
+          "require_same_model_sha256": true,
+          "require_same_protocol_sha256": true,
+          "require_same_source_commit": true,
+          "scope": "cross_process_same_machine",
+          "variant": "Normal"
+        }
+      },
+      "schema_version": "physanim-locomotion-determinism-contract/v1"
+    },
+    "fixed_delta_time_sec": 0.016666666666666666,
+    "id": "scripted-causal-locomotion",
+    "path": "F:\\NewEngine-AgentB\\.worktrees\\complete-hardening\\product-gates\\scripted-locomotion.v3.json",
+    "status": "LOCKED",
+    "version": 3
+  },
+  "runtime": {
+    "machine_architecture": "AMD64",
+    "python_implementation": "CPython",
+    "python_version": "3.9.6"
+  },
+  "schema_version": "physanim-environment-fingerprint/v1",
+  "source": {
+    "commit": "68f86ffe8807424313bc2004021c9c28066cdce7",
+    "tree_dirty": false
+  },
+  "unreal": {
+    "engine_association": "5.7",
+    "plugin_version": "0.1.0",
+    "uproject_path": "F:\\NewEngine-AgentB\\.worktrees\\complete-hardening\\PhysAnimUE5\\PhysAnimUE5.uproject"
+  }
+}

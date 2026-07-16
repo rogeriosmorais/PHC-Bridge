@@ -361,7 +361,6 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 #if WITH_DEV_AUTOMATION_TESTS
 		const bool bCapturePolicyInputProvenanceThisStep =
 			bPolicyInputProvenanceTraceEnabledForTesting &&
-			StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
 			bEnablePolicyInference &&
 			bStandingVariantUsesPolicyInference &&
 			!FirstPolicyInputProvenanceSnapshot.bCaptured;
