@@ -772,3 +772,13 @@ Machine-readable record: `experiments/stage1/scaled-delayed-neck.e50.json`.
 **Next experiment selected.** Delayed scaled restoration of the left proximal arm chain.
 
 Machine-readable record: `experiments/stage1/production-scaled-delayed-neck.e51.json`.
+
+## E52 — Left proximal arm at 25% after first active policy cycle (2026-07-15)
+
+**Hypothesis.** Left proximal joints 13–15 at delayed scale 0.25 preserve the locked causal-standing contract on the production Neck baseline.
+
+**Result.** Supported. Normal AUC was exactly 31.1022, ZeroActions exactly 39.3495 and ratio 0.790409. All streams were byte-deterministic; first-active left proximal actions were zero, later actions were nonzero, and Torso/right proximal remained zero.
+
+**Next experiment selected.** Promote delayed left proximal scale 0.25 into production.
+
+Machine-readable record: `experiments/stage1/scaled-delayed-left-proximal.e52.json`.
