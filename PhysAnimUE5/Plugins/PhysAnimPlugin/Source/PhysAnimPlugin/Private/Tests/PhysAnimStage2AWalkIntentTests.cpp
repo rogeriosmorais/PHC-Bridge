@@ -82,12 +82,12 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 		TestComp->Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::NotEvaluated;
 	};
 
-	// 1. DeltaClamping: actor forward +X, 50ms = 3cm; 1s clamps to 6cm.
+	// 1. DeltaClamping: the 160 cm/s Pose Search speed is clamped to 6 cm per step.
 	{
 		ResetToAllowed();
 		Fixture.Actor->SetActorRotation(FRotator::ZeroRotator);
 		const FVector Delta1 = TestComp->BuildStage2AWalkDeltaCm(0.05f);
-		TestEqual(TEXT("WALK-01 50ms delta should be 3cm along actor forward X"), (double)Delta1.X, 3.0, 0.01);
+		TestEqual(TEXT("WALK-E68-01 50ms delta is clamped to 6cm along actor forward X"), (double)Delta1.X, 6.0, 0.01);
 		TestEqual(TEXT("WALK-01B 50ms delta should not drift Y"), (double)Delta1.Y, 0.0, 0.01);
 
 		const FVector Delta2 = TestComp->BuildStage2AWalkDeltaCm(1.0f);
@@ -101,7 +101,7 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 		Fixture.Actor->SetActorRotation(FRotator(0.0f, 90.0f, 0.0f));
 		const FVector RotatedDelta = TestComp->BuildStage2AWalkDeltaCm(0.05f);
 		TestEqual(TEXT("WALK-03 Rotated actor should not move on X"), (double)RotatedDelta.X, 0.0, 0.01);
-		TestEqual(TEXT("WALK-04 Rotated actor should move 3cm on Y"), (double)RotatedDelta.Y, 3.0, 0.01);
+		TestEqual(TEXT("WALK-E68-02 Rotated actor should move the clamped 6cm on Y"), (double)RotatedDelta.Y, 6.0, 0.01);
 	}
 
 	// 3. ActivationGating: Verify TryActivateStage2AWalkIntent respects frame threshold.
@@ -136,11 +136,11 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("WALK-11 ActiveIntent is WalkForward"), TestComp->BridgeIntentState.ActiveIntent, FString(TEXT("WalkForward")));
 		TestEqual(TEXT("WALK-12 MotionSource is Stage2A_KinematicShell"), TestComp->BridgeTrajectoryState.MotionSource, FString(TEXT("Stage2A_KinematicShell")));
 		TestEqual(TEXT("WALK-13 Intent magnitude is 1"), (double)TestComp->BridgeIntentState.IntentMagnitude, 1.0, 0.01);
-		TestEqual(TEXT("WALK-14 Desired speed is 60cm/s"), (double)TestComp->BridgeIntentState.DesiredSpeedCmPerSecond, 60.0, 0.01);
+		TestEqual(TEXT("WALK-E68-03 Desired speed matches the 160cm/s Pose Search contract"), (double)TestComp->BridgeIntentState.DesiredSpeedCmPerSecond, 160.0, 0.01);
 		TestFalse(TEXT("WALK-15 Walk does not request desired facing"), TestComp->BridgeIntentState.bHasDesiredFacing);
 		TestTrue(TEXT("WALK-16 Trajectory initialized"), TestComp->BridgeTrajectoryState.bInitialized);
 		TestEqual(TEXT("WALK-17 Trajectory dt is 0.05"), (double)TestComp->BridgeTrajectoryState.LastDeltaTimeSeconds, 0.05, 0.001);
-		TestEqual(TEXT("WALK-18 Desired velocity X is 60cm/s"), (double)TestComp->BridgeTrajectoryState.DesiredVelocityCmPerSecond.X, 60.0, 0.01);
+		TestEqual(TEXT("WALK-E68-04 Desired velocity X matches 160cm/s"), (double)TestComp->BridgeTrajectoryState.DesiredVelocityCmPerSecond.X, 160.0, 0.01);
 	}
 
 	// 5. Movement acceptance state and telemetry.
@@ -152,8 +152,8 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 		TestComp->Stage2AConsecutivePolicyActiveFrames = 3;
 		const float DeltaTime = 0.05f;
 		TestTrue(TEXT("WALK-19 Activation succeeds for movement"), TestComp->TryActivateStage2AWalkIntent(DeltaTime));
-		TestEqual(TEXT("WALK-20 LastWalkDeltaCm command is 3cm"), (double)TestComp->Stage2ALastWalkDeltaCm.X, (double)(60.0f * DeltaTime), 0.01);
-		TestEqual(TEXT("WALK-21 AcceptedWorldDeltaCm is 3cm"), (double)TestComp->BridgeShellState.AcceptedWorldDeltaCm.X, (double)(60.0f * DeltaTime), 0.01);
+		TestEqual(TEXT("WALK-E68-05 LastWalkDeltaCm command is clamped to 6cm"), (double)TestComp->Stage2ALastWalkDeltaCm.X, 6.0, 0.01);
+		TestEqual(TEXT("WALK-E68-06 AcceptedWorldDeltaCm is clamped to 6cm"), (double)TestComp->BridgeShellState.AcceptedWorldDeltaCm.X, 6.0, 0.01);
 		TestFalse(TEXT("WALK-22 Move is not blocked"), TestComp->BridgeShellState.bLastMoveBlocked);
 		TestEqual(TEXT("WALK-23 AuthorityState is Locomoting"), (int32)TestComp->BridgeLocomotionAuthorityState, (int32)EBridgeLocomotionAuthorityState::Locomoting);
 		TestEqual(TEXT("WALK-24 RuntimeState is LocomotionActiveShell"), (int32)TestComp->RuntimeState, (int32)EPhysAnimRuntimeState::LocomotionActiveShell);

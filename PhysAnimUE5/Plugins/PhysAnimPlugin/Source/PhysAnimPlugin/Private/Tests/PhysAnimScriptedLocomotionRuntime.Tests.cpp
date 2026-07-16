@@ -103,10 +103,10 @@ bool FPhysAnimScriptedLocomotionRuntimeTest::RunTest(const FString& Parameters)
 			TestComp->TryActivateStage2AScriptedLocomotionIntent(0.05f, 0.5f, 5.0f, true));
 		TestEqual(TEXT("SCRIPTED-03 Runtime enters locomotion"), (int32)TestComp->RuntimeState, (int32)EPhysAnimRuntimeState::LocomotionActiveShell);
 		TestEqual(TEXT("SCRIPTED-04 Intent magnitude is clamped/scaled"), (double)TestComp->BridgeIntentState.IntentMagnitude, 0.5, 1.0e-6);
-		TestEqual(TEXT("SCRIPTED-05 Desired speed is 30 cm/s"), (double)TestComp->BridgeIntentState.DesiredSpeedCmPerSecond, 30.0, 1.0e-4);
+		TestEqual(TEXT("SCRIPTED-E68-01 Desired speed uses half of the 160 cm/s Pose Search contract"), (double)TestComp->BridgeIntentState.DesiredSpeedCmPerSecond, 80.0, 1.0e-4);
 		TestTrue(TEXT("SCRIPTED-06 Desired facing is published"), TestComp->BridgeIntentState.bHasDesiredFacing);
 		TestEqual(TEXT("SCRIPTED-07 Actor yaw is composed"), (double)Fixture.Actor->GetActorRotation().Yaw, 5.0, 1.0e-3);
-		TestEqual(TEXT("SCRIPTED-08 Accepted displacement magnitude is 1.5 cm"), (double)TestComp->BridgeShellState.AcceptedWorldDeltaCm.Size2D(), 1.5, 1.0e-3);
+		TestEqual(TEXT("SCRIPTED-E68-02 Accepted displacement remains clamped to 3 cm at half intent"), (double)TestComp->BridgeShellState.AcceptedWorldDeltaCm.Size2D(), 3.0, 1.0e-3);
 		TestTrue(TEXT("SCRIPTED-09 Telemetry identifies scripted locomotion"), TestComp->LastStage2ALocomotionTelemetryLine.Contains(TEXT("locomotion_intent=ScriptedLocomotion")));
 		const FPhysAnimStabilizationSettings EffectiveSettings = TestComp->ResolveEffectiveStabilizationSettings();
 		TestComp->UpdateBridgeLocomotionAuthorityState(
@@ -120,7 +120,7 @@ bool FPhysAnimScriptedLocomotionRuntimeTest::RunTest(const FString& Parameters)
 		TestTrue(
 			TEXT("SCRIPTED-09B A second locomotion step continues without reopening the standing gate"),
 			TestComp->TryActivateStage2AScriptedLocomotionIntent(0.05f, 0.5f, 0.0f, true));
-		TestEqual(TEXT("SCRIPTED-09C Two half-speed steps travel 3 cm"), (double)Fixture.Actor->GetActorLocation().Size2D(), 3.0, 1.0e-3);
+		TestEqual(TEXT("SCRIPTED-E68-03 Two half-intent steps travel 6 cm"), (double)Fixture.Actor->GetActorLocation().Size2D(), 6.0, 1.0e-3);
 	}
 
 	// Red contract 2: destructive control applies the same shell transform but hides trajectory conditioning.
@@ -130,7 +130,7 @@ bool FPhysAnimScriptedLocomotionRuntimeTest::RunTest(const FString& Parameters)
 		TestTrue(
 			TEXT("SCRIPTED-11 Shell motion succeeds with conditioning suppressed"),
 			TestComp->TryActivateStage2AScriptedLocomotionIntent(0.05f, 0.5f, 5.0f, false));
-		TestEqual(TEXT("SCRIPTED-12 Shell displacement is preserved"), (double)TestComp->BridgeShellState.AcceptedWorldDeltaCm.Size2D(), 1.5, 1.0e-3);
+		TestEqual(TEXT("SCRIPTED-E68-04 Conditioning drop preserves the 3 cm shell displacement"), (double)TestComp->BridgeShellState.AcceptedWorldDeltaCm.Size2D(), 3.0, 1.0e-3);
 		TestTrue(TEXT("SCRIPTED-13 Intent is hidden from downstream conditioning"), TestComp->BridgeIntentState.ActiveIntent.IsEmpty());
 		TestEqual(TEXT("SCRIPTED-14 Hidden intent magnitude is zero"), (double)TestComp->BridgeIntentState.IntentMagnitude, 0.0, 0.0);
 		TestFalse(TEXT("SCRIPTED-15 Hidden trajectory is uninitialized"), TestComp->BridgeTrajectoryState.bInitialized);

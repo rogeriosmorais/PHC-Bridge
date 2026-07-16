@@ -18,8 +18,21 @@ DEFINE_LOG_CATEGORY(LogPhysAnimBridge);
 
 namespace
 {
-	static constexpr float Stage2AForwardWalkSpeedCmPerSecond = 60.0f;
 	static constexpr float Stage2AMaxWalkDeltaPerTickCm = 6.0f;
+
+	float ResolveStage2ALocomotionSpeedCmPerSecond(const FPhysAnimStabilizationSettings& EffectiveSettings)
+	{
+		const float MaxBridgeSpeedCmPerSecond =
+			FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementMaxPlanarSpeedCmPerSecond);
+		if (!EffectiveSettings.bBridgePoseSearchUseStabilizedWalkQuerySpeed)
+		{
+			return MaxBridgeSpeedCmPerSecond;
+		}
+		return FMath::Clamp(
+			EffectiveSettings.BridgePoseSearchStabilizedWalkSpeedCmPerSecond,
+			0.0f,
+			MaxBridgeSpeedCmPerSecond);
+	}
 	static constexpr int32 Stage2AMinPolicyActiveFramesBeforeWalk = 3;
 	static constexpr const TCHAR* Stage2AWalkIntentName = TEXT("WalkForward");
 	static constexpr const TCHAR* Stage2AMotionSourceName = TEXT("Stage2A_KinematicShell");
@@ -2191,15 +2204,18 @@ bool UPhysAnimComponent::TryActivateStage2AWalkIntent(float DeltaTime)
 		WorldMoveDirection = FVector::ForwardVector;
 	}
 
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	const float Stage2ALocomotionSpeedCmPerSecond = ResolveStage2ALocomotionSpeedCmPerSecond(EffectiveSettings);
+
 	BridgeIntentState.ActiveIntent = Stage2AWalkIntentName;
 	BridgeIntentState.WorldMoveDirection = WorldMoveDirection;
 	BridgeIntentState.LocalMoveDirection = FVector::ForwardVector;
 	BridgeIntentState.IntentMagnitude = 1.0f;
-	BridgeIntentState.DesiredSpeedCmPerSecond = Stage2AForwardWalkSpeedCmPerSecond;
+	BridgeIntentState.DesiredSpeedCmPerSecond = Stage2ALocomotionSpeedCmPerSecond;
 	BridgeIntentState.bHasDesiredFacing = false;
 
 	BridgeTrajectoryState.MotionSource = Stage2AMotionSourceName;
-	BridgeTrajectoryState.DesiredVelocityCmPerSecond = WorldMoveDirection * Stage2AForwardWalkSpeedCmPerSecond;
+	BridgeTrajectoryState.DesiredVelocityCmPerSecond = WorldMoveDirection * Stage2ALocomotionSpeedCmPerSecond;
 	BridgeTrajectoryState.AcceptedVelocityCmPerSecond = FVector::ZeroVector;
 	BridgeTrajectoryState.QueryVelocityCmPerSecond = BridgeTrajectoryState.DesiredVelocityCmPerSecond;
 	BridgeTrajectoryState.LastDeltaTimeSeconds = DeltaTime;
@@ -2386,7 +2402,9 @@ bool UPhysAnimComponent::TryActivateStage2AScriptedLocomotionIntent(
 	{
 		WorldMoveDirection = FVector::ForwardVector;
 	}
-	const float DesiredSpeedCmPerSecond = Stage2AForwardWalkSpeedCmPerSecond * ClampedMagnitude;
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	const float DesiredSpeedCmPerSecond =
+		ResolveStage2ALocomotionSpeedCmPerSecond(EffectiveSettings) * ClampedMagnitude;
 
 	BridgeIntentState.ActiveIntent = TEXT("ScriptedLocomotion");
 	BridgeIntentState.WorldMoveDirection = WorldMoveDirection;
@@ -2502,7 +2520,8 @@ FVector UPhysAnimComponent::BuildStage2AWalkDeltaCm(float DeltaTime) const
 		return FVector::ZeroVector;
 	}
 
-	const float RawDelta = Stage2AForwardWalkSpeedCmPerSecond * DeltaTime;
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	const float RawDelta = ResolveStage2ALocomotionSpeedCmPerSecond(EffectiveSettings) * DeltaTime;
 	const float ClampedDelta = FMath::Clamp(RawDelta, 0.0f, Stage2AMaxWalkDeltaPerTickCm);
 	return Forward * ClampedDelta;
 }
