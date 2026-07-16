@@ -2,6 +2,7 @@ param (
     [switch]$Full,  # Perform full plugin packaging (Slow)
     [switch]$Run,   # Launch the Editor on success
     [switch]$Clean,  # Wipe Binaries/Intermediate before building
+    [switch]$CloseEngineProcesses, # Opt-in: stop only UE 5.7 processes owned by UE5_PATH
     [string]$Test,    # Optional Unreal automation test name to run after a successful build
     [switch]$SkipBuild,
     [ValidateSet("NullRHI", "RenderOffscreen")]
@@ -39,6 +40,13 @@ if (-not $env:UE5_PATH) {
     . "$PSScriptRoot\local.paths.ps1"
 }
 
+$UnrealProcessSafetyModule = Join-Path $PSScriptRoot "UnrealProcessSafety.psm1"
+Import-Module $UnrealProcessSafetyModule -Force -ErrorAction Stop
+$EngineVersion = Assert-UnrealEngineVersion `
+    -EngineRoot $env:UE5_PATH `
+    -ExpectedMajorVersion 5 `
+    -ExpectedMinorVersion 7
+
 $ProjectDir = "$PWD\PhysAnimUE5"
 $ProjectFile = "$ProjectDir\PhysAnimUE5.uproject"
 $PluginDir = "$ProjectDir\Plugins\PhysAnimPlugin"
@@ -49,17 +57,37 @@ $EditorCmdExe = "$env:UE5_PATH\Binaries\Win64\UnrealEditor-Cmd.exe"
 
 $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
-# 2. Kill Unreal-related tasks to prevent file locks
-Write-Host "--- Checking for running Unreal processes ---" -ForegroundColor Yellow
-$ProcessNames = @("UnrealEditor", "ShaderCompileWorker", "UnrealMultiUserServer", "CrashReportClient")
+# 2. Protect unrelated Unreal installations and user sessions.
+Write-Host "--- Checking for UE 5.7 processes owned by $($EngineVersion.EngineRoot) ---" -ForegroundColor Yellow
+$EngineOwnedProcesses = @(
+    Get-EngineOwnedUnrealProcesses -EngineRoot $EngineVersion.EngineRoot
+)
 
-foreach ($Name in $ProcessNames) {
-    $RunningProcs = Get-Process -Name $Name -ErrorAction SilentlyContinue
-    if ($RunningProcs) {
-        Write-Host "Closing $Name..." -ForegroundColor Magenta
-        $RunningProcs | Stop-Process -Force
-        Start-Sleep -Seconds 1 # Wait for OS to release file handles
+if ($EngineOwnedProcesses.Count -gt 0) {
+    $ProcessSummary = ($EngineOwnedProcesses | ForEach-Object {
+        "$($_.ProcessName):$($_.Id) [$($_.Path)]"
+    }) -join ", "
+
+    if (-not $CloseEngineProcesses) {
+        Write-Error (
+            "BLOCKED: UE 5.7 processes from this project's configured engine are running: " +
+            "$ProcessSummary. Close them manually or rerun with -CloseEngineProcesses. " +
+            "Processes outside $($EngineVersion.EngineRoot), including Unreal Engine 5.8, are ignored and never stopped."
+        )
+        exit 3
     }
+
+    Write-Host "Closing only UE 5.7 processes owned by the configured engine root..." -ForegroundColor Magenta
+    $StoppedProcesses = @(
+        Stop-EngineOwnedUnrealProcesses `
+            -EngineRoot $EngineVersion.EngineRoot `
+            -ExpectedMajorVersion 5 `
+            -ExpectedMinorVersion 7
+    )
+    foreach ($Process in $StoppedProcesses) {
+        Write-Host "Closed $($Process.ProcessName):$($Process.Id) [$($Process.Path)]" -ForegroundColor Magenta
+    }
+    Start-Sleep -Seconds 1 # Wait for OS to release file handles.
 }
 
 # 3. Optional Cleanup
