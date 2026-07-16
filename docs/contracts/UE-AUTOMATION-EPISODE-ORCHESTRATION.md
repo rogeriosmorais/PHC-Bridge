@@ -30,6 +30,8 @@ After execution, `validate_ue_automation_run.py` requires:
 - `source_tree_dirty=false`;
 - every required manifest artifact to exist and be nonempty.
 
+The wrapper then writes `environment-fingerprint.json`, including source/protocol/model hashes and Unreal device metadata. A fingerprint failure makes the fixture invalid.
+
 A wrapper `PASS` is **not** a product verdict. It means the product fixture completed with a trustworthy identity and complete evidence. The versioned protocol evaluator must still determine behavioral `PASS` or `FAIL`.
 
 ## Dry-run example
