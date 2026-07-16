@@ -800,3 +800,11 @@ Machine-readable record: `experiments/stage1/production-scaled-delayed-left-prox
 **Next experiment selected.** Promote delayed right proximal scale 0.03125 into production.
 
 Machine-readable record: `experiments/stage1/scaled-delayed-right-proximal.e54.json`.
+
+## E55 — Production right proximal arm at 3.125% after first active policy cycle (2026-07-15)
+
+**Result.** Supported. The no-flag bundle exactly reproduced E54: Normal AUC 31.0041, ZeroActions 39.3495, ratio 0.787916. Streams were deterministic and destructive controls remained discriminative.
+
+**Next experiment selected.** Restore the final masked Torso joint at a conservative delayed scale.
+
+Machine-readable record: `experiments/stage1/production-scaled-delayed-right-proximal.e55.json`.
