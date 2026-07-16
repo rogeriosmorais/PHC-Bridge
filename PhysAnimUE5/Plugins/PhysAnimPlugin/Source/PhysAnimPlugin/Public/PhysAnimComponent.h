@@ -1953,6 +1953,10 @@ public:
 #endif
 
 #if WITH_DEV_AUTOMATION_TESTS
+	bool TestOnlyTryOpenStage2ALocomotionRequestGate(const TCHAR* RequestReason)
+	{
+		return TryOpenStage2ALocomotionRequestGate(RequestReason);
+	}
 	bool TestOnlyTryActivateStage2AScriptedLocomotionIntent(
 		float DeltaSeconds,
 		float IntentMagnitude,

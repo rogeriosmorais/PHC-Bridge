@@ -1483,6 +1483,56 @@ namespace
 			: CurrentGapMs + FMath::Max(0.0, DeltaTimeSeconds) * 1000.0;
 	}
 
+	struct FScriptedLocomotionStep
+	{
+		FString Phase = TEXT("StandingHold");
+		float IntentMagnitude = 0.0f;
+		float YawDeltaDegrees = 0.0f;
+		bool bMove = false;
+		bool bStop = false;
+	};
+
+	FScriptedLocomotionStep ResolveScriptedLocomotionStep(double TimeSeconds)
+	{
+		FScriptedLocomotionStep Step;
+		if (TimeSeconds < 1.0)
+		{
+			return Step;
+		}
+		if (TimeSeconds < 2.0)
+		{
+			Step.Phase = TEXT("Acceleration");
+			Step.IntentMagnitude = FMath::Lerp(0.1f, 1.0f, static_cast<float>(TimeSeconds - 1.0));
+			Step.bMove = true;
+			return Step;
+		}
+		if (TimeSeconds < 4.0)
+		{
+			Step.Phase = TEXT("Cruise");
+			Step.IntentMagnitude = 1.0f;
+			Step.bMove = true;
+			return Step;
+		}
+		if (TimeSeconds < 5.0)
+		{
+			Step.Phase = TEXT("MovingTurn");
+			Step.IntentMagnitude = 0.8f;
+			Step.YawDeltaDegrees = 30.0f * static_cast<float>(CausalStandingFixedDeltaTimeSeconds);
+			Step.bMove = true;
+			return Step;
+		}
+		if (TimeSeconds < 6.0)
+		{
+			Step.Phase = TEXT("Deceleration");
+			Step.IntentMagnitude = FMath::Lerp(0.8f, 0.05f, static_cast<float>(TimeSeconds - 5.0));
+			Step.bMove = true;
+			return Step;
+		}
+		Step.Phase = TEXT("Settle");
+		Step.bStop = true;
+		return Step;
+	}
+
 	struct FCausalStandingRunConfig
 	{
 		FString RunRoot;
@@ -1493,6 +1543,7 @@ namespace
 		int32 Repetition = 0;
 		bool bSourceTreeDirty = false;
 		bool bPlantRun = false;
+		bool bScriptedLocomotionRun = false;
 		double CaptureWindowSeconds = StandingWindowSeconds;
 		bool bApplyPerturbation = true;
 		FString ProtocolRelativePath = TEXT("../product-gates/causal-standing.v1.json");
@@ -1520,6 +1571,28 @@ namespace
 				return false;
 			}
 			RunRoot = FPaths::ConvertRelativePathToFull(RunRoot);
+			return true;
+		}
+
+		bool ConfigureScriptedLocomotion(FString& OutError)
+		{
+			bScriptedLocomotionRun = true;
+			bApplyPerturbation = false;
+			CaptureWindowSeconds = 10.0;
+			ProtocolRelativePath = TEXT("../product-gates/scripted-locomotion.v1.json");
+			FixtureAuthority = TEXT("PRODUCT_RUN");
+			RunSchemaVersion = TEXT("physanim-scripted-locomotion-run/v1");
+			StandingVariant = Variant == TEXT("ZeroActions")
+				? EPhysAnimStandingVariant::ZeroActions
+				: EPhysAnimStandingVariant::Normal;
+			if (Variant != TEXT("Normal") &&
+				Variant != TEXT("ZeroActions") &&
+				Variant != TEXT("DropTrajectoryConditioning") &&
+				Variant != TEXT("SuppressStopTransition"))
+			{
+				OutError = FString::Printf(TEXT("Unknown scripted-locomotion variant '%s'"), *Variant);
+				return false;
+			}
 			return true;
 		}
 
@@ -2670,6 +2743,13 @@ namespace
 				ObservationStartWorldTime = World->GetTimeSeconds();
 				if (Component)
 				{
+					if (Config.bScriptedLocomotionRun && Component->GetOwner())
+					{
+						ScenarioStartLocation = Component->GetOwner()->GetActorLocation();
+						LastScenarioActorLocation = ScenarioStartLocation;
+						ScenarioStartYawDegrees = Component->GetOwner()->GetActorRotation().Yaw;
+						bScenarioTransformInitialized = true;
+					}
 					const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
 					LastPolicyActionSampleCount = Metrics.PolicyActionSampleCount;
 					LastPoseSearchQueryCount = Metrics.PoseSearchQueryCount;
@@ -2696,6 +2776,11 @@ namespace
 				bPerturbationApplied = true;
 			}
 
+			if (Config.bScriptedLocomotionRun)
+			{
+				DriveScriptedLocomotion(Component, TimeSeconds);
+			}
+
 			if (TimeSeconds < Config.CaptureWindowSeconds)
 			{
 				return false;
@@ -2710,6 +2795,57 @@ namespace
 		}
 
 	private:
+		void DriveScriptedLocomotion(UPhysAnimComponent* Component, double TimeSeconds)
+		{
+			if (!Component)
+			{
+				++ScriptStepFailureCount;
+				return;
+			}
+			const FScriptedLocomotionStep Step = ResolveScriptedLocomotionStep(TimeSeconds);
+			CurrentScriptPhase = Step.Phase;
+			CurrentScriptIntentMagnitude = Step.IntentMagnitude;
+			ObservedScriptPhases.Add(Step.Phase);
+			if (Step.bMove)
+			{
+				if (!bLocomotionGateOpened)
+				{
+					bLocomotionGateOpened = Component->TestOnlyTryOpenStage2ALocomotionRequestGate(TEXT("E60ScriptedScenario"));
+					if (!bLocomotionGateOpened)
+					{
+						++ScriptStepFailureCount;
+						return;
+					}
+				}
+				const bool bPublishTrajectory = Config.Variant != TEXT("DropTrajectoryConditioning");
+				bTrajectoryConditioningPublished = bPublishTrajectory;
+				if (!Component->TestOnlyTryActivateStage2AScriptedLocomotionIntent(
+					CausalStandingFixedDeltaTimeSeconds,
+					Step.IntentMagnitude,
+					Step.YawDeltaDegrees,
+					bPublishTrajectory))
+				{
+					++ScriptStepFailureCount;
+				}
+			}
+			else if (Step.bStop && !bStopDecisionMade)
+			{
+				bStopDecisionMade = true;
+				if (Config.Variant == TEXT("SuppressStopTransition"))
+				{
+					bStopTransitionSuppressed = true;
+				}
+				else
+				{
+					bStopIssued = Component->TestOnlyStopStage2AScriptedLocomotionAndReturnToStanding();
+					if (!bStopIssued)
+					{
+						++ScriptStepFailureCount;
+					}
+				}
+			}
+		}
+
 		void CapturePhysicsSample(UWorld* World, UPhysAnimComponent* Component, double TimeSeconds)
 		{
 			ProductSupportGapTimerMs = AdvanceCausalStandingSupportGapMs(
@@ -2820,8 +2956,31 @@ namespace
 			UCharacterMovementComponent* Movement = Character ? Character->GetCharacterMovement() : nullptr;
 			UCapsuleComponent* Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
 			const TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
+			const AActor* const OwnerActor = Component ? Component->GetOwner() : nullptr;
+			const FVector ActorLocation = OwnerActor ? OwnerActor->GetActorLocation() : FVector::ZeroVector;
+			if (Config.bScriptedLocomotionRun && bScenarioTransformInitialized)
+			{
+				ShellPathLengthCm += FVector::Dist2D(LastScenarioActorLocation, ActorLocation);
+				LastScenarioActorLocation = ActorLocation;
+			}
+			const FScriptedLocomotionStep ScriptStep = ResolveScriptedLocomotionStep(TimeSeconds);
+			const FBridgeShellState& ScriptShell = Component
+				? Component->GetBridgeShellStateForTesting()
+				: EmptyBridgeShellState;
 			Row->SetNumberField(TEXT("sequence"), PhysicsSequence++);
 			Row->SetNumberField(TEXT("time_sec"), TimeSeconds);
+			Row->SetStringField(TEXT("script_phase"), Config.bScriptedLocomotionRun ? ScriptStep.Phase : TEXT("Standing"));
+			Row->SetNumberField(TEXT("actor_location_x_cm"), ActorLocation.X);
+			Row->SetNumberField(TEXT("actor_location_y_cm"), ActorLocation.Y);
+			Row->SetNumberField(TEXT("actor_location_z_cm"), ActorLocation.Z);
+			Row->SetNumberField(TEXT("actor_yaw_deg"), OwnerActor ? OwnerActor->GetActorRotation().Yaw : 0.0);
+			Row->SetNumberField(TEXT("script_intent_magnitude"), Config.bScriptedLocomotionRun ? ScriptStep.IntentMagnitude : 0.0);
+			Row->SetBoolField(TEXT("trajectory_conditioning_published"), Config.bScriptedLocomotionRun && Config.Variant != TEXT("DropTrajectoryConditioning") && ScriptStep.bMove);
+			Row->SetNumberField(TEXT("shell_accepted_speed_cm_per_sec"), ScriptShell.AcceptedPlanarVelocityCmPerSecond.Size2D());
+			Row->SetNumberField(TEXT("shell_path_length_cm"), ShellPathLengthCm);
+			Row->SetNumberField(TEXT("target_readback_match_ratio"), LatestTargetReadbackMatchRatio);
+			Row->SetNumberField(TEXT("script_step_failure_count"), ScriptStepFailureCount);
+			Row->SetBoolField(TEXT("human_input"), false);
 			Row->SetStringField(TEXT("runtime_state"), Component ? RuntimeStateName(Component->GetRuntimeState()) : TEXT("Uninitialized"));
 			Row->SetNumberField(TEXT("pelvis_height_cm"), MeasurePelvisHeight(World, Character, PelvisBody));
 			Row->SetNumberField(TEXT("root_tilt_deg"), MeasureRootTilt(Component));
@@ -2902,8 +3061,14 @@ namespace
 			}
 
 			const TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
+			LatestTargetReadbackMatchRatio = Diagnostics.NumTotalTargetsWritten > 0
+				? static_cast<double>(ReadbackMatches) / static_cast<double>(Diagnostics.NumTotalTargetsWritten)
+				: 0.0;
+			const FScriptedLocomotionStep ScriptStep = ResolveScriptedLocomotionStep(TimeSeconds);
 			Row->SetNumberField(TEXT("sequence"), PolicySequence++);
 			Row->SetNumberField(TEXT("time_sec"), TimeSeconds);
+			Row->SetStringField(TEXT("script_phase"), Config.bScriptedLocomotionRun ? ScriptStep.Phase : TEXT("Standing"));
+			Row->SetBoolField(TEXT("trajectory_conditioning_published"), Config.bScriptedLocomotionRun && Config.Variant != TEXT("DropTrajectoryConditioning") && ScriptStep.bMove);
 			Row->SetBoolField(TEXT("pose_search_valid"), Metrics.PoseSearchQueryCount > LastPoseSearchQueryCount && Metrics.PoseSearchValidResultCount > LastPoseSearchValidCount);
 			Row->SetStringField(TEXT("selected_animation"), Metrics.PoseSearchSelectedAnimationName);
 			Row->SetBoolField(TEXT("inference_attempted"), Metrics.PolicyInferenceAttemptCount > LastInferenceAttemptCount);
@@ -3011,6 +3176,7 @@ namespace
 			const FString PolicyInputSnapshotPath = FPaths::Combine(Config.RunRoot, TEXT("policy-input-snapshot.json"));
 			const FString RenderPath = FPaths::Combine(Config.RunRoot, TEXT("render.png"));
 			const FString ManifestPath = FPaths::Combine(Config.RunRoot, TEXT("manifest.json"));
+			const FString ScenarioSummaryPath = FPaths::Combine(Config.RunRoot, TEXT("scenario-summary.json"));
 			const bool bPhysicsWritten = FFileHelper::SaveStringToFile(FString::Join(PhysicsRows, TEXT("\n")) + TEXT("\n"), *PhysicsPath);
 			const FString PolicyContents = PolicyRows.IsEmpty() ? FString() : FString::Join(PolicyRows, TEXT("\n")) + TEXT("\n");
 			const bool bPolicyWritten = FFileHelper::SaveStringToFile(PolicyContents, *PolicyPath);
@@ -3253,6 +3419,39 @@ namespace
 					*ObservationPositionTracePath);
 			}
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
+			bool bScenarioSummaryWritten = true;
+			if (Config.bScriptedLocomotionRun)
+			{
+				const AActor* const OwnerActor = Component ? Component->GetOwner() : nullptr;
+				const FVector EndLocation = OwnerActor ? OwnerActor->GetActorLocation() : FVector::ZeroVector;
+				const float EndYawDegrees = OwnerActor ? OwnerActor->GetActorRotation().Yaw : 0.0f;
+				const FVector PlanarDelta(EndLocation.X - ScenarioStartLocation.X, EndLocation.Y - ScenarioStartLocation.Y, 0.0f);
+				const TSharedRef<FJsonObject> Summary = MakeShared<FJsonObject>();
+				Summary->SetStringField(TEXT("schema_version"), TEXT("physanim-scripted-locomotion-summary/v1"));
+				Summary->SetStringField(TEXT("variant"), Config.Variant);
+				Summary->SetBoolField(TEXT("human_input"), false);
+				Summary->SetBoolField(TEXT("locomotion_gate_opened"), bLocomotionGateOpened);
+				Summary->SetBoolField(TEXT("stop_issued"), bStopIssued);
+				Summary->SetBoolField(TEXT("stop_transition_suppressed"), bStopTransitionSuppressed);
+				Summary->SetBoolField(TEXT("trajectory_conditioning_expected"), Config.Variant != TEXT("DropTrajectoryConditioning"));
+				Summary->SetBoolField(TEXT("trajectory_conditioning_ever_published"), bTrajectoryConditioningPublished);
+				Summary->SetNumberField(TEXT("script_step_failure_count"), ScriptStepFailureCount);
+				Summary->SetNumberField(TEXT("shell_path_length_cm"), ShellPathLengthCm);
+				Summary->SetNumberField(TEXT("net_planar_displacement_cm"), PlanarDelta.Size2D());
+				Summary->SetNumberField(TEXT("yaw_delta_deg"), FMath::FindDeltaAngleDegrees(ScenarioStartYawDegrees, EndYawDegrees));
+				Summary->SetStringField(TEXT("final_runtime_state"), Component ? RuntimeStateName(Component->GetRuntimeState()) : TEXT("Uninitialized"));
+				Summary->SetNumberField(TEXT("final_shell_speed_cm_per_sec"), Component ? Component->GetBridgeShellStateForTesting().AcceptedPlanarVelocityCmPerSecond.Size2D() : 0.0);
+				TArray<TSharedPtr<FJsonValue>> PhaseValues;
+				for (const FString& Phase : { FString(TEXT("StandingHold")), FString(TEXT("Acceleration")), FString(TEXT("Cruise")), FString(TEXT("MovingTurn")), FString(TEXT("Deceleration")), FString(TEXT("Settle")) })
+				{
+					const TSharedRef<FJsonObject> PhaseJson = MakeShared<FJsonObject>();
+					PhaseJson->SetStringField(TEXT("phase"), Phase);
+					PhaseJson->SetBoolField(TEXT("observed"), ObservedScriptPhases.Contains(Phase));
+					PhaseValues.Add(MakeShared<FJsonValueObject>(PhaseJson));
+				}
+				Summary->SetArrayField(TEXT("phases"), PhaseValues);
+				bScenarioSummaryWritten = FFileHelper::SaveStringToFile(SerializeJson(Summary) + TEXT("\n"), *ScenarioSummaryPath);
+			}
 
 			const FString ProtocolPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), Config.ProtocolRelativePath));
 			const TSharedRef<FJsonObject> Manifest = MakeShared<FJsonObject>();
@@ -3271,6 +3470,14 @@ namespace
 			Manifest->SetNumberField(TEXT("perturbation_time_sec"), Config.bApplyPerturbation ? PerturbationTimeSeconds : -1.0);
 			Manifest->SetStringField(TEXT("physics_samples"), TEXT("physics.jsonl"));
 			Manifest->SetStringField(TEXT("policy_samples"), TEXT("policy.jsonl"));
+			Manifest->SetBoolField(TEXT("scripted_locomotion_run"), Config.bScriptedLocomotionRun);
+			Manifest->SetBoolField(TEXT("human_input"), false);
+			if (Config.bScriptedLocomotionRun)
+			{
+				Manifest->SetStringField(TEXT("scenario_summary"), TEXT("scenario-summary.json"));
+				Manifest->SetStringField(TEXT("root_authority"), TEXT("Stage1_KinematicRoot"));
+				Manifest->SetStringField(TEXT("motion_source"), TEXT("Stage2A_KinematicShell"));
+			}
 			Manifest->SetStringField(TEXT("policy_input_snapshot"), TEXT("policy-input-snapshot.json"));
 			Manifest->SetStringField(
 				TEXT("first_active_conditioned_actions"),
@@ -3290,6 +3497,7 @@ namespace
 				bFirstPolicyBodySourceWritten &&
 				bFirstPolicyGroundReferenceWritten &&
 				bObservationPositionTraceWritten &&
+				bScenarioSummaryWritten &&
 				bManifestWritten;
 		}
 
@@ -3300,6 +3508,22 @@ namespace
 		double ObservationStartWorldTime = 0.0;
 		double LastPhysicsTimeSeconds = -1.0;
 		double ProductSupportGapTimerMs = 0.0;
+		double LatestTargetReadbackMatchRatio = 0.0;
+		double ShellPathLengthCm = 0.0;
+		FVector ScenarioStartLocation = FVector::ZeroVector;
+		FVector LastScenarioActorLocation = FVector::ZeroVector;
+		float ScenarioStartYawDegrees = 0.0f;
+		FString CurrentScriptPhase = TEXT("StandingHold");
+		float CurrentScriptIntentMagnitude = 0.0f;
+		TSet<FString> ObservedScriptPhases;
+		FBridgeShellState EmptyBridgeShellState;
+		bool bScenarioTransformInitialized = false;
+		bool bLocomotionGateOpened = false;
+		bool bStopDecisionMade = false;
+		bool bStopIssued = false;
+		bool bStopTransitionSuppressed = false;
+		bool bTrajectoryConditioningPublished = false;
+		int32 ScriptStepFailureCount = 0;
 		bool bObservationStarted = false;
 		bool bVariantApplied = false;
 		bool bPerturbationApplied = false;
@@ -3363,6 +3587,54 @@ bool FPhysAnimCausalStandingProductTest::RunTest(const FString& Parameters)
 	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"), true))
 	{
 		AddError(TEXT("Unable to open the causal-standing product map"));
+		return false;
+	}
+	const TSharedRef<FCausalStandingFixedTimeStepState> FixedTimeStepState =
+		MakeShared<FCausalStandingFixedTimeStepState>();
+	AddCommand(new FConfigureCausalStandingFixedTimeStepCommand(FixedTimeStepState));
+	AddCommand(new FStartPIECommand(false));
+	AddCommand(new FCausalStandingCaptureCommand(this, Config, FixedTimeStepState));
+	AddCommand(new FEndPlayMapCommand());
+	AddCommand(new FRestoreCausalStandingFixedTimeStepCommand(FixedTimeStepState));
+	AddCommand(new FResetCausalStandingVariantCommand());
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(
+	FPhysAnimScriptedLocomotionProductTest,
+	"PhysAnim.Product.ScriptedLocomotion",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimScriptedLocomotionProductTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	for (const TCHAR* Variant : { TEXT("Normal"), TEXT("ZeroActions"), TEXT("DropTrajectoryConditioning"), TEXT("SuppressStopTransition") })
+	{
+		OutBeautifiedNames.Add(Variant);
+		OutTestCommands.Add(Variant);
+	}
+}
+
+bool FPhysAnimScriptedLocomotionProductTest::RunTest(const FString& Parameters)
+{
+	FCausalStandingRunConfig Config;
+	FString ConfigError;
+	if (!Config.ReadFromCommandLine(ConfigError) || !Config.ConfigureScriptedLocomotion(ConfigError))
+	{
+		AddError(ConfigError);
+		return false;
+	}
+	if (Config.Variant != Parameters)
+	{
+		AddError(FString::Printf(TEXT("Requested scripted-locomotion variant '%s' does not match test '%s'"), *Config.Variant, *Parameters));
+		return false;
+	}
+	if (IConsoleVariable* ReviewMode = IConsoleManager::Get().FindConsoleVariable(TEXT("physanim.V0PlantReviewMode")))
+	{
+		ReviewMode->Set(Config.Variant == TEXT("ZeroActions") ? 2 : 0, ECVF_SetByCode);
+	}
+	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"), true))
+	{
+		AddError(TEXT("Unable to open the scripted-locomotion product map"));
 		return false;
 	}
 	const TSharedRef<FCausalStandingFixedTimeStepState> FixedTimeStepState =
