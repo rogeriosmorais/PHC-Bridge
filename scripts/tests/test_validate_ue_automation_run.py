@@ -82,6 +82,28 @@ def test_complete_run_is_valid(tmp_path: Path) -> None:
     assert result["checks"]["required_artifacts_present"] is True
 
 
+def test_success_with_warnings_is_valid_when_exact_test_passed(tmp_path: Path) -> None:
+    run, report, protocol = _complete_run(tmp_path)
+    payload = _success_report("PhysAnim.Product.ScriptedLocomotion.Normal")
+    payload["succeeded"] = 0
+    payload["succeededWithWarnings"] = 1
+    payload["tests"][0]["warnings"] = 1
+    _write_json(report / "index.json", payload)
+
+    result = validate_run(
+        run_root=run,
+        report_root=report,
+        expected_test="PhysAnim.Product.ScriptedLocomotion.Normal",
+        expected_source_commit="a" * 40,
+        expected_protocol=protocol,
+        expected_variant="Normal",
+        expected_repetition=1,
+    )
+
+    assert result["verdict"] == "PASS"
+    assert result["checks"]["automation_success"] is True
+
+
 def test_failed_or_wrong_automation_test_is_invalid(tmp_path: Path) -> None:
     run, report, protocol = _complete_run(tmp_path)
     payload = _success_report("PhysAnim.Product.Other")

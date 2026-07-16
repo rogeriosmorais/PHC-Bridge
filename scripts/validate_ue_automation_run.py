@@ -110,23 +110,26 @@ def validate_run(
             )
         else:
             test = matching[0]
+            successful_test_count = (
+                int(report.get("succeeded", 0))
+                + int(report.get("succeededWithWarnings", 0))
+            )
             counters_clean = (
                 int(report.get("failed", 0)) == 0
                 and int(report.get("inProcess", 0)) == 0
                 and int(report.get("notRun", 0)) == 0
-                and int(report.get("succeeded", 0)) >= 1
+                and successful_test_count >= 1
             )
-            test_clean = (
+            test_completed_successfully = (
                 test.get("state") == "Success"
                 and int(test.get("errors", 0)) == 0
-                and int(test.get("warnings", 0)) == 0
             )
-            checks["automation_success"] = counters_clean and test_clean
+            checks["automation_success"] = counters_clean and test_completed_successfully
             if not checks["automation_success"]:
                 issues.append(
                     Issue(
                         "automation_not_successful",
-                        "Automation report or exact test is not a clean success",
+                        "Automation report or exact test did not complete successfully",
                         str(report_path),
                     )
                 )
