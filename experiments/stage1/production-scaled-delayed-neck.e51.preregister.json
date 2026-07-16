@@ -1,0 +1,16 @@
+{
+  "schema_version": "physanim-preregistration/v1",
+  "experiment_id": "production-scaled-delayed-neck-e51",
+  "preregistered_utc": "2026-07-16T00:05:00Z",
+  "fixed_baseline_commit": "1d7662b480b0bf6827a7aed0a876a7a8e45b5c74",
+  "single_variable": "Promote Neck joint 11 at scale 0.25 after the first completed active-standing policy inference.",
+  "production_behavior_flags": "none",
+  "execution": "-onethread",
+  "acceptance": [
+    "Focused production timing/scale contract passes.",
+    "No-flag locked 3 Normal + 3 ZeroActions + 2 destructive-control bundle passes.",
+    "Normal and ZeroActions streams are byte-deterministic.",
+    "Normal/ZeroActions recovery-AUC ratio is <= 0.8.",
+    "First-active Neck is exactly zero and later Neck is nonzero at production scale 0.25."
+  ]
+}
