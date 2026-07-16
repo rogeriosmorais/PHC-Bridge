@@ -3636,20 +3636,6 @@ namespace
 						bMannyLocalFrameRoundtripTraceEnabled)) + TEXT("\n"),
 					*MannyLocalFrameRoundtripTracePath);
 
-				const bool bPolicyInputProvenanceEnabled =
-					Component && Component->IsPolicyInputProvenanceTraceEnabledForTesting();
-				if (bPolicyInputProvenanceEnabled)
-				{
-					const FString PolicyInputProvenancePath = FPaths::Combine(
-						Config.RunRoot,
-						TEXT("policy-input-provenance.json"));
-					bPolicyInputProvenanceWritten = FFileHelper::SaveStringToFile(
-						SerializeJson(BuildPolicyInputProvenanceJson(
-							Component->GetPolicyInputProvenanceSnapshotForTesting(),
-							true)) + TEXT("\n"),
-						*PolicyInputProvenancePath);
-				}
-
 				const bool bStartupChronologyEnabled =
 					Component && Component->IsStartupChronologyTraceEnabledForTesting();
 				if (bStartupChronologyEnabled)
@@ -3752,6 +3738,21 @@ namespace
 					SerializeJson(ObservationPositionTrace) + TEXT("\n"),
 					*ObservationPositionTracePath);
 			}
+
+			const bool bPolicyInputProvenanceEnabled =
+				Component && Component->IsPolicyInputProvenanceTraceEnabledForTesting();
+			if (bPolicyInputProvenanceEnabled)
+			{
+				const FString PolicyInputProvenancePath = FPaths::Combine(
+					Config.RunRoot,
+					TEXT("policy-input-provenance.json"));
+				bPolicyInputProvenanceWritten = FFileHelper::SaveStringToFile(
+					SerializeJson(BuildPolicyInputProvenanceJson(
+						Component->GetPolicyInputProvenanceSnapshotForTesting(),
+						true)) + TEXT("\n"),
+					*PolicyInputProvenancePath);
+			}
+
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
 			bool bScenarioSummaryWritten = true;
 			if (Config.bScriptedLocomotionRun)
