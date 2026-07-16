@@ -833,6 +833,7 @@ namespace PhysAnimBridge
 		const FTransform& InMeshWorldTransform,
 		const FTransform& InSelectedAnimationWorldRootProtoMeters,
 		const FTransform& InSelectedAnimationDataRootProtoMeters,
+		TConstArrayView<float> InQueryTrajectorySampleTimesSeconds,
 		TConstArrayView<FTransform> InQueryTrajectoryWorldTransformsCm,
 		TConstArrayView<FPhysAnimBodySample> InLiveBodySamplesProtoWorldMeters,
 		TConstArrayView<FPhysAnimBodySample> InPhysicalBodySamplesProtoWorldMeters,
@@ -861,6 +862,9 @@ namespace PhysAnimBridge
 		MeshWorldTransform = InMeshWorldTransform;
 		SelectedAnimationWorldRootProtoMeters = InSelectedAnimationWorldRootProtoMeters;
 		SelectedAnimationDataRootProtoMeters = InSelectedAnimationDataRootProtoMeters;
+		QueryTrajectorySampleTimesSeconds.Append(
+			InQueryTrajectorySampleTimesSeconds.GetData(),
+			InQueryTrajectorySampleTimesSeconds.Num());
 		QueryTrajectoryWorldTransformsCm.Append(
 			InQueryTrajectoryWorldTransformsCm.GetData(),
 			InQueryTrajectoryWorldTransformsCm.Num());
@@ -907,6 +911,7 @@ namespace PhysAnimBridge
 		MeshWorldTransform = FTransform::Identity;
 		SelectedAnimationWorldRootProtoMeters = FTransform::Identity;
 		SelectedAnimationDataRootProtoMeters = FTransform::Identity;
+		QueryTrajectorySampleTimesSeconds.Reset();
 		QueryTrajectoryWorldTransformsCm.Reset();
 		LiveBodySamplesProtoWorldMeters.Reset();
 		PhysicalBodySamplesProtoWorldMeters.Reset();
@@ -1038,21 +1043,33 @@ namespace PhysAnimBridge
 			OutError = TEXT("Locomotion frame replay contains an invalid frame transform.");
 			return false;
 		}
-		if (Snapshot.QueryTrajectoryWorldTransformsCm.Num() != NumFutureSteps + 1)
+		if (Snapshot.QueryTrajectorySampleTimesSeconds.Num() != NumFutureSteps + 1 ||
+			Snapshot.QueryTrajectoryWorldTransformsCm.Num() != NumFutureSteps + 1)
 		{
 			OutError = FString::Printf(
-				TEXT("Query trajectory replay has %d transforms instead of %d."),
+				TEXT("Query trajectory replay has %d times and %d transforms instead of %d each."),
+				Snapshot.QueryTrajectorySampleTimesSeconds.Num(),
 				Snapshot.QueryTrajectoryWorldTransformsCm.Num(),
 				NumFutureSteps + 1);
 			return false;
 		}
+		if (Snapshot.QueryTrajectorySampleTimesSeconds[0] != 0.0f)
+		{
+			OutError = TEXT("Query trajectory replay current sample time is not exact zero.");
+			return false;
+		}
+		float PreviousQueryTimeSeconds = -UE_SMALL_NUMBER;
 		for (int32 SampleIndex = 0; SampleIndex < Snapshot.QueryTrajectoryWorldTransformsCm.Num(); ++SampleIndex)
 		{
-			if (!IsFiniteTransform(Snapshot.QueryTrajectoryWorldTransformsCm[SampleIndex]))
+			const float QueryTimeSeconds = Snapshot.QueryTrajectorySampleTimesSeconds[SampleIndex];
+			if (!FMath::IsFinite(QueryTimeSeconds) ||
+				QueryTimeSeconds + UE_SMALL_NUMBER < PreviousQueryTimeSeconds ||
+				!IsFiniteTransform(Snapshot.QueryTrajectoryWorldTransformsCm[SampleIndex]))
 			{
-				OutError = FString::Printf(TEXT("Query trajectory transform %d is invalid."), SampleIndex);
+				OutError = FString::Printf(TEXT("Query trajectory sample %d has an invalid time or transform."), SampleIndex);
 				return false;
 			}
+			PreviousQueryTimeSeconds = QueryTimeSeconds;
 		}
 		if (!ValidateBodySamples(Snapshot.LiveBodySamplesProtoWorldMeters, TEXT("Live body replay")) ||
 			!ValidateBodySamples(Snapshot.PhysicalBodySamplesProtoWorldMeters, TEXT("Physical body replay")) ||
@@ -1068,12 +1085,20 @@ namespace PhysAnimBridge
 		}
 		for (int32 FutureIndex = 0; FutureIndex < NumFutureSteps; ++FutureIndex)
 		{
+			const float RawFutureTimeSeconds =
+				Snapshot.RawCanonicalFuturePoseSamples[FutureIndex].FutureTimeSeconds;
 			if (!FMath::IsNearlyEqual(
-				Snapshot.RawCanonicalFuturePoseSamples[FutureIndex].FutureTimeSeconds,
+				RawFutureTimeSeconds,
 				Snapshot.PlacedCanonicalFuturePoseSamples[FutureIndex].FutureTimeSeconds,
-				UE_SMALL_NUMBER))
+				UE_SMALL_NUMBER) ||
+				!FMath::IsNearlyEqual(
+					RawFutureTimeSeconds,
+					Snapshot.QueryTrajectorySampleTimesSeconds[FutureIndex + 1],
+					UE_SMALL_NUMBER))
 			{
-				OutError = FString::Printf(TEXT("Raw and placed future replay sample %d use different times."), FutureIndex);
+				OutError = FString::Printf(
+					TEXT("Raw, placed, and query future replay sample %d use different times."),
+					FutureIndex);
 				return false;
 			}
 		}

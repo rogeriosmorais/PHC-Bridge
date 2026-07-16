@@ -479,6 +479,7 @@ namespace PhysAnimBridge
 			const FTransform& InMeshWorldTransform,
 			const FTransform& InSelectedAnimationWorldRootProtoMeters,
 			const FTransform& InSelectedAnimationDataRootProtoMeters,
+			TConstArrayView<float> InQueryTrajectorySampleTimesSeconds,
 			TConstArrayView<FTransform> InQueryTrajectoryWorldTransformsCm,
 			TConstArrayView<FPhysAnimBodySample> InLiveBodySamplesProtoWorldMeters,
 			TConstArrayView<FPhysAnimBodySample> InPhysicalBodySamplesProtoWorldMeters,
@@ -504,6 +505,7 @@ namespace PhysAnimBridge
 		FTransform MeshWorldTransform = FTransform::Identity;
 		FTransform SelectedAnimationWorldRootProtoMeters = FTransform::Identity;
 		FTransform SelectedAnimationDataRootProtoMeters = FTransform::Identity;
+		TArray<float> QueryTrajectorySampleTimesSeconds;
 		TArray<FTransform> QueryTrajectoryWorldTransformsCm;
 		TArray<FPhysAnimBodySample> LiveBodySamplesProtoWorldMeters;
 		TArray<FPhysAnimBodySample> PhysicalBodySamplesProtoWorldMeters;

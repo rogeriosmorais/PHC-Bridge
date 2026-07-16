@@ -1985,13 +1985,22 @@ namespace
 
 	bool FPhysAnimLocomotionFrameReplayContractTest::RunTest(const FString& Parameters)
 	{
+		TArray<float> QueryTrajectorySampleTimesSeconds;
 		TArray<FTransform> QueryTrajectoryWorldTransformsCm;
+		QueryTrajectorySampleTimesSeconds.Reserve(NumFutureSteps + 1);
 		QueryTrajectoryWorldTransformsCm.Reserve(NumFutureSteps + 1);
-		for (int32 SampleIndex = 0; SampleIndex <= NumFutureSteps; ++SampleIndex)
+		QueryTrajectorySampleTimesSeconds.Add(0.0f);
+		QueryTrajectoryWorldTransformsCm.Add(FTransform(
+			FQuat::Identity,
+			FVector(0.0, 0.0, 90.0)));
+		for (int32 FutureIndex = 0; FutureIndex < NumFutureSteps; ++FutureIndex)
 		{
+			const float FutureTimeSeconds =
+				static_cast<float>(FutureIndex + 1) * FutureStepSeconds;
+			QueryTrajectorySampleTimesSeconds.Add(FutureTimeSeconds);
 			QueryTrajectoryWorldTransformsCm.Add(FTransform(
-				FQuat(FVector::UpVector, FMath::DegreesToRadians(2.0 * SampleIndex)),
-				FVector(16.0 * SampleIndex, 0.0, 90.0)));
+				FQuat(FVector::UpVector, FMath::DegreesToRadians(2.0 * (FutureIndex + 1))),
+				FVector(160.0 * FutureTimeSeconds, 0.0, 90.0)));
 		}
 
 		TArray<FPhysAnimBodySample> LiveBodySamples;
@@ -2050,6 +2059,7 @@ namespace
 				FTransform(FQuat(FVector::UpVector, -PI * 0.5), FVector::ZeroVector),
 				FTransform::Identity,
 				FTransform::Identity,
+				QueryTrajectorySampleTimesSeconds,
 				QueryTrajectoryWorldTransformsCm,
 				LiveBodySamples,
 				PhysicalBodySamples,
@@ -2066,16 +2076,27 @@ namespace
 			TEXT("The complete E80 replay satisfies its deterministic contract"),
 			ValidateLocomotionFrameReplaySnapshot(Snapshot, Error));
 		TestTrue(TEXT("A valid E80 replay has no validation error"), Error.IsEmpty());
+		TestEqual(TEXT("The replay records current plus fifteen query sample times"), Snapshot.QueryTrajectorySampleTimesSeconds.Num(), NumFutureSteps + 1);
 		TestEqual(TEXT("The replay records current plus fifteen future query roots"), Snapshot.QueryTrajectoryWorldTransformsCm.Num(), NumFutureSteps + 1);
+		TestEqual(TEXT("The current query sample time is exact zero"), Snapshot.QueryTrajectorySampleTimesSeconds[0], 0.0f);
+		TestEqual(TEXT("The last query sample uses the actual future schedule"), Snapshot.QueryTrajectorySampleTimesSeconds.Last(), RawFutureSamples.Last().FutureTimeSeconds);
 		TestEqual(TEXT("The replay records the final action width"), Snapshot.ConditionedActions.Num(), NumActionFloats);
 		TestTrue(TEXT("The replay records a nonzero action signature"), Snapshot.ConditionedActionCrc32 != 0u);
 
 		FPhysAnimLocomotionFrameReplaySnapshot MissingTrajectory = Snapshot;
+		MissingTrajectory.QueryTrajectorySampleTimesSeconds.Pop();
 		MissingTrajectory.QueryTrajectoryWorldTransformsCm.Pop();
 		TestFalse(
 			TEXT("A replay with a truncated query horizon is rejected"),
 			ValidateLocomotionFrameReplaySnapshot(MissingTrajectory, Error));
 		TestTrue(TEXT("The truncated query failure is explicit"), Error.Contains(TEXT("trajectory")));
+
+		FPhysAnimLocomotionFrameReplaySnapshot MismatchedQueryTime = Snapshot;
+		MismatchedQueryTime.QueryTrajectorySampleTimesSeconds[1] += 0.01f;
+		TestFalse(
+			TEXT("A replay whose query time differs from the future sample is rejected"),
+			ValidateLocomotionFrameReplaySnapshot(MismatchedQueryTime, Error));
+		TestTrue(TEXT("The query-time mismatch is explicit"), Error.Contains(TEXT("different times")));
 
 		FPhysAnimLocomotionFrameReplaySnapshot CorruptActionSignature = Snapshot;
 		++CorruptActionSignature.ConditionedActionCrc32;

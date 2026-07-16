@@ -2523,9 +2523,9 @@ namespace
 				Snapshot.QueryTrajectoryWorldTransformsCm[SampleIndex]);
 			Sample->SetNumberField(
 				TEXT("sample_time_seconds"),
-				SampleIndex == 0
-					? 0.0
-					: static_cast<double>(SampleIndex) * PhysAnimBridge::FutureStepSeconds);
+				Snapshot.QueryTrajectorySampleTimesSeconds.IsValidIndex(SampleIndex)
+					? Snapshot.QueryTrajectorySampleTimesSeconds[SampleIndex]
+					: -1.0);
 			QueryTrajectory.Add(MakeShared<FJsonValueObject>(Sample));
 		}
 		Root->SetArrayField(TEXT("query_trajectory_world_transforms_cm"), QueryTrajectory);

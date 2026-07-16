@@ -249,6 +249,7 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		}
 #if WITH_DEV_AUTOMATION_TESTS
 		const TArray<FPhysAnimFuturePoseSample> RawCanonicalFuturePoseSamplesForReplay = FuturePoseSamples;
+		TArray<float> QueryTrajectorySampleTimesSecondsForReplay;
 		TArray<FTransform> QueryTrajectoryWorldTransformsCmForReplay;
 #endif
 
@@ -275,6 +276,8 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			const PhysAnimFrameContract::FWorldTransformCm CurrentQueryWorldRoot(
 				CurrentTrajectorySample.GetTransform());
 #if WITH_DEV_AUTOMATION_TESTS
+			QueryTrajectorySampleTimesSecondsForReplay.Reserve(FuturePoseSamples.Num() + 1);
+			QueryTrajectorySampleTimesSecondsForReplay.Add(0.0f);
 			QueryTrajectoryWorldTransformsCmForReplay.Reserve(FuturePoseSamples.Num() + 1);
 			QueryTrajectoryWorldTransformsCmForReplay.Add(CurrentTrajectorySample.GetTransform());
 #endif
@@ -290,6 +293,7 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 					PhysAnimFrameContract::FWorldTransformCm(
 						FutureTrajectorySample.GetTransform()));
 #if WITH_DEV_AUTOMATION_TESTS
+				QueryTrajectorySampleTimesSecondsForReplay.Add(FuturePose.FutureTimeSeconds);
 				QueryTrajectoryWorldTransformsCmForReplay.Add(FutureTrajectorySample.GetTransform());
 #endif
 			}
@@ -467,6 +471,7 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 				SkeletalMesh ? SkeletalMesh->GetComponentTransform() : FTransform::Identity,
 				MimicTargetReferenceWorldRoot,
 				MimicTargetReferenceDataRoot,
+				QueryTrajectorySampleTimesSecondsForReplay,
 				QueryTrajectoryWorldTransformsCmForReplay,
 				MannyCurrentBodySamples,
 				PhysicalBodySamplesForReplay,
