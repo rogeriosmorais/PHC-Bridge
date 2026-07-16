@@ -686,40 +686,6 @@ float UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbExtraDampingS
 }
 
 
-float UPhysAnimComponent::ResolveCausalLocomotionLowerLimbDampingRatioScaleForBone(
-	FName BoneName,
-	bool bApplyPolicy,
-	float BlendAlpha,
-	EPhysAnimRuntimeState RuntimeState)
-{
-	const bool bApplyLocomotionResponse =
-		ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(
-			bApplyPolicy,
-			BlendAlpha,
-			RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell);
-	return bApplyLocomotionResponse
-		? ResolveTrainingAlignedLocomotionLowerLimbDampingRatioScaleForBone(BoneName, BlendAlpha)
-		: 1.0f;
-}
-
-
-float UPhysAnimComponent::ResolveCausalLocomotionLowerLimbExtraDampingScaleForBone(
-	FName BoneName,
-	bool bApplyPolicy,
-	float BlendAlpha,
-	EPhysAnimRuntimeState RuntimeState)
-{
-	const bool bApplyLocomotionResponse =
-		ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(
-			bApplyPolicy,
-			BlendAlpha,
-			RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell);
-	return bApplyLocomotionResponse
-		? ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(BoneName, BlendAlpha)
-		: 1.0f;
-}
-
-
 bool UPhysAnimComponent::ShouldApplyTrainingAlignedControlFamilyProfile(bool bApplyTrainingAlignedControlFamilyProfile, float BlendAlpha)
 {
 	return bApplyTrainingAlignedControlFamilyProfile && BlendAlpha > UE_SMALL_NUMBER;
