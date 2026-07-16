@@ -1976,16 +1976,6 @@ public:
 	{
 		return StopStage2AScriptedLocomotionAndReturnToStanding();
 	}
-	static FVector TestOnlyExpressBridgeWorldVelocityInPoseSearchAnimationFrame(
-		const FVector& WorldVelocity,
-		const FQuat& ActorWorldRotation,
-		const FQuat& MeshWorldRotation)
-	{
-		return ExpressBridgeWorldVelocityInPoseSearchAnimationFrame(
-			WorldVelocity,
-			ActorWorldRotation,
-			MeshWorldRotation);
-	}
 	const FBridgeIntentState& GetBridgeIntentStateForTesting() const { return BridgeIntentState; }
 	const FBridgeTrajectoryState& GetBridgeTrajectoryStateForTesting() const { return BridgeTrajectoryState; }
 	const FBridgeShellState& GetBridgeShellStateForTesting() const { return BridgeShellState; }
@@ -2642,10 +2632,6 @@ private:
 	bool QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	void UpdateBridgePoseSearchTrajectory(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResolveBridgePoseSearchQueryVelocity(const FPhysAnimStabilizationSettings& EffectiveSettings, FVector& OutQueryVelocity, float* OutIntentMagnitude = nullptr) const;
-	static FVector ExpressBridgeWorldVelocityInPoseSearchAnimationFrame(
-		const FVector& WorldVelocity,
-		const FQuat& ActorWorldRotation,
-		const FQuat& MeshWorldRotation);
 	void ApplyBridgePoseSearchSelectionPolicy(
 		FPoseSearchBlueprintResult& InOutSearchResult,
 		float QueryDeltaTimeSeconds,

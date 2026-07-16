@@ -1,28 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 
-FVector UPhysAnimComponent::ExpressBridgeWorldVelocityInPoseSearchAnimationFrame(
-	const FVector& WorldVelocity,
-	const FQuat& ActorWorldRotation,
-	const FQuat& MeshWorldRotation)
-{
-	if (WorldVelocity.IsNearlyZero())
-	{
-		return FVector::ZeroVector;
-	}
-
-	const FQuat NormalizedActorRotation = ActorWorldRotation.GetNormalized();
-	const FQuat NormalizedMeshRotation = MeshWorldRotation.GetNormalized();
-	const FQuat ActorToMeshRotation =
-		(NormalizedActorRotation.Inverse() * NormalizedMeshRotation).GetNormalized();
-	const FVector ActorLocalVelocity =
-		NormalizedActorRotation.Inverse().RotateVector(WorldVelocity);
-	const FVector AnimationFrameActorLocalVelocity =
-		ActorToMeshRotation.Inverse().RotateVector(ActorLocalVelocity);
-	return NormalizedActorRotation.RotateVector(AnimationFrameActorLocalVelocity);
-}
-
-
 void UPhysAnimComponent::GetGravity(FVector& OutGravityAccel)
 {
 	const UWorld* const World = GetWorld();
@@ -44,22 +22,9 @@ void UPhysAnimComponent::GetCurrentState(FVector& OutPosition, FQuat& OutFacing,
 	}
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	FVector WorldQueryVelocity = FVector::ZeroVector;
-	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, WorldQueryVelocity);
-	WorldQueryVelocity.Z = 0.0f;
-	BridgePoseSearchQueryVelocityCmPerSecond = WorldQueryVelocity;
-	BridgeTrajectoryState.QueryVelocityCmPerSecond = WorldQueryVelocity;
-	OutVelocity = WorldQueryVelocity;
-	if (const AActor* const OwnerActor = GetOwner())
-	{
-		if (const USkeletalMeshComponent* const SkeletalMesh = GetMeshComponent())
-		{
-			OutVelocity = ExpressBridgeWorldVelocityInPoseSearchAnimationFrame(
-				WorldQueryVelocity,
-				OwnerActor->GetActorQuat(),
-				SkeletalMesh->GetComponentQuat());
-		}
-	}
+	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, OutVelocity);
+	BridgePoseSearchQueryVelocityCmPerSecond = OutVelocity;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = OutVelocity;
 	OutVelocity.Z = 0.0f;
 }
 
@@ -67,22 +32,9 @@ void UPhysAnimComponent::GetCurrentState(FVector& OutPosition, FQuat& OutFacing,
 void UPhysAnimComponent::GetVelocity(FVector& OutVelocity)
 {
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	FVector WorldQueryVelocity = FVector::ZeroVector;
-	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, WorldQueryVelocity);
-	WorldQueryVelocity.Z = 0.0f;
-	BridgePoseSearchQueryVelocityCmPerSecond = WorldQueryVelocity;
-	BridgeTrajectoryState.QueryVelocityCmPerSecond = WorldQueryVelocity;
-	OutVelocity = WorldQueryVelocity;
-	if (const AActor* const OwnerActor = GetOwner())
-	{
-		if (const USkeletalMeshComponent* const SkeletalMesh = GetMeshComponent())
-		{
-			OutVelocity = ExpressBridgeWorldVelocityInPoseSearchAnimationFrame(
-				WorldQueryVelocity,
-				OwnerActor->GetActorQuat(),
-				SkeletalMesh->GetComponentQuat());
-		}
-	}
+	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, OutVelocity);
+	BridgePoseSearchQueryVelocityCmPerSecond = OutVelocity;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = OutVelocity;
 	OutVelocity.Z = 0.0f;
 }
 
@@ -101,27 +53,16 @@ void UPhysAnimComponent::Predict(FTransformTrajectory& InOutTrajectory, int32 Nu
 	FQuat SimulatedFacing = OwnerActor->GetActorQuat();
 
 	float IntentMagnitude = 0.0f;
-	FVector WorldQueryVelocity = FVector::ZeroVector;
 	ResolveBridgePoseSearchQueryVelocity(
 		EffectiveSettings,
-		WorldQueryVelocity,
+		BridgePoseSearchQueryVelocityCmPerSecond,
 		&IntentMagnitude);
-	WorldQueryVelocity.Z = 0.0f;
-	BridgePoseSearchQueryVelocityCmPerSecond = WorldQueryVelocity;
-	BridgeTrajectoryState.QueryVelocityCmPerSecond = WorldQueryVelocity;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = BridgePoseSearchQueryVelocityCmPerSecond;
 
-	FVector PoseSearchQueryVelocity = WorldQueryVelocity;
-	if (const USkeletalMeshComponent* const SkeletalMesh = GetMeshComponent())
-	{
-		PoseSearchQueryVelocity = ExpressBridgeWorldVelocityInPoseSearchAnimationFrame(
-			WorldQueryVelocity,
-			OwnerActor->GetActorQuat(),
-			SkeletalMesh->GetComponentQuat());
-	}
-	PoseSearchQueryVelocity.Z = 0.0f;
+	FVector SimulatedVelocity = BridgePoseSearchQueryVelocityCmPerSecond;
+	SimulatedVelocity.Z = 0.0f;
 
-	FVector SimulatedVelocity = PoseSearchQueryVelocity;
-	const FVector DesiredVelocity = PoseSearchQueryVelocity;
+	const FVector DesiredVelocity = BridgePoseSearchQueryVelocityCmPerSecond;
 
 	float DesiredYawDegrees = SimulatedFacing.Rotator().Yaw;
 	if (BridgeIntentState.bHasDesiredFacing)

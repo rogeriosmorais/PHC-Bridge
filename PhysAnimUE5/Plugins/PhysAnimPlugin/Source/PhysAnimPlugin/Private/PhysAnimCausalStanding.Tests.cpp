@@ -213,41 +213,6 @@ bool FPhysAnimPoseSearchLocomotionAssetDirectionAuditTest::RunTest(const FString
 			FString::Printf(TEXT("%s half-second root travel remains a walk-scale displacement"), Expectation.AssetName),
 			RootDelta.Size2D() > 140.0f && RootDelta.Size2D() < 160.0f);
 	}
-
-	const FQuat ActorIdentity = FQuat::Identity;
-	const FQuat StandardMeshWorldRotation(FVector::UpVector, FMath::DegreesToRadians(-90.0f));
-	const FVector AdaptedForward =
-		UPhysAnimComponent::TestOnlyExpressBridgeWorldVelocityInPoseSearchAnimationFrame(
-			FVector(160.0f, 0.0f, 0.0f),
-			ActorIdentity,
-			StandardMeshWorldRotation);
-	TestTrue(
-		TEXT("E74 actor-forward +X maps to authored database-forward +Y"),
-		AdaptedForward.Equals(FVector(0.0f, 160.0f, 0.0f), 1.0e-4f));
-
-	const FQuat TurnedActorRotation(FVector::UpVector, FMath::DegreesToRadians(30.0f));
-	const FQuat TurnedMeshWorldRotation =
-		(TurnedActorRotation * StandardMeshWorldRotation).GetNormalized();
-	const FVector TurnedWorldForward = TurnedActorRotation.RotateVector(FVector(160.0f, 0.0f, 0.0f));
-	const FVector TurnedAdaptedForward =
-		UPhysAnimComponent::TestOnlyExpressBridgeWorldVelocityInPoseSearchAnimationFrame(
-			TurnedWorldForward,
-			TurnedActorRotation,
-			TurnedMeshWorldRotation);
-	const FVector ExpectedTurnedDatabaseForward =
-		TurnedActorRotation.RotateVector(FVector(0.0f, 160.0f, 0.0f));
-	TestTrue(
-		TEXT("E74 turning preserves actor-relative database-forward direction"),
-		TurnedAdaptedForward.Equals(ExpectedTurnedDatabaseForward, 1.0e-4f));
-	TestTrue(
-		TEXT("E74 frame adaptation preserves query speed"),
-		FMath::IsNearlyEqual(TurnedAdaptedForward.Size2D(), 160.0f, 1.0e-4f));
-	TestTrue(
-		TEXT("E74 frame adaptation preserves exact zero velocity"),
-		UPhysAnimComponent::TestOnlyExpressBridgeWorldVelocityInPoseSearchAnimationFrame(
-			FVector::ZeroVector,
-			TurnedActorRotation,
-			TurnedMeshWorldRotation).Equals(FVector::ZeroVector, 0.0f));
 	return true;
 }
 
