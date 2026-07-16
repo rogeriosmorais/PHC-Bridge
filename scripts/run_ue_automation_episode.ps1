@@ -37,6 +37,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $BuildScript = Join-Path $PSScriptRoot "build.ps1"
 $Validator = Join-Path $PSScriptRoot "validate_ue_automation_run.py"
+$FingerprintTool = Join-Path $PSScriptRoot "environment_fingerprint.py"
 
 function Resolve-RepoPath([string]$Value) {
     if ([System.IO.Path]::IsPathRooted($Value)) {
@@ -65,7 +66,7 @@ function Get-Sha256([string]$Path) {
     }
 }
 
-foreach ($RequiredTool in @($BuildScript, $Validator)) {
+foreach ($RequiredTool in @($BuildScript, $Validator, $FingerprintTool)) {
     if (-not (Test-Path -LiteralPath $RequiredTool -PathType Leaf)) {
         Write-Error "BLOCKED: required orchestration tool is missing: $RequiredTool"
         exit 3
@@ -137,6 +138,7 @@ $InvocationPath = Join-Path $RunRoot "invoke-build.ps1"
 $StdoutPath = Join-Path $RunRoot "automation.stdout.log"
 $StderrPath = Join-Path $RunRoot "automation.stderr.log"
 $ValidationPath = Join-Path $RunRoot "fixture-validation.json"
+$FingerprintPath = Join-Path $RunRoot "environment-fingerprint.json"
 $OrchestrationPath = Join-Path $RunRoot "orchestration.json"
 $ModelHash = Get-Sha256 $ModelPath
 
@@ -283,6 +285,27 @@ $Validation = if (Test-Path $ValidationPath) {
 }
 $FixtureVerdict = if ($Validation) { $Validation.verdict } else { "INVALID" }
 
+$ReportIndexPath = Join-Path $ReportRoot "index.json"
+$FingerprintArguments = @(
+    $FingerprintTool,
+    "--repo-root", $RepoRoot,
+    "--protocol", $ProtocolPath,
+    "--model", $ModelPath,
+    "--source-commit", $SourceCommit,
+    "--output", $FingerprintPath
+)
+if ($SourceTreeDirty) {
+    $FingerprintArguments += "--source-tree-dirty"
+}
+if (Test-Path -LiteralPath $ReportIndexPath -PathType Leaf) {
+    $FingerprintArguments += @("--automation-report", $ReportIndexPath)
+}
+& python @FingerprintArguments
+$FingerprintExitCode = $LASTEXITCODE
+if ($FingerprintExitCode -ne 0 -or -not (Test-Path -LiteralPath $FingerprintPath -PathType Leaf)) {
+    $FixtureVerdict = "INVALID"
+}
+
 Write-OrchestrationResult $OrchestrationPath @{
     schema_version = "physanim-ue-automation-orchestration/v1"
     state = "COMPLETE"
@@ -290,6 +313,8 @@ Write-OrchestrationResult $OrchestrationPath @{
     note = "This verdict covers fixture identity, automation completion, and artifact completeness only. Behavioral product acceptance remains the versioned evaluator's responsibility."
     child_exit_code = $ExitCode
     validator_exit_code = $ValidationExitCode
+    fingerprint_exit_code = $FingerprintExitCode
+    environment_fingerprint = $FingerprintPath
     ended_utc = (Get-Date).ToUniversalTime().ToString("o")
     plan = $Plan
     validation = $Validation
