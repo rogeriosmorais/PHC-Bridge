@@ -1,0 +1,301 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$TestName,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ProtocolPath,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Variant,
+
+    [int]$Repetition = 1,
+    [string]$OutputRoot,
+    [string]$RunId,
+    [string]$ModelPath,
+
+    [ValidateSet("NullRHI", "RenderOffscreen")]
+    [string]$TestMode = "RenderOffscreen",
+
+    [ValidateRange(10, 7200)]
+    [int]$TimeoutSeconds = 600,
+
+    [string[]]$RequiredArtifactFields = @(
+        "physics_samples",
+        "policy_samples",
+        "scenario_summary",
+        "policy_input_snapshot",
+        "render_capture"
+    ),
+
+    [switch]$AllowDirty,
+    [switch]$SkipCompile,
+    [switch]$DryRun
+)
+
+$ErrorActionPreference = "Stop"
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$BuildScript = Join-Path $PSScriptRoot "build.ps1"
+$Validator = Join-Path $PSScriptRoot "validate_ue_automation_run.py"
+
+function Resolve-RepoPath([string]$Value) {
+    if ([System.IO.Path]::IsPathRooted($Value)) {
+        return [System.IO.Path]::GetFullPath($Value)
+    }
+    return [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $Value))
+}
+
+function Write-OrchestrationResult([string]$Path, [hashtable]$Value) {
+    $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding utf8
+}
+
+function Get-Sha256([string]$Path) {
+    $Stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $Hasher = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return ([System.BitConverter]::ToString($Hasher.ComputeHash($Stream))).Replace("-", "").ToLowerInvariant()
+        }
+        finally {
+            $Hasher.Dispose()
+        }
+    }
+    finally {
+        $Stream.Dispose()
+    }
+}
+
+foreach ($RequiredTool in @($BuildScript, $Validator)) {
+    if (-not (Test-Path -LiteralPath $RequiredTool -PathType Leaf)) {
+        Write-Error "BLOCKED: required orchestration tool is missing: $RequiredTool"
+        exit 3
+    }
+}
+
+$ProtocolPath = Resolve-RepoPath $ProtocolPath
+if (-not (Test-Path -LiteralPath $ProtocolPath -PathType Leaf)) {
+    Write-Error "BLOCKED: protocol is missing: $ProtocolPath"
+    exit 3
+}
+$Protocol = Get-Content -Raw -LiteralPath $ProtocolPath | ConvertFrom-Json
+if ($Protocol.status -ne "LOCKED") {
+    Write-Error "INVALID: protocol must declare status LOCKED: $ProtocolPath"
+    exit 2
+}
+
+if (-not $ModelPath) {
+    $ModelPath = Join-Path $RepoRoot "PhysAnimUE5\Content\NNEModels\phc_policy.onnx"
+}
+$ModelPath = Resolve-RepoPath $ModelPath
+if (-not (Test-Path -LiteralPath $ModelPath -PathType Leaf)) {
+    Write-Error "BLOCKED: model file is missing: $ModelPath"
+    exit 3
+}
+
+$SourceCommit = (& git -C $RepoRoot rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or $SourceCommit -notmatch '^[0-9a-f]{40}$') {
+    Write-Error "BLOCKED: could not resolve source commit"
+    exit 3
+}
+$GitStatus = @(& git -C $RepoRoot status --porcelain=v1 --untracked-files=normal)
+$SourceTreeDirty = $GitStatus.Count -gt 0
+if ($SourceTreeDirty -and -not $AllowDirty) {
+    Write-Error "INVALID: authoritative automation requires a clean source tree. Use -AllowDirty only for development diagnostics."
+    exit 2
+}
+
+$RunningUnreal = @(Get-Process -Name "UnrealEditor", "UnrealEditor-Cmd" -ErrorAction SilentlyContinue)
+if ($RunningUnreal.Count -gt 0) {
+    $ProcessSummary = ($RunningUnreal | ForEach-Object { "$($_.ProcessName):$($_.Id)" }) -join ", "
+    Write-Error "BLOCKED: an Unreal process is already running; refusing to start a duplicate episode: $ProcessSummary"
+    exit 3
+}
+
+if (-not $OutputRoot) {
+    $OutputRoot = Join-Path $RepoRoot "test-results\ue-automation-episodes"
+}
+$OutputRoot = Resolve-RepoPath $OutputRoot
+$NormalizedRepo = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\') + '\'
+$NormalizedOutput = [System.IO.Path]::GetFullPath($OutputRoot)
+if (-not $NormalizedOutput.StartsWith($NormalizedRepo, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Write-Error "INVALID: output root must remain inside the repository: $OutputRoot"
+    exit 2
+}
+
+if (-not $RunId) {
+    $Timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+    $RunId = "$Timestamp-$Variant-$Repetition-$($SourceCommit.Substring(0, 8))-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+}
+if ($RunId -notmatch '^[A-Za-z0-9._-]+$') {
+    Write-Error "INVALID: RunId contains unsupported characters: $RunId"
+    exit 2
+}
+
+$RunRoot = Join-Path $OutputRoot $RunId
+$ReportRoot = Join-Path $RunRoot "automation-report"
+$InvocationPath = Join-Path $RunRoot "invoke-build.ps1"
+$StdoutPath = Join-Path $RunRoot "automation.stdout.log"
+$StderrPath = Join-Path $RunRoot "automation.stderr.log"
+$ValidationPath = Join-Path $RunRoot "fixture-validation.json"
+$OrchestrationPath = Join-Path $RunRoot "orchestration.json"
+$ModelHash = Get-Sha256 $ModelPath
+
+$Plan = [ordered]@{
+    schema_version = "physanim-ue-automation-plan/v1"
+    authority = if ($SourceTreeDirty) { "DEVELOPMENT_DIRTY" } else { "COMMITTED_SOURCE" }
+    run_id = $RunId
+    run_root = $RunRoot
+    report_root = $ReportRoot
+    test_name = $TestName
+    protocol_path = $ProtocolPath
+    protocol_id = $Protocol.protocol_id
+    protocol_version = $Protocol.version
+    variant = $Variant
+    repetition = $Repetition
+    source_commit = $SourceCommit
+    source_tree_dirty = $SourceTreeDirty
+    model_path = $ModelPath
+    model_sha256 = $ModelHash
+    test_mode = $TestMode
+    timeout_seconds = $TimeoutSeconds
+    compile_before_run = -not $SkipCompile
+    required_artifact_fields = $RequiredArtifactFields
+}
+
+if ($DryRun) {
+    $Plan.dry_run = $true
+    $Plan | ConvertTo-Json -Depth 8
+    exit 0
+}
+
+New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
+Write-OrchestrationResult $OrchestrationPath @{
+    schema_version = "physanim-ue-automation-orchestration/v1"
+    state = "PLANNED"
+    plan = $Plan
+}
+
+$EscapedBuildScript = $BuildScript.Replace("'", "''")
+$EscapedTestName = $TestName.Replace("'", "''")
+$EscapedTestMode = $TestMode.Replace("'", "''")
+$EscapedReportRoot = $ReportRoot.Replace("'", "''")
+$EscapedRunRoot = $RunRoot.Replace("'", "''")
+$EscapedRunId = $RunId.Replace("'", "''")
+$EscapedVariant = $Variant.Replace("'", "''")
+$EscapedSourceCommit = $SourceCommit.Replace("'", "''")
+$EscapedModelHash = $ModelHash.Replace("'", "''")
+$SkipBuildLiteral = if ($SkipCompile) { '$true' } else { '$false' }
+$DirtyLiteral = if ($SourceTreeDirty) { '$true' } else { '$false' }
+
+$Invocation = @"
+`$ErrorActionPreference = 'Stop'
+`$Parameters = @{
+    SkipBuild = $SkipBuildLiteral
+    Test = '$EscapedTestName'
+    TestMode = '$EscapedTestMode'
+    ReportExportPath = '$EscapedReportRoot'
+    ProductRunRoot = '$EscapedRunRoot'
+    ProductRunId = '$EscapedRunId'
+    ProductVariant = '$EscapedVariant'
+    ProductRepetition = $Repetition
+    SourceCommit = '$EscapedSourceCommit'
+    ModelOnnxSha256 = '$EscapedModelHash'
+    SourceTreeDirty = $DirtyLiteral
+}
+& '$EscapedBuildScript' @Parameters
+exit `$LASTEXITCODE
+"@
+$Invocation | Set-Content -LiteralPath $InvocationPath -Encoding utf8
+
+Write-OrchestrationResult $OrchestrationPath @{
+    schema_version = "physanim-ue-automation-orchestration/v1"
+    state = "RUNNING"
+    started_utc = (Get-Date).ToUniversalTime().ToString("o")
+    plan = $Plan
+}
+
+$Process = Start-Process powershell.exe `
+    -ArgumentList @("-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $InvocationPath) `
+    -WorkingDirectory $RepoRoot `
+    -RedirectStandardOutput $StdoutPath `
+    -RedirectStandardError $StderrPath `
+    -PassThru
+
+$Deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+while (-not $Process.HasExited) {
+    if ([DateTime]::UtcNow -ge $Deadline) {
+        & taskkill.exe /PID $Process.Id /T /F | Out-Null
+        Write-OrchestrationResult $OrchestrationPath @{
+            schema_version = "physanim-ue-automation-orchestration/v1"
+            state = "TIMED_OUT"
+            verdict = "BLOCKED"
+            ended_utc = (Get-Date).ToUniversalTime().ToString("o")
+            child_pid = $Process.Id
+            plan = $Plan
+            stdout = $StdoutPath
+            stderr = $StderrPath
+        }
+        Write-Error "BLOCKED: automation exceeded $TimeoutSeconds seconds. Existing artifacts and logs were retained at $RunRoot"
+        exit 3
+    }
+    Start-Sleep -Seconds 1
+    $Process.Refresh()
+}
+
+$ExitCode = $Process.ExitCode
+if ($ExitCode -ne 0) {
+    $StdoutTail = if (Test-Path $StdoutPath) { (Get-Content $StdoutPath -Tail 80) -join "`n" } else { "" }
+    $Verdict = if ($StdoutTail -match 'COMPILATION FAILED|Result: Failed') { "BLOCKED" } else { "INVALID" }
+    Write-OrchestrationResult $OrchestrationPath @{
+        schema_version = "physanim-ue-automation-orchestration/v1"
+        state = "CHILD_FAILED"
+        verdict = $Verdict
+        child_exit_code = $ExitCode
+        ended_utc = (Get-Date).ToUniversalTime().ToString("o")
+        plan = $Plan
+        stdout = $StdoutPath
+        stderr = $StderrPath
+    }
+    Write-Error "$Verdict`: automation process exited with code $ExitCode. Artifacts and logs were retained at $RunRoot"
+    exit $(if ($Verdict -eq "BLOCKED") { 3 } else { 2 })
+}
+
+$ValidatorArguments = @(
+    $Validator,
+    "--run-root", $RunRoot,
+    "--report-root", $ReportRoot,
+    "--expected-test", $TestName,
+    "--expected-source-commit", $SourceCommit,
+    "--expected-protocol", $ProtocolPath,
+    "--expected-variant", $Variant,
+    "--expected-repetition", $Repetition,
+    "--output", $ValidationPath
+)
+foreach ($Field in $RequiredArtifactFields) {
+    $ValidatorArguments += @("--required-artifact-field", $Field)
+}
+& python @ValidatorArguments
+$ValidationExitCode = $LASTEXITCODE
+$Validation = if (Test-Path $ValidationPath) {
+    Get-Content -Raw -LiteralPath $ValidationPath | ConvertFrom-Json
+} else {
+    $null
+}
+$FixtureVerdict = if ($Validation) { $Validation.verdict } else { "INVALID" }
+
+Write-OrchestrationResult $OrchestrationPath @{
+    schema_version = "physanim-ue-automation-orchestration/v1"
+    state = "COMPLETE"
+    verdict = $FixtureVerdict
+    note = "This verdict covers fixture identity, automation completion, and artifact completeness only. Behavioral product acceptance remains the versioned evaluator's responsibility."
+    child_exit_code = $ExitCode
+    validator_exit_code = $ValidationExitCode
+    ended_utc = (Get-Date).ToUniversalTime().ToString("o")
+    plan = $Plan
+    validation = $Validation
+    stdout = $StdoutPath
+    stderr = $StderrPath
+}
+
+Write-Output "$FixtureVerdict`: UE automation episode retained at $RunRoot"
+exit $(if ($FixtureVerdict -eq "PASS") { 0 } else { 2 })
