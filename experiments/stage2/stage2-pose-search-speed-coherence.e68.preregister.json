@@ -1,0 +1,29 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E68",
+  "title": "Restore Stage2 shell-to-Pose-Search speed coherence",
+  "baseline_commit": "d50164318d936b52b092c8713e2bef57aa05f439",
+  "date": "2026-07-16",
+  "observed_failure": {
+    "raw_motion_match_result": "MM_Idle",
+    "sustained_cruise_idle_total_cost": 0.056615,
+    "sustained_cruise_best_locomotion_asset": "MF_Unarmed_Walk_Left",
+    "sustained_cruise_best_locomotion_total_cost": 0.073279,
+    "stage2_shell_speed_cm_per_second": 60.0,
+    "pose_search_stabilized_speed_cm_per_second": 160.0,
+    "historical_bridge_max_speed_cm_per_second": 240.0,
+    "regression_commit": "41571245c249949ccc22b29d04c5106614ce080f",
+    "root_cause": "Stage2 introduced a duplicate 60 cm/s kinematic-shell constant after the bridge Pose Search path had been tuned around the existing stabilized 160 cm/s query. The unchanged locomotion database contains approximately 300 cm/s walk root motion. The 60/160 split leaves trajectory history near idle and makes MM_Idle cheaper than every locomotion pose."
+  },
+  "hypothesis": "Using the existing BridgePoseSearchStabilizedWalkSpeedCmPerSecond as the Stage2 shell speed will make observed trajectory history coherent with the Pose Search future query and restore non-idle selection without forcing an animation by name.",
+  "single_behavior_change": "Replace the duplicate Stage2AForwardWalkSpeedCmPerSecond constant with a resolver based on the effective BridgePoseSearchStabilizedWalkSpeedCmPerSecond, clamped by BridgeOwnedMovementMaxPlanarSpeedCmPerSecond. Apply it consistently to Stage2 walk, turn, and scripted locomotion shell deltas.",
+  "tdd_contract": [
+    "Default effective settings resolve Stage2 locomotion speed to 160 cm/s, not 60 cm/s.",
+    "The shell delta remains bounded by Stage2AMaxWalkDeltaPerTickCm.",
+    "Intent magnitude still scales physical shell speed and displacement.",
+    "Zero intent still produces zero displacement.",
+    "The authoritative scripted Normal episode selects at least one non-idle database animation during moving phases without an asset-name override.",
+    "Pose Search assets, schema weights, policy action scales, Physics Control gains, root authority, and selection policy remain unchanged."
+  ],
+  "next_if_supported": "Retune only the scripted phase durations in a separately preregistered scenario revision so path length remains in the locked acceptance band, then run the full causal/control bundle."
+}
