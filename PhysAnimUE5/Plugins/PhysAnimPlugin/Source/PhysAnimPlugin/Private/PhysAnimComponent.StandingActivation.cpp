@@ -211,6 +211,25 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 			RuntimeState);
 #endif
 
+	const auto ResolveExpectedControlMultiplierForBone =
+		[this, &EffectiveSettings, &ControlMultiplier](FName BoneName) -> FPhysicsControlMultiplier
+	{
+		FPhysicsControlMultiplier BoneControlMultiplier = ControlMultiplier;
+		BoneControlMultiplier.AngularDampingRatioMultiplier *=
+			ResolveCausalLocomotionLowerLimbDampingRatioScaleForBone(
+				BoneName,
+				EffectiveSettings.bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy,
+				EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend,
+				RuntimeState);
+		BoneControlMultiplier.AngularExtraDampingMultiplier *=
+			ResolveCausalLocomotionLowerLimbExtraDampingScaleForBone(
+				BoneName,
+				EffectiveSettings.bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy,
+				EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend,
+				RuntimeState);
+		return BoneControlMultiplier;
+	};
+
 	for (const FName BoneName : ControlBones)
 	{
 		FConstraintInstance* const Constraint = Mesh->FindConstraintInstance(BoneName);
@@ -246,9 +265,11 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 			Constraint->SetAngularDriveAccelerationMode(false);
 		}
 #endif
+		const FPhysicsControlMultiplier ExpectedBoneControlMultiplier =
+			ResolveExpectedControlMultiplierForBone(BoneName);
 		PhysicsControl->SetControlMultiplier(
 			ControlName,
-			ControlMultiplier,
+			ExpectedBoneControlMultiplier,
 			ExpectedControl.bEnabled,
 			true,
 			false);
@@ -397,10 +418,12 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 			PhysAnimBridge::MakeControlName(BoneName));
 		const bool bEnabledMatches = Control &&
 			(Control->PhysicsControl.IsEnabled() == ExpectedControl.bEnabled);
+		const FPhysicsControlMultiplier ExpectedBoneControlMultiplier =
+			ResolveExpectedControlMultiplierForBone(BoneName);
 		if (bEnabledMatches &&
-			FMath::IsNearlyEqual(Control->PhysicsControl.ControlMultiplier.AngularStrengthMultiplier, ControlMultiplier.AngularStrengthMultiplier) &&
-			FMath::IsNearlyEqual(Control->PhysicsControl.ControlMultiplier.AngularDampingRatioMultiplier, ControlMultiplier.AngularDampingRatioMultiplier) &&
-			FMath::IsNearlyEqual(Control->PhysicsControl.ControlMultiplier.AngularExtraDampingMultiplier, ControlMultiplier.AngularExtraDampingMultiplier))
+			FMath::IsNearlyEqual(Control->PhysicsControl.ControlMultiplier.AngularStrengthMultiplier, ExpectedBoneControlMultiplier.AngularStrengthMultiplier) &&
+			FMath::IsNearlyEqual(Control->PhysicsControl.ControlMultiplier.AngularDampingRatioMultiplier, ExpectedBoneControlMultiplier.AngularDampingRatioMultiplier) &&
+			FMath::IsNearlyEqual(Control->PhysicsControl.ControlMultiplier.AngularExtraDampingMultiplier, ExpectedBoneControlMultiplier.AngularExtraDampingMultiplier))
 		{
 			++Readback.ControlGainMatchCount;
 		}

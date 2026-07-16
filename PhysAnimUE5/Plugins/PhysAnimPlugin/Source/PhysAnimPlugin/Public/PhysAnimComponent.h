@@ -3234,6 +3234,16 @@ public:
 	static float ResolveTrainingAlignedControlStrengthScaleForBone(FName BoneName, float BlendAlpha);
 	static float ResolveTrainingAlignedLocomotionLowerLimbDampingRatioScaleForBone(FName BoneName, float BlendAlpha);
 	static float ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(FName BoneName, float BlendAlpha);
+	static float ResolveCausalLocomotionLowerLimbDampingRatioScaleForBone(
+		FName BoneName,
+		bool bApplyPolicy,
+		float BlendAlpha,
+		EPhysAnimRuntimeState RuntimeState);
+	static float ResolveCausalLocomotionLowerLimbExtraDampingScaleForBone(
+		FName BoneName,
+		bool bApplyPolicy,
+		float BlendAlpha,
+		EPhysAnimRuntimeState RuntimeState);
 	static float ResolveTrainingAlignedControlExtraDampingScaleForBone(FName BoneName, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedControlFamilyProfile(bool bApplyTrainingAlignedControlFamilyProfile, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(bool bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy, float BlendAlpha, bool bLocomotionModeActive);

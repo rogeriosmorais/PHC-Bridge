@@ -900,6 +900,70 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			true,
 			EPhysAnimRuntimeState::LocomotionActiveShell),
 		1.5f);
+	TestEqual(
+		TEXT("E71 locomotion thigh damping ratio uses the existing 1.10 profile"),
+		UPhysAnimComponent::ResolveCausalLocomotionLowerLimbDampingRatioScaleForBone(
+			TEXT("thigh_l"),
+			true,
+			1.0f,
+			EPhysAnimRuntimeState::LocomotionActiveShell),
+		1.10f);
+	TestEqual(
+		TEXT("E71 locomotion thigh extra damping uses the existing 1.15 profile"),
+		UPhysAnimComponent::ResolveCausalLocomotionLowerLimbExtraDampingScaleForBone(
+			TEXT("thigh_r"),
+			true,
+			1.0f,
+			EPhysAnimRuntimeState::LocomotionActiveShell),
+		1.15f);
+	TestEqual(
+		TEXT("E71 locomotion calf damping ratio uses the existing 1.25 profile"),
+		UPhysAnimComponent::ResolveCausalLocomotionLowerLimbDampingRatioScaleForBone(
+			TEXT("calf_l"),
+			true,
+			1.0f,
+			EPhysAnimRuntimeState::LocomotionActiveShell),
+		1.25f);
+	TestEqual(
+		TEXT("E71 locomotion calf extra damping uses the existing 1.45 profile"),
+		UPhysAnimComponent::ResolveCausalLocomotionLowerLimbExtraDampingScaleForBone(
+			TEXT("calf_r"),
+			true,
+			1.0f,
+			EPhysAnimRuntimeState::LocomotionActiveShell),
+		1.45f);
+	TestEqual(
+		TEXT("E71 locomotion foot damping remains identity"),
+		UPhysAnimComponent::ResolveCausalLocomotionLowerLimbDampingRatioScaleForBone(
+			TEXT("foot_l"),
+			true,
+			1.0f,
+			EPhysAnimRuntimeState::LocomotionActiveShell),
+		1.0f);
+	TestEqual(
+		TEXT("E71 standing thigh damping remains identity"),
+		UPhysAnimComponent::ResolveCausalLocomotionLowerLimbDampingRatioScaleForBone(
+			TEXT("thigh_l"),
+			true,
+			1.0f,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		1.0f);
+	TestEqual(
+		TEXT("E71 disabled locomotion response remains identity"),
+		UPhysAnimComponent::ResolveCausalLocomotionLowerLimbExtraDampingScaleForBone(
+			TEXT("calf_l"),
+			false,
+			1.0f,
+			EPhysAnimRuntimeState::LocomotionActiveShell),
+		1.0f);
+	TestEqual(
+		TEXT("E71 zero blend remains identity"),
+		UPhysAnimComponent::ResolveCausalLocomotionLowerLimbExtraDampingScaleForBone(
+			TEXT("calf_l"),
+			true,
+			0.0f,
+			EPhysAnimRuntimeState::LocomotionActiveShell),
+		1.0f);
 	TestTrue(
 		TEXT("E63 production component action axis remains active during locomotion"),
 		UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
