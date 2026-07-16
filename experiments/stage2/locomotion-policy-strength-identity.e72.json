@@ -1,0 +1,22 @@
+{
+  "schema_version": "physanim-experiment-result/v1",
+  "experiment_id": "E72",
+  "status": "REJECTED_FAIL_STOPPED",
+  "baseline_commit": "e1821b9bf9d56c9bb55134cefc9f9ad6ae9ec4bf",
+  "behavior_commit": "5402fa0a1d8c32565527039c026d0a514c2a64d6",
+  "screen_run": "test-results/scripted-locomotion/e72-identity-strength/Normal-1",
+  "observed": {
+    "shell_path_length_cm": 211.80000288784504,
+    "yaw_delta_deg": 30.0,
+    "pose_search_remained_non_idle": true,
+    "final_runtime_state": "FailStopped",
+    "final_support_gap_ms": 2599.9999999999986,
+    "stability_cost_auc": 357.31713839253285,
+    "cruise_mean_root_tilt_deg": 9.49759152730306,
+    "moving_turn_mean_root_tilt_deg": 21.44985972510444,
+    "deceleration_mean_root_tilt_deg": 40.35077063242594,
+    "settle_mean_root_tilt_deg": 46.0944517496929,
+    "settle_mean_pelvis_height_error_cm": 76.77516406892022
+  },
+  "conclusion": "Locomotion requires more than identity policy strength to remain supported through deceleration and stop. Reject and revert. The component analysis also shows the standing-derived locomotion cost rewards ZeroActions for remaining statue-like rather than following the moving reference; protocol-v2 metric validity must be audited before further gain interpolation."
+}
