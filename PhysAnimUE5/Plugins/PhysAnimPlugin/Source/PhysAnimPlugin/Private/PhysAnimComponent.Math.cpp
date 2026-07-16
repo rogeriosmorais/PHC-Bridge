@@ -288,6 +288,39 @@ void UPhysAnimComponent::MakeMimicTargetDataFrameBodySamples(
 }
 
 
+FVector2D UPhysAnimComponent::ResolveMimicTargetTranslationOnlyDataOffsetXY(
+	const FTransform& CurrentSelectedWorldRoot,
+	const FTransform& CurrentSelectedDataRoot)
+{
+	return FVector2D(
+		CurrentSelectedWorldRoot.GetLocation().X - CurrentSelectedDataRoot.GetLocation().X,
+		CurrentSelectedWorldRoot.GetLocation().Y - CurrentSelectedDataRoot.GetLocation().Y);
+}
+
+
+void UPhysAnimComponent::MakeMimicTargetTranslationOnlyBodySamples(
+	const TArray<FPhysAnimBodySample>& SourceBodySamples,
+	const FVector2D& DataOffsetXY,
+	float GroundHeight,
+	TArray<FPhysAnimBodySample>& OutBodySamples)
+{
+	OutBodySamples = SourceBodySamples;
+	for (FPhysAnimBodySample& BodySample : OutBodySamples)
+	{
+		BodySample.Position.X -= DataOffsetXY.X;
+		BodySample.Position.Y -= DataOffsetXY.Y;
+		BodySample.Position.Z -= GroundHeight;
+	}
+}
+
+
+bool UPhysAnimComponent::ShouldUseLocomotionTranslationOnlyMimicReference(
+	EPhysAnimRuntimeState RuntimeState)
+{
+	return RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell;
+}
+
+
 float UPhysAnimComponent::ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz)
 {
 	const float ClampedRateHz = FMath::Max(PolicyControlRateHz, 1.0f);
