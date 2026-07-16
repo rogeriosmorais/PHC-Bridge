@@ -808,3 +808,11 @@ Machine-readable record: `experiments/stage1/scaled-delayed-right-proximal.e54.j
 **Next experiment selected.** Restore the final masked Torso joint at a conservative delayed scale.
 
 Machine-readable record: `experiments/stage1/production-scaled-delayed-right-proximal.e55.json`.
+
+## E56 — Torso at 0.390625% after first active policy cycle (2026-07-15)
+
+**Result.** Falsified. Despite the small scale, Torso deterministically caused pelvis-height/root-tilt failure, Normal AUC 45.6836 and ratio 1.160971. Timing and all-joint action contracts were valid.
+
+**Next experiment selected.** Reduce Torso by 256× to scale 0.0000152587890625.
+
+Machine-readable record: `experiments/stage1/scaled-delayed-torso.e56.json`.
