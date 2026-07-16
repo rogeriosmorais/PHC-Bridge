@@ -9,8 +9,8 @@
     "PhysAnim.Frames.TypedRoundTrips": "PASS",
     "PhysAnim.Frames.TypedPolicyTensors": "PASS",
     "PhysAnim.Frames.LocomotionReplayMatrix": "PASS",
-    "PhysAnim.Locomotion.FrameAdapter.ReplayContract": "PASS",
-    "PhysAnim.Locomotion.FrameAdapter.Factorial": "PASS"
+    "PhysAnim.Adapter.ProtoManny.*": "PASS (5 tests)",
+    "PhysAnim.Locomotion.Protocol.AuthoritativeLoading": "PASS"
   },
   "typed_engine": {
     "private_header": "PhysAnimFrameContract.h",
@@ -63,6 +63,6 @@
       ]
     }
   },
-  "conclusion": "The coordinate search no longer needs full Chaos. The unique algebraic contract keeps Pose Search mesh-facing while preserving the authoritative world velocity, maps current and future through one selected world-to-data transform, and places animation-relative body pose on the query-trajectory root. Raw animation root motion is rejected because it advances about 300 cm/s and omits the requested turn against the 160 cm/s scripted shell contract.",
+  "conclusion": "The coordinate search no longer needs full Chaos. The unique algebraic contract keeps Pose Search mesh-facing while preserving the authoritative world velocity, maps current and future through one selected world-to-data transform, and places animation-relative body pose on the query-trajectory root. Raw animation root motion is rejected because it advances about 300 cm/s and omits the requested turn against the 160 cm/s scripted shell contract. This is an algebraic fixture derived from locked product evidence, not yet a complete serialized runtime-step replay; runtime promotion remains an E80 responsibility.",
   "next": "E80 may change only future-root placement to the unique survivor. No other frame, policy, gain, action, protocol, or shell variable may change before one authoritative v2 probe."
 }
