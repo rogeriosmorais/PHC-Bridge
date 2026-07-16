@@ -1,0 +1,16 @@
+{
+  "schema_version": "physanim-preregistration/v1",
+  "experiment_id": "production-scaled-delayed-torso-e58",
+  "preregistered_utc": "2026-07-16T04:05:00Z",
+  "fixed_baseline_commit": "4c2faa8e993d8b54d78f7e78b7fa3494bc171113",
+  "single_variable": "Promote Torso joint 8 at scale 0.0000152587890625 after the first completed active-standing policy inference.",
+  "production_behavior_flags": "none",
+  "execution": "-onethread",
+  "acceptance": [
+    "Focused production timing/scale contract passes after an exact red failure.",
+    "No-flag locked bundle exactly reproduces E57.",
+    "Normal and ZeroActions streams are byte-deterministic.",
+    "Normal/ZeroActions recovery-AUC ratio is <= 0.8.",
+    "Every action joint 0-22 is nonzero in at least one Normal policy row; every ZeroActions scalar remains zero."
+  ]
+}
