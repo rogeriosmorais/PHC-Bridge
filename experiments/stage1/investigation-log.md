@@ -792,3 +792,11 @@ Machine-readable record: `experiments/stage1/scaled-delayed-left-proximal.e52.js
 **Next experiment selected.** Delayed right proximal restoration at a conservative scale because little causal margin remains.
 
 Machine-readable record: `experiments/stage1/production-scaled-delayed-left-proximal.e53.json`.
+
+## E54 — Right proximal arm at 3.125% after first active policy cycle (2026-07-15)
+
+**Result.** Supported. Normal AUC was exactly 31.0041, ZeroActions 39.3495 and ratio 0.787916. First-active right proximal actions were zero, all later rows were nonzero, Torso remained zero, and all streams were deterministic.
+
+**Next experiment selected.** Promote delayed right proximal scale 0.03125 into production.
+
+Machine-readable record: `experiments/stage1/scaled-delayed-right-proximal.e54.json`.
