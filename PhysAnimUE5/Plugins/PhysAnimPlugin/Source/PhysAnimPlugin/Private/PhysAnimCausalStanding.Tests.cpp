@@ -213,6 +213,67 @@ bool FPhysAnimPoseSearchLocomotionAssetDirectionAuditTest::RunTest(const FString
 			FString::Printf(TEXT("%s half-second root travel remains a walk-scale displacement"), Expectation.AssetName),
 			RootDelta.Size2D() > 140.0f && RootDelta.Size2D() < 160.0f);
 	}
+
+	const FQuat ActorIdentity = FQuat::Identity;
+	const FQuat StandardMeshWorldRotation(FVector::UpVector, FMath::DegreesToRadians(-90.0f));
+	const FQuat IdentityActorFrame =
+		UPhysAnimComponent::TestOnlyResolveBridgePoseSearchAnimationFrameRotation(
+			ActorIdentity,
+			StandardMeshWorldRotation);
+	TestTrue(
+		TEXT("E75 standard Manny mesh resolves a normalized authored-frame rotation"),
+		IdentityActorFrame.IsNormalized());
+	TestTrue(
+		TEXT("E75 actor yaw zero resolves authored-frame yaw plus 90"),
+		FMath::IsNearlyEqual(
+			FMath::FindDeltaAngleDegrees(0.0f, IdentityActorFrame.Rotator().Yaw),
+			90.0f,
+			1.0e-3f));
+	TestTrue(
+		TEXT("E75 full frame maps actor-forward velocity to database-forward velocity"),
+		IdentityActorFrame.RotateVector(FVector(160.0f, 0.0f, 0.0f)).Equals(
+			FVector(0.0f, 160.0f, 0.0f),
+			1.0e-4f));
+	TestTrue(
+		TEXT("E75 full frame maps actor-facing to authored-facing"),
+		(IdentityActorFrame * ActorIdentity).GetNormalized().Equals(
+			FQuat(FVector::UpVector, FMath::DegreesToRadians(90.0f)),
+			1.0e-5f));
+
+	const FQuat TurnedActorRotation(FVector::UpVector, FMath::DegreesToRadians(30.0f));
+	const FQuat TurnedMeshWorldRotation =
+		(TurnedActorRotation * StandardMeshWorldRotation).GetNormalized();
+	const FQuat TurnedFrame =
+		UPhysAnimComponent::TestOnlyResolveBridgePoseSearchAnimationFrameRotation(
+			TurnedActorRotation,
+			TurnedMeshWorldRotation);
+	const FVector TurnedWorldForward = TurnedActorRotation.RotateVector(FVector(160.0f, 0.0f, 0.0f));
+	const FVector ExpectedTurnedDatabaseForward =
+		TurnedActorRotation.RotateVector(FVector(0.0f, 160.0f, 0.0f));
+	TestTrue(
+		TEXT("E75 turned full frame preserves actor-relative database-forward velocity"),
+		TurnedFrame.RotateVector(TurnedWorldForward).Equals(
+			ExpectedTurnedDatabaseForward,
+			1.0e-4f));
+	TestTrue(
+		TEXT("E75 turned full frame maps facing yaw 30 to authored yaw 120"),
+		FMath::IsNearlyEqual(
+			FMath::FindDeltaAngleDegrees(
+				0.0f,
+				(TurnedFrame * TurnedActorRotation).GetNormalized().Rotator().Yaw),
+			120.0f,
+			1.0e-3f));
+	TestTrue(
+		TEXT("E75 full frame preserves velocity magnitude"),
+		FMath::IsNearlyEqual(TurnedFrame.RotateVector(TurnedWorldForward).Size2D(), 160.0f, 1.0e-4f));
+	TestTrue(
+		TEXT("E75 full frame preserves exact zero velocity"),
+		TurnedFrame.RotateVector(FVector::ZeroVector).Equals(FVector::ZeroVector, 0.0f));
+	const FVector RoundtripVelocity =
+		TurnedFrame.Inverse().RotateVector(TurnedFrame.RotateVector(TurnedWorldForward));
+	TestTrue(
+		TEXT("E75 full frame inverse roundtrip restores world velocity"),
+		RoundtripVelocity.Equals(TurnedWorldForward, 1.0e-4f));
 	return true;
 }
 
