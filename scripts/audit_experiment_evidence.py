@@ -120,11 +120,36 @@ def _iter_json_files(path: Path) -> Iterable[Path]:
     return sorted(p for p in path.rglob("*.json") if p.is_file())
 
 
+def _experiment_lineage_key(
+    experiments_root: Path, path: Path, experiment_id: str
+) -> tuple[str, int | None]:
+    try:
+        relative = path.relative_to(experiments_root)
+        stage = relative.parts[0].casefold() if len(relative.parts) > 1 else "unknown"
+    except ValueError:
+        stage = "unknown"
+
+    token_source = f"{path.name} {experiment_id}"
+    experiment_match = re.search(
+        r"(?i)(?:^|[._-])e(\d+)(?=[._-]|\s|$)", token_source
+    )
+    attempt_match = re.search(
+        r"(?i)(?:^|[._-])attempt(\d+)(?=[._-]|\s|$)", token_source
+    )
+    if experiment_match:
+        base_key = f"{stage}/e{int(experiment_match.group(1))}"
+    else:
+        normalized_id = re.sub(r"[^a-z0-9]+", "-", experiment_id.casefold()).strip("-")
+        base_key = f"{stage}/id/{normalized_id}"
+    attempt = int(attempt_match.group(1)) if attempt_match else None
+    return base_key, attempt
+
+
 def _collect_experiments(
     root: Path, issues: list[Issue], check_git: bool
 ) -> dict[str, dict[str, Any]]:
-    records: dict[str, dict[str, Any]] = {}
     experiments_root = root / "experiments"
+    entries_by_base: dict[str, list[dict[str, Any]]] = {}
     for path in _iter_json_files(experiments_root):
         try:
             value = _read_json(path)
@@ -136,22 +161,18 @@ def _collect_experiments(
         experiment_id = value.get("experiment_id")
         if not isinstance(experiment_id, str) or not experiment_id:
             continue
-        is_prereg = path.name.endswith(".preregister.json")
-        record = records.setdefault(
-            experiment_id,
-            {
-                "preregistrations": [],
-                "results": [],
-                "has_preregistration": False,
-                "has_result": False,
-            },
-        )
-        key = "preregistrations" if is_prereg else "results"
-        record[key].append(_repo_relative(root, path))
-        record["has_preregistration"] = bool(record["preregistrations"])
-        record["has_result"] = bool(record["results"])
+        base_key, attempt = _experiment_lineage_key(experiments_root, path, experiment_id)
+        entry = {
+            "attempt": attempt,
+            "experiment_id": experiment_id,
+            "is_preregistration": path.name.endswith(".preregister.json"),
+            "path": _repo_relative(root, path),
+            "value": value,
+        }
+        entries_by_base.setdefault(base_key, []).append(entry)
 
         if check_git:
+            lineage_key = base_key if attempt is None else f"{base_key}/attempt{attempt}"
             for field in ("baseline_commit", "behavior_commit", "evidence_commit"):
                 revision = value.get(field)
                 if revision is not None and (
@@ -162,32 +183,72 @@ def _collect_experiments(
                             "error",
                             "missing_commit",
                             f"{field} does not resolve to a commit: {revision!r}",
-                            _repo_relative(root, path),
-                            experiment_id,
+                            entry["path"],
+                            lineage_key,
                         )
                     )
 
-    for experiment_id, record in sorted(records.items()):
-        if record["has_preregistration"] and not record["has_result"]:
-            issues.append(
-                Issue(
-                    "error",
-                    "experiment_missing_result",
-                    "Preregistration has no recorded result.",
-                    record["preregistrations"][0],
-                    experiment_id,
-                )
+    records: dict[str, dict[str, Any]] = {}
+    for base_key, entries in sorted(entries_by_base.items()):
+        prereg_by_attempt: dict[int | None, list[dict[str, Any]]] = {}
+        result_by_attempt: dict[int | None, list[dict[str, Any]]] = {}
+        for entry in entries:
+            target = prereg_by_attempt if entry["is_preregistration"] else result_by_attempt
+            target.setdefault(entry["attempt"], []).append(entry)
+
+        # Historical attempt-1 files commonly reused the base preregistration while
+        # later attempts gained explicit attempt-specific preregistrations.
+        if (
+            None in prereg_by_attempt
+            and None not in result_by_attempt
+            and 1 in result_by_attempt
+            and 1 not in prereg_by_attempt
+        ):
+            prereg_by_attempt[1] = prereg_by_attempt.pop(None)
+
+        attempts = sorted(
+            set(prereg_by_attempt) | set(result_by_attempt),
+            key=lambda value: (-1 if value is None else value),
+        )
+        for attempt in attempts:
+            lineage_key = base_key if attempt is None else f"{base_key}/attempt{attempt}"
+            preregistrations = prereg_by_attempt.get(attempt, [])
+            results = result_by_attempt.get(attempt, [])
+            source_ids = sorted(
+                {
+                    entry["experiment_id"]
+                    for entry in preregistrations + results
+                }
             )
-        if record["has_result"] and not record["has_preregistration"]:
-            issues.append(
-                Issue(
-                    "error",
-                    "experiment_missing_preregistration",
-                    "Result has no matching preregistration.",
-                    record["results"][0],
-                    experiment_id,
+            record = {
+                "preregistrations": sorted(entry["path"] for entry in preregistrations),
+                "results": sorted(entry["path"] for entry in results),
+                "source_experiment_ids": source_ids,
+                "has_preregistration": bool(preregistrations),
+                "has_result": bool(results),
+            }
+            records[lineage_key] = record
+
+            if record["has_preregistration"] and not record["has_result"]:
+                issues.append(
+                    Issue(
+                        "error",
+                        "experiment_missing_result",
+                        "Preregistration has no recorded result.",
+                        record["preregistrations"][0],
+                        lineage_key,
+                    )
                 )
-            )
+            if record["has_result"] and not record["has_preregistration"]:
+                issues.append(
+                    Issue(
+                        "warning",
+                        "experiment_missing_preregistration",
+                        "Result has no matching preregistration; retained as legacy evidence rather than a current blocking error.",
+                        record["results"][0],
+                        lineage_key,
+                    )
+                )
     return records
 
 

@@ -62,6 +62,54 @@ def test_repository_audit_finds_missing_result_dirty_run_and_missing_artifact(tm
     assert result["summary"]["error_count"] >= 4
 
 
+def test_result_without_preregistration_is_reported_as_legacy_warning(tmp_path: Path) -> None:
+    _write_json(
+        tmp_path / "experiments" / "stage1" / "legacy.e1.json",
+        {"experiment_id": "legacy-e1", "status": "SUPPORTED"},
+    )
+
+    result = audit_repository(tmp_path, check_git=False)
+
+    assert result["summary"]["error_count"] == 0
+    assert result["summary"]["warning_count"] == 1
+    assert result["summary"]["status"] == "PASS"
+    assert result["issues"][0]["code"] == "experiment_missing_preregistration"
+
+
+def test_repository_audit_pairs_legacy_files_by_stage_and_experiment_number(tmp_path: Path) -> None:
+    _write_json(
+        tmp_path / "experiments" / "stage1" / "real-onnx-preintervention-determinism.e5.preregister.json",
+        {"experiment_id": "E5", "baseline_commit": "abc"},
+    )
+    _write_json(
+        tmp_path / "experiments" / "stage1" / "real-onnx-preintervention-determinism.e5.json",
+        {"experiment_id": "real-onnx-preintervention-determinism-e5", "status": "SUPPORTED"},
+    )
+
+    result = audit_repository(tmp_path, check_git=False)
+
+    assert result["summary"]["error_count"] == 0
+    assert result["experiments"]["stage1/e5"]["has_preregistration"] is True
+    assert result["experiments"]["stage1/e5"]["has_result"] is True
+
+
+def test_repository_audit_pairs_attempt1_with_base_preregistration(tmp_path: Path) -> None:
+    _write_json(
+        tmp_path / "experiments" / "stage1" / "checkpoint-torque-ceiling.e21.preregister.json",
+        {"experiment_id": "checkpoint-torque-ceiling-e21"},
+    )
+    _write_json(
+        tmp_path / "experiments" / "stage1" / "checkpoint-torque-ceiling.e21.attempt1.json",
+        {"experiment_id": "checkpoint-torque-ceiling-e21-attempt1", "status": "INVALID"},
+    )
+
+    result = audit_repository(tmp_path, check_git=False)
+
+    assert result["summary"]["error_count"] == 0
+    assert result["experiments"]["stage1/e21/attempt1"]["has_preregistration"] is True
+    assert result["experiments"]["stage1/e21/attempt1"]["has_result"] is True
+
+
 def test_repository_audit_accepts_complete_pair_and_artifacts(tmp_path: Path) -> None:
     _write_json(
         tmp_path / "experiments" / "stage2" / "example.e90.preregister.json",
@@ -89,5 +137,5 @@ def test_repository_audit_accepts_complete_pair_and_artifacts(tmp_path: Path) ->
     result = audit_repository(tmp_path, check_git=False)
 
     assert result["summary"]["error_count"] == 0
-    assert result["experiments"]["E90"]["has_preregistration"] is True
-    assert result["experiments"]["E90"]["has_result"] is True
+    assert result["experiments"]["stage2/e90"]["has_preregistration"] is True
+    assert result["experiments"]["stage2/e90"]["has_result"] is True
