@@ -1,0 +1,26 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E73",
+  "title": "Add physical-root to scripted-shell tracking evidence",
+  "baseline_commit": "21a975e293eab30e46edfbe6a6c6ba78bc7dbee7",
+  "date": "2026-07-16",
+  "observed_metric_invalidity": {
+    "normal_shell_path_cm": 211.80000288784504,
+    "zero_actions_shell_path_cm": 211.80000288784504,
+    "normal_root_linear_speed_auc": 205.8410344742911,
+    "zero_actions_root_linear_speed_auc": 14.855962329713694,
+    "v1_cost_omits_shell_body_tracking": true,
+    "consequence": "ZeroActions is rewarded for remaining statue-like while the kinematic actor shell travels the scripted route. The v1 standing-derived cost measures pose, tilt, and height but never verifies that the physical character follows the shell."
+  },
+  "hypothesis": "Actor-local baseline tracking will show that Normal moves the simulated pelvis/root with the shell while ZeroActions leaves it behind. This is the missing causal locomotion outcome required for a valid protocol-v2 comparison.",
+  "single_change": "Evidence instrumentation only. Record simulated pelvis/root world position, cumulative physical-root planar path, net physical-root displacement, and planar error from the actor-transformed initial root offset. Add the same aggregate fields to scenario-summary.json. Do not change policy, Pose Search, gains, shell motion, timing, state transitions, or acceptance behavior.",
+  "tdd_contract": [
+    "Tracking error is zero when the physical root equals actor_transform * initial_actor_local_root_offset.",
+    "Tracking error is invariant to actor translation and yaw when the relative offset is preserved.",
+    "A 5 cm planar physical-root displacement from the expected shell-relative location reports 5 cm error.",
+    "Every scripted physics row contains physical_root_location_xyz_cm, root_shell_tracking_error_cm, and physical_root_path_length_cm.",
+    "Scenario summary contains physical_root_path_length_cm, physical_root_net_planar_displacement_cm, final_root_shell_tracking_error_cm, and max_root_shell_tracking_error_cm.",
+    "Normal and ZeroActions retain identical scripted shell path, turn, and phase behavior."
+  ],
+  "next_if_supported": "Use the measured discrimination to preregister immutable scripted-locomotion protocol v2 and its causal score before running any final bundle."
+}
