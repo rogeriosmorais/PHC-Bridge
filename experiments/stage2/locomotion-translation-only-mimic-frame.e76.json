@@ -1,0 +1,30 @@
+{
+  "schema_version": "physanim-experiment-result/v1",
+  "experiment_id": "E76",
+  "status": "REJECTED_UNSTABLE_WITH_MODERN_CANONICAL_ADAPTER",
+  "baseline_commit": "ca7bb24d36ef905afb27208830978aa34a6623f1",
+  "behavior_commit": "fd3b50966024c47fb3af17fbd6341ae849537e28",
+  "date": "2026-07-16",
+  "tests": {
+    "PhysAnim.Component.MandatoryPath.FirstSliceContract": "PASS",
+    "PhysAnim.Locomotion": "PASS",
+    "PhysAnim.ProductHarness.DropDispatchSwitch": "PASS"
+  },
+  "authoritative_normal": {
+    "run_root": "test-results/scripted-locomotion/e76-translation-frame/Normal-1",
+    "shell_path_length_cm": 211.80000288784504,
+    "physical_root_path_length_cm": 1957.3565961955326,
+    "physical_root_net_planar_displacement_cm": 781.588481345122,
+    "final_root_shell_tracking_error_cm": 681.0642251143804,
+    "max_root_shell_tracking_error_cm": 690.1762565195548,
+    "selected_animation_counts": {
+      "MM_Idle": 245,
+      "MF_Unarmed_Walk_Left": 45
+    },
+    "first_fail_time_sec": 9.683333838358521,
+    "first_fail_support_gap_ms": 1216.6666666666665,
+    "final_runtime_state": "FailStopped"
+  },
+  "rejection_reason": "The historical translation-only reference is incompatible with the modern canonical Manny/SMPL rotation adapter. It preserves Motion Matching selection but causes runaway physical motion and support loss. The current full canonical frame is required; the remaining locomotion-direction defect must be fixed in future-target root-motion semantics rather than the live current-reference transform.",
+  "next": "Revert E76 and audit BuildMimicTargetPoses plus the selected future-root displacement encoding and its relation to the PHC training frame."
+}
