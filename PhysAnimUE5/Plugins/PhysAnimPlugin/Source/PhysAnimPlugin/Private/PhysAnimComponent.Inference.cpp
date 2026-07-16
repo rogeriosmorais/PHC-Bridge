@@ -214,7 +214,9 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 			RuntimeState)
 			? 1.0f
 			: 0.0f;
-		float LeftProximalScale = 0.0f;
+		float LeftProximalScale = ResolveCausalStandingLeftProximalScaleAfterFirstPolicy(
+			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+			RuntimeState);
 		float LeftDistalScale = 1.0f;
 		float RightProximalScale = 0.0f;
 		float RightDistalScale = 1.0f;

@@ -563,6 +563,24 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			true,
 			EPhysAnimRuntimeState::Standing_PolicyBlend),
 		0.0f);
+	TestEqual(
+		TEXT("E53 production left proximal remains masked on the first active-policy inference"),
+		UPhysAnimComponent::ResolveCausalStandingLeftProximalScaleAfterFirstPolicy(
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		0.0f);
+	TestEqual(
+		TEXT("E53 production left proximal restores at the validated quarter scale after an earlier active-policy inference"),
+		UPhysAnimComponent::ResolveCausalStandingLeftProximalScaleAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		0.25f);
+	TestEqual(
+		TEXT("E53 production left proximal remains masked outside active standing"),
+		UPhysAnimComponent::ResolveCausalStandingLeftProximalScaleAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend),
+		0.0f);
 	Component->ApplyProductVariantFromCommandLineForTesting(
 		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCausalStandingUpperBody=SpineChest"));
 	TestTrue(
