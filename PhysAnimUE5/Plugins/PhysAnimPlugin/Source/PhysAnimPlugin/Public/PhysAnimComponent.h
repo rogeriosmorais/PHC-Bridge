@@ -1404,6 +1404,7 @@ class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPo
 	friend class FPhysAnimStage2AWalkSmokeTest;
 	friend class FPhysAnimStage2ATurnIntentTest;
 	friend class FPhysAnimStage2ATurnSmokeTest;
+	friend class FPhysAnimScriptedLocomotionRuntimeTest;
 	friend class FPhysAnimFailStopCircuitTest;
 	friend class FPhysAnimSteadyActionConditioningTest;
 	friend class FPhysAnimStage2ADumbbellLoadTest;
@@ -1952,6 +1953,27 @@ public:
 #endif
 
 #if WITH_DEV_AUTOMATION_TESTS
+	bool TestOnlyTryActivateStage2AScriptedLocomotionIntent(
+		float DeltaSeconds,
+		float IntentMagnitude,
+		float YawDeltaDegrees,
+		bool bPublishTrajectoryConditioning)
+	{
+		return TryActivateStage2AScriptedLocomotionIntent(
+			DeltaSeconds,
+			IntentMagnitude,
+			YawDeltaDegrees,
+			bPublishTrajectoryConditioning);
+	}
+	bool TestOnlyStopStage2AScriptedLocomotionAndReturnToStanding()
+	{
+		return StopStage2AScriptedLocomotionAndReturnToStanding();
+	}
+	const FBridgeIntentState& GetBridgeIntentStateForTesting() const { return BridgeIntentState; }
+	const FBridgeTrajectoryState& GetBridgeTrajectoryStateForTesting() const { return BridgeTrajectoryState; }
+	const FBridgeShellState& GetBridgeShellStateForTesting() const { return BridgeShellState; }
+	EStage2ALocomotionTerminalState GetStage2ALocomotionTerminalStateForTesting() const { return Stage2ALastLocomotionTerminalState; }
+	const FString& GetStage2ALocomotionTelemetryForTesting() const { return LastStage2ALocomotionTelemetryLine; }
 	static bool TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState State) { return IsBalanceEntryState(State); }
 	static bool TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState State) { return IsBalanceActiveState(State); }
 	void TestOnlySetBridgeLocomotionGateIntent(float IntentMagnitude, double IntentAgeSeconds);
@@ -3414,6 +3436,12 @@ private:
 	void EmitStage2ALocomotionTelemetry(const TCHAR* LocomotionIntent, const TCHAR* CapsuleOrShellMotionSource, EStage2ALocomotionTerminalState TerminalState);
 	bool TryActivateStage2AWalkIntent(float DeltaSeconds);
 	bool TryActivateStage2ATurnIntent(float DeltaSeconds, float YawDeltaDegrees);
+	bool TryActivateStage2AScriptedLocomotionIntent(
+		float DeltaSeconds,
+		float IntentMagnitude,
+		float YawDeltaDegrees,
+		bool bPublishTrajectoryConditioning);
+	bool StopStage2AScriptedLocomotionAndReturnToStanding();
 	FVector BuildStage2AWalkDeltaCm(float DeltaSeconds) const;
 	void ApplyStage2AKinematicShellWalkDelta(const FVector& DeltaCm);
 	static const TCHAR* Stage2ATerminalStateToString(EStage2ALocomotionTerminalState TerminalState);

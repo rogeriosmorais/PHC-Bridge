@@ -2308,6 +2308,166 @@ bool UPhysAnimComponent::TryActivateStage2ATurnIntent(float DeltaTime, float Yaw
 	return true;
 }
 
+bool UPhysAnimComponent::TryActivateStage2AScriptedLocomotionIntent(
+	float DeltaTime,
+	float IntentMagnitude,
+	float YawDeltaDegrees,
+	bool bPublishTrajectoryConditioning)
+{
+	Stage2ALastLocomotionTerminalState = EvaluateStage2ALocomotionRequestGate();
+	if (Stage2ALastLocomotionTerminalState != EStage2ALocomotionTerminalState::Allowed ||
+		Stage2AConsecutivePolicyActiveFrames < Stage2AMinPolicyActiveFramesBeforeWalk ||
+		DeltaTime <= 0.0f)
+	{
+		if (Stage2ALastLocomotionTerminalState == EStage2ALocomotionTerminalState::Allowed)
+		{
+			Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive;
+		}
+		bStage2AWalkIntentActive = false;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+		EmitStage2ALocomotionTelemetry(
+			TEXT("ScriptedLocomotion"),
+			Stage2AMotionSourceName,
+			Stage2ALastLocomotionTerminalState);
+		return false;
+	}
+
+	AActor* const OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked;
+		EmitStage2ALocomotionTelemetry(
+			TEXT("ScriptedLocomotion"),
+			Stage2AMotionSourceName,
+			Stage2ALastLocomotionTerminalState);
+		return false;
+	}
+
+	const float ClampedMagnitude = FMath::Clamp(IntentMagnitude, 0.0f, 1.0f);
+	const FRotator CurrentRotation = OwnerActor->GetActorRotation();
+	const FRotator TargetRotation(
+		CurrentRotation.Pitch,
+		CurrentRotation.Yaw + YawDeltaDegrees,
+		CurrentRotation.Roll);
+	const bool bRotationAccepted = OwnerActor->SetActorLocationAndRotation(
+		OwnerActor->GetActorLocation(),
+		TargetRotation,
+		true);
+	if (!bRotationAccepted)
+	{
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked;
+		EmitStage2ALocomotionTelemetry(
+			TEXT("ScriptedLocomotion"),
+			Stage2AMotionSourceName,
+			Stage2ALastLocomotionTerminalState);
+		return false;
+	}
+
+	FVector WorldMoveDirection = TargetRotation.Vector();
+	WorldMoveDirection.Z = 0.0f;
+	if (!WorldMoveDirection.Normalize())
+	{
+		WorldMoveDirection = FVector::ForwardVector;
+	}
+	const float DesiredSpeedCmPerSecond = Stage2AForwardWalkSpeedCmPerSecond * ClampedMagnitude;
+
+	BridgeIntentState.ActiveIntent = TEXT("ScriptedLocomotion");
+	BridgeIntentState.WorldMoveDirection = WorldMoveDirection;
+	BridgeIntentState.LocalMoveDirection = FVector::ForwardVector;
+	BridgeIntentState.IntentMagnitude = ClampedMagnitude;
+	BridgeIntentState.DesiredSpeedCmPerSecond = DesiredSpeedCmPerSecond;
+	BridgeIntentState.DesiredFacingYawDegrees = TargetRotation.Yaw;
+	BridgeIntentState.bHasDesiredFacing = true;
+
+	BridgeTrajectoryState.MotionSource = Stage2AMotionSourceName;
+	BridgeTrajectoryState.DesiredVelocityCmPerSecond = WorldMoveDirection * DesiredSpeedCmPerSecond;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = BridgeTrajectoryState.DesiredVelocityCmPerSecond;
+	BridgeTrajectoryState.AcceptedVelocityCmPerSecond = FVector::ZeroVector;
+	BridgeTrajectoryState.LastDeltaTimeSeconds = DeltaTime;
+	BridgeTrajectoryState.bInitialized = true;
+
+	const float RawStepCm = DesiredSpeedCmPerSecond * DeltaTime;
+	const float MaxStepCm = Stage2AMaxWalkDeltaPerTickCm * ClampedMagnitude;
+	const float StepCm = FMath::Clamp(RawStepCm, 0.0f, MaxStepCm);
+	Stage2ALastWalkDeltaCm = WorldMoveDirection * StepCm;
+	Stage2ALastTurnYawDeltaDegrees = YawDeltaDegrees;
+	ApplyStage2AKinematicShellWalkDelta(Stage2ALastWalkDeltaCm);
+
+	const bool bTranslationRequired = ClampedMagnitude > KINDA_SMALL_NUMBER;
+	const bool bTranslationAccepted = !bTranslationRequired || !BridgeShellState.AcceptedWorldDeltaCm.IsNearlyZero();
+	const bool bAccepted = bRotationAccepted && bTranslationAccepted;
+	bStage2AWalkIntentActive = bAccepted && bTranslationRequired;
+	if (!bAccepted)
+	{
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::StartupLocomotion;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked;
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+		EmitStage2ALocomotionTelemetry(
+			TEXT("ScriptedLocomotion"),
+			Stage2AMotionSourceName,
+			Stage2ALastLocomotionTerminalState);
+		return false;
+	}
+
+	BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Locomoting;
+	Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+	Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Allowed;
+	TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShell);
+	BridgeTrajectoryState.AcceptedVelocityCmPerSecond = BridgeShellState.AcceptedPlanarVelocityCmPerSecond;
+
+	if (!bPublishTrajectoryConditioning)
+	{
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+	}
+
+	EmitStage2ALocomotionTelemetry(
+		bPublishTrajectoryConditioning
+			? TEXT("ScriptedLocomotion")
+			: TEXT("ScriptedLocomotion_NoConditioning"),
+		Stage2AMotionSourceName,
+		Stage2ALastLocomotionTerminalState);
+	return true;
+}
+
+bool UPhysAnimComponent::StopStage2AScriptedLocomotionAndReturnToStanding()
+{
+	if (RuntimeState != EPhysAnimRuntimeState::LocomotionActiveShell &&
+		RuntimeState != EPhysAnimRuntimeState::LocomotionActiveShellDenied)
+	{
+		return false;
+	}
+
+	BridgeIntentState = FBridgeIntentState();
+	BridgeTrajectoryState = FBridgeTrajectoryState();
+	BridgeShellState.RequestedWorldDeltaCm = FVector::ZeroVector;
+	BridgeShellState.PendingPlanarVelocityCmPerSecond = FVector::ZeroVector;
+	BridgeShellState.AcceptedPlanarVelocityCmPerSecond = FVector::ZeroVector;
+	BridgeShellState.AcceptedWorldDeltaCm = FVector::ZeroVector;
+	BridgeOwnedMovementLastWorldIntent = FVector::ZeroVector;
+	BridgeOwnedMovementPlanarVelocityCmPerSecond = FVector::ZeroVector;
+	BridgePoseSearchQueryVelocityCmPerSecond = FVector::ZeroVector;
+	DistalLocomotionCompositionTimeSinceActiveIntentSeconds = -1.0f;
+	bStage2AWalkIntentActive = false;
+	Stage2ALastWalkDeltaCm = FVector::ZeroVector;
+	Stage2ALastTurnYawDeltaDegrees = 0.0f;
+	BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+	Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+	Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Allowed;
+	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
+	EmitStage2ALocomotionTelemetry(
+		TEXT("StopAndSettle"),
+		Stage2AMotionSourceName,
+		Stage2ALastLocomotionTerminalState);
+	return true;
+}
+
 FVector UPhysAnimComponent::BuildStage2AWalkDeltaCm(float DeltaTime) const
 {
 	if (DeltaTime <= 0.0f)
