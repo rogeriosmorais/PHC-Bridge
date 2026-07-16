@@ -1002,6 +1002,17 @@ bool UPhysAnimComponent::ShouldRestoreCausalStandingHeadAfterFirstPolicy(
 		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
 }
 
+float UPhysAnimComponent::ResolveCausalStandingNeckScaleAfterFirstPolicy(
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+		bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		InRuntimeState)
+		? 0.25f
+		: 0.0f;
+}
+
 bool UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
 	EPhysAnimRuntimeState InRuntimeState)
 {

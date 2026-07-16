@@ -545,6 +545,24 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		UPhysAnimComponent::ShouldRestoreCausalStandingHeadAfterFirstPolicy(
 			true,
 			EPhysAnimRuntimeState::Standing_PolicyBlend));
+	TestEqual(
+		TEXT("E51 production Neck remains masked on the first active-policy inference"),
+		UPhysAnimComponent::ResolveCausalStandingNeckScaleAfterFirstPolicy(
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		0.0f);
+	TestEqual(
+		TEXT("E51 production Neck restores at the validated quarter scale after an earlier active-policy inference"),
+		UPhysAnimComponent::ResolveCausalStandingNeckScaleAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		0.25f);
+	TestEqual(
+		TEXT("E51 production Neck remains masked outside active standing"),
+		UPhysAnimComponent::ResolveCausalStandingNeckScaleAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend),
+		0.0f);
 	Component->ApplyProductVariantFromCommandLineForTesting(
 		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCausalStandingUpperBody=SpineChest"));
 	TestTrue(
