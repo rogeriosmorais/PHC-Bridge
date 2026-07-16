@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimBridge.h"
+#include "PhysAnimScriptedLocomotionProtocol.h"
 
 #include "Animation/AnimSequence.h"
 #include "Components/CapsuleComponent.h"
@@ -141,7 +142,8 @@ namespace
 	void ConfigureCausalStandingFixedTimeStep(
 		bool& bInOutConfigured,
 		bool& bOutPreviousUseFixedTimeStep,
-		double& OutPreviousFixedDeltaTimeSeconds);
+		double& OutPreviousFixedDeltaTimeSeconds,
+		double FixedDeltaTimeSeconds);
 	void RestoreCausalStandingFixedTimeStep(
 		bool& bInOutConfigured,
 		bool bPreviousUseFixedTimeStep,
@@ -342,7 +344,8 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	ConfigureCausalStandingFixedTimeStep(
 		bFixedStepLifecycleConfigured,
 		bPreviousUseFixedTimeStep,
-		PreviousFixedDeltaTimeSeconds);
+		PreviousFixedDeltaTimeSeconds,
+		GetCausalStandingFixedDeltaTimeSeconds());
 	TestTrue(TEXT("E42 fixed-step lifecycle records configured state"), bFixedStepLifecycleConfigured);
 	TestTrue(TEXT("E42 fixed-step lifecycle enables fixed timestep before PIE"), FApp::UseFixedTimeStep());
 	TestTrue(
@@ -1593,7 +1596,8 @@ namespace
 	void ConfigureCausalStandingFixedTimeStep(
 		bool& bInOutConfigured,
 		bool& bOutPreviousUseFixedTimeStep,
-		double& OutPreviousFixedDeltaTimeSeconds)
+		double& OutPreviousFixedDeltaTimeSeconds,
+		double FixedDeltaTimeSeconds)
 	{
 		if (bInOutConfigured)
 		{
@@ -1602,7 +1606,7 @@ namespace
 
 		bOutPreviousUseFixedTimeStep = FApp::UseFixedTimeStep();
 		OutPreviousFixedDeltaTimeSeconds = FApp::GetFixedDeltaTime();
-		FApp::SetFixedDeltaTime(GetCausalStandingFixedDeltaTimeSeconds());
+		FApp::SetFixedDeltaTime(FixedDeltaTimeSeconds);
 		FApp::SetUseFixedTimeStep(true);
 		bInOutConfigured = true;
 	}
@@ -1624,16 +1628,24 @@ namespace
 
 	struct FCausalStandingFixedTimeStepState
 	{
+		explicit FCausalStandingFixedTimeStepState(
+			double InRequestedFixedDeltaTimeSeconds = CausalStandingFixedDeltaTimeSeconds)
+			: RequestedFixedDeltaTimeSeconds(InRequestedFixedDeltaTimeSeconds)
+		{
+		}
+
 		bool bConfigured = false;
 		bool bPreviousUseFixedTimeStep = false;
 		double PreviousFixedDeltaTimeSeconds = 0.0;
+		double RequestedFixedDeltaTimeSeconds = CausalStandingFixedDeltaTimeSeconds;
 
 		void Configure()
 		{
 			ConfigureCausalStandingFixedTimeStep(
 				bConfigured,
 				bPreviousUseFixedTimeStep,
-				PreviousFixedDeltaTimeSeconds);
+				PreviousFixedDeltaTimeSeconds,
+				RequestedFixedDeltaTimeSeconds);
 		}
 
 		void Restore()
@@ -1693,73 +1705,6 @@ namespace
 			: CurrentGapMs + FMath::Max(0.0, DeltaTimeSeconds) * 1000.0;
 	}
 
-	struct FScriptedLocomotionStep
-	{
-		FString Phase = TEXT("StandingHold");
-		float IntentMagnitude = 0.0f;
-		float YawDeltaDegrees = 0.0f;
-		bool bMove = false;
-		bool bStop = false;
-	};
-
-	FScriptedLocomotionStep ResolveScriptedLocomotionStep(double TimeSeconds)
-	{
-		static constexpr double StandingEndSeconds = 1.0;
-		static constexpr double AccelerationEndSeconds = 1.6;
-		static constexpr double CruiseEndSeconds = 2.1;
-		static constexpr double MovingTurnEndSeconds = 2.4;
-		static constexpr double DecelerationEndSeconds = 3.0;
-		static constexpr double AccelerationDurationSeconds =
-			AccelerationEndSeconds - StandingEndSeconds;
-		static constexpr double MovingTurnDurationSeconds =
-			MovingTurnEndSeconds - CruiseEndSeconds;
-		static constexpr double DecelerationDurationSeconds =
-			DecelerationEndSeconds - MovingTurnEndSeconds;
-
-		FScriptedLocomotionStep Step;
-		if (TimeSeconds < StandingEndSeconds)
-		{
-			return Step;
-		}
-		if (TimeSeconds < AccelerationEndSeconds)
-		{
-			Step.Phase = TEXT("Acceleration");
-			const float PhaseAlpha = static_cast<float>(
-				(TimeSeconds - StandingEndSeconds) / AccelerationDurationSeconds);
-			Step.IntentMagnitude = FMath::Lerp(0.1f, 1.0f, PhaseAlpha);
-			Step.bMove = true;
-			return Step;
-		}
-		if (TimeSeconds < CruiseEndSeconds)
-		{
-			Step.Phase = TEXT("Cruise");
-			Step.IntentMagnitude = 1.0f;
-			Step.bMove = true;
-			return Step;
-		}
-		if (TimeSeconds < MovingTurnEndSeconds)
-		{
-			Step.Phase = TEXT("MovingTurn");
-			Step.IntentMagnitude = 0.8f;
-			Step.YawDeltaDegrees =
-				30.0f * static_cast<float>(CausalStandingFixedDeltaTimeSeconds / MovingTurnDurationSeconds);
-			Step.bMove = true;
-			return Step;
-		}
-		if (TimeSeconds < DecelerationEndSeconds)
-		{
-			Step.Phase = TEXT("Deceleration");
-			const float PhaseAlpha = static_cast<float>(
-				(TimeSeconds - MovingTurnEndSeconds) / DecelerationDurationSeconds);
-			Step.IntentMagnitude = FMath::Lerp(0.8f, 0.05f, PhaseAlpha);
-			Step.bMove = true;
-			return Step;
-		}
-		Step.Phase = TEXT("Settle");
-		Step.bStop = true;
-		return Step;
-	}
-
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimScriptedLocomotionScheduleContractTest,
 		"PhysAnim.Locomotion.ScriptedSchedule",
@@ -1767,11 +1712,24 @@ namespace
 
 	bool FPhysAnimScriptedLocomotionScheduleContractTest::RunTest(const FString& Parameters)
 	{
-		auto TestPhase = [this](double TimeSeconds, const TCHAR* ExpectedPhase)
+		PhysAnimScriptedLocomotion::FProtocol Protocol;
+		FString Error;
+		const FString ProtocolPath = FPaths::ConvertRelativePathToFull(
+			FPaths::Combine(FPaths::ProjectDir(), TEXT("../product-gates/scripted-locomotion.v2.json")));
+		TestTrue(
+			TEXT("E78 loads the authoritative v2 schedule"),
+			PhysAnimScriptedLocomotion::LoadProtocolFromFile(ProtocolPath, Protocol, Error));
+		if (!Error.IsEmpty())
+		{
+			AddError(Error);
+			return false;
+		}
+
+		auto TestPhase = [this, &Protocol](double TimeSeconds, const TCHAR* ExpectedPhase)
 		{
 			TestEqual(
-				FString::Printf(TEXT("E69 phase at %.3f seconds"), TimeSeconds),
-				ResolveScriptedLocomotionStep(TimeSeconds).Phase,
+				FString::Printf(TEXT("Protocol phase at %.3f seconds"), TimeSeconds),
+				Protocol.ResolveStep(TimeSeconds).Phase,
 				FString(ExpectedPhase));
 		};
 
@@ -1789,13 +1747,18 @@ namespace
 		double IntegratedYawDegrees = 0.0;
 		double PredictedPathCm = 0.0;
 		TSet<FString> ObservedPhases;
-		for (int32 StepIndex = 0; StepIndex < 300; ++StepIndex)
+		const int32 StepCount = FMath::RoundToInt(
+			Protocol.CaptureWindowSeconds / Protocol.FixedDeltaTimeSeconds);
+		for (int32 StepIndex = 0; StepIndex < StepCount; ++StepIndex)
 		{
-			const double TimeSeconds = static_cast<double>(StepIndex) * CausalStandingFixedDeltaTimeSeconds;
-			const FScriptedLocomotionStep Step = ResolveScriptedLocomotionStep(TimeSeconds);
+			const double TimeSeconds = static_cast<double>(StepIndex) * Protocol.FixedDeltaTimeSeconds;
+			const PhysAnimScriptedLocomotion::FStep Step = Protocol.ResolveStep(TimeSeconds);
 			ObservedPhases.Add(Step.Phase);
 			IntegratedYawDegrees += Step.YawDeltaDegrees;
-			PredictedPathCm += static_cast<double>(Step.IntentMagnitude) * 160.0 * CausalStandingFixedDeltaTimeSeconds;
+			PredictedPathCm +=
+				static_cast<double>(Step.IntentMagnitude) *
+				Protocol.NominalSpeedCmPerSecond *
+				Protocol.FixedDeltaTimeSeconds;
 		}
 
 		for (const FString& RequiredPhase : {
@@ -1806,10 +1769,18 @@ namespace
 			FString(TEXT("Deceleration")),
 			FString(TEXT("Settle")) })
 		{
-			TestTrue(FString::Printf(TEXT("E69 observes phase %s"), *RequiredPhase), ObservedPhases.Contains(RequiredPhase));
+			TestTrue(
+				FString::Printf(TEXT("Protocol observes phase %s"), *RequiredPhase),
+				ObservedPhases.Contains(RequiredPhase));
 		}
-		TestEqual(TEXT("E69 moving turn integrates to 30 degrees"), IntegratedYawDegrees, 30.0, 1.0e-4);
-		TestTrue(TEXT("E69 predicted path is inside the locked 180-260 cm band"), PredictedPathCm >= 180.0 && PredictedPathCm <= 260.0);
+		TestEqual(
+			TEXT("Protocol moving turn integrates to its requested yaw"),
+			IntegratedYawDegrees,
+			static_cast<double>(Protocol.MovingTurn.TotalYawDegrees),
+			1.0e-4);
+		TestTrue(
+			TEXT("Protocol predicted path satisfies its minimum product threshold"),
+			PredictedPathCm >= Protocol.Acceptance.MinimumShellPathLengthCm);
 		return true;
 	}
 
@@ -1830,6 +1801,7 @@ namespace
 		FString FixtureAuthority = TEXT("PRODUCT_RUN");
 		FString RunSchemaVersion = TEXT("physanim-product-run/v1");
 		EPhysAnimStandingVariant StandingVariant = EPhysAnimStandingVariant::Normal;
+		PhysAnimScriptedLocomotion::FProtocol ScriptedLocomotionProtocol;
 
 		bool ReadFromCommandLine(FString& OutError)
 		{
@@ -1858,19 +1830,37 @@ namespace
 		{
 			bScriptedLocomotionRun = true;
 			bApplyPerturbation = false;
-			CaptureWindowSeconds = 10.0;
-			ProtocolRelativePath = TEXT("../product-gates/scripted-locomotion.v1.json");
+			ProtocolRelativePath = TEXT("../product-gates/scripted-locomotion.v2.json");
+			const FString ProtocolPath = FPaths::ConvertRelativePathToFull(
+				FPaths::Combine(FPaths::ProjectDir(), ProtocolRelativePath));
+			if (!PhysAnimScriptedLocomotion::LoadProtocolFromFile(
+				ProtocolPath,
+				ScriptedLocomotionProtocol,
+				OutError))
+			{
+				return false;
+			}
+			CaptureWindowSeconds = ScriptedLocomotionProtocol.CaptureWindowSeconds;
 			FixtureAuthority = TEXT("PRODUCT_RUN");
-			RunSchemaVersion = TEXT("physanim-scripted-locomotion-run/v1");
+			RunSchemaVersion = TEXT("physanim-scripted-locomotion-run/v2");
 			StandingVariant = Variant == TEXT("ZeroActions")
 				? EPhysAnimStandingVariant::ZeroActions
 				: EPhysAnimStandingVariant::Normal;
-			if (Variant != TEXT("Normal") &&
-				Variant != TEXT("ZeroActions") &&
-				Variant != TEXT("DropTrajectoryConditioning") &&
-				Variant != TEXT("SuppressStopTransition"))
+			if (!ScriptedLocomotionProtocol.Variants.Contains(Variant))
 			{
-				OutError = FString::Printf(TEXT("Unknown scripted-locomotion variant '%s'"), *Variant);
+				OutError = FString::Printf(
+					TEXT("Variant '%s' is not declared by scripted-locomotion protocol v%d"),
+					*Variant,
+					ScriptedLocomotionProtocol.Version);
+				return false;
+			}
+			const int32* AllowedRepetitions = ScriptedLocomotionProtocol.Repetitions.Find(Variant);
+			if (!AllowedRepetitions || Repetition > *AllowedRepetitions)
+			{
+				OutError = FString::Printf(
+					TEXT("Repetition %d exceeds protocol allowance for '%s'"),
+					Repetition,
+					*Variant);
 				return false;
 			}
 			return true;
@@ -2993,7 +2983,10 @@ namespace
 			UWorld* World = FindProductWorld();
 			if (!World)
 			{
-				if (FPlatformTime::Seconds() - StartupRealTime >= StartupTimeoutSeconds)
+				const double EffectiveStartupTimeoutSeconds = Config.bScriptedLocomotionRun
+					? Config.ScriptedLocomotionProtocol.Acceptance.StartupTimeoutSeconds
+					: StartupTimeoutSeconds;
+				if (FPlatformTime::Seconds() - StartupRealTime >= EffectiveStartupTimeoutSeconds)
 				{
 					Test->AddError(TEXT("PIE world was unavailable for the causal-standing product run"));
 					FixedTimeStepState->Restore();
@@ -3025,7 +3018,10 @@ namespace
 				const bool bReady = Component && (Config.bPlantRun
 					? bPlantReady
 					: Component->GetRuntimeState() == EPhysAnimRuntimeState::BalanceActive_Standing);
-				if (!bReady && FPlatformTime::Seconds() - StartupRealTime < StartupTimeoutSeconds)
+				const double EffectiveStartupTimeoutSeconds = Config.bScriptedLocomotionRun
+					? Config.ScriptedLocomotionProtocol.Acceptance.StartupTimeoutSeconds
+					: StartupTimeoutSeconds;
+				if (!bReady && FPlatformTime::Seconds() - StartupRealTime < EffectiveStartupTimeoutSeconds)
 				{
 					return false;
 				}
@@ -3092,7 +3088,8 @@ namespace
 				++ScriptStepFailureCount;
 				return;
 			}
-			const FScriptedLocomotionStep Step = ResolveScriptedLocomotionStep(TimeSeconds);
+			const PhysAnimScriptedLocomotion::FStep Step =
+				Config.ScriptedLocomotionProtocol.ResolveStep(TimeSeconds);
 			CurrentScriptPhase = Step.Phase;
 			CurrentScriptIntentMagnitude = Step.IntentMagnitude;
 			ObservedScriptPhases.Add(Step.Phase);
@@ -3110,10 +3107,11 @@ namespace
 				const bool bPublishTrajectory = Config.Variant != TEXT("DropTrajectoryConditioning");
 				bTrajectoryConditioningPublished = bPublishTrajectory;
 				if (!Component->TestOnlyTryActivateStage2AScriptedLocomotionIntent(
-					CausalStandingFixedDeltaTimeSeconds,
+					static_cast<float>(Config.ScriptedLocomotionProtocol.FixedDeltaTimeSeconds),
 					Step.IntentMagnitude,
 					Step.YawDeltaDegrees,
-					bPublishTrajectory))
+					bPublishTrajectory,
+					static_cast<float>(Config.ScriptedLocomotionProtocol.NominalSpeedCmPerSecond)))
 				{
 					++ScriptStepFailureCount;
 				}
@@ -3138,10 +3136,13 @@ namespace
 
 		void CapturePhysicsSample(UWorld* World, UPhysAnimComponent* Component, double TimeSeconds)
 		{
+			const double EvidenceDeltaTimeSeconds = Config.bScriptedLocomotionRun
+				? Config.ScriptedLocomotionProtocol.FixedDeltaTimeSeconds
+				: CausalStandingFixedDeltaTimeSeconds;
 			ProductSupportGapTimerMs = AdvanceCausalStandingSupportGapMs(
 				ProductSupportGapTimerMs,
 				Component && Component->HasProductSupportContactForTesting(),
-				CausalStandingFixedDeltaTimeSeconds);
+				EvidenceDeltaTimeSeconds);
 			ACharacter* Character = Component ? Cast<ACharacter>(Component->GetOwner()) : nullptr;
 			USkeletalMeshComponent* Mesh = Component ? Component->GetMeshComponent() : nullptr;
 			UPhysicsControlComponent* PhysicsControl = Character ? Character->FindComponentByClass<UPhysicsControlComponent>() : nullptr;
@@ -3281,7 +3282,9 @@ namespace
 						FMath::Max(MaxRootShellTrackingErrorCm, RootShellTrackingErrorCm);
 				}
 			}
-			const FScriptedLocomotionStep ScriptStep = ResolveScriptedLocomotionStep(TimeSeconds);
+			const PhysAnimScriptedLocomotion::FStep ScriptStep = Config.bScriptedLocomotionRun
+				? Config.ScriptedLocomotionProtocol.ResolveStep(TimeSeconds)
+				: PhysAnimScriptedLocomotion::FStep();
 			const FBridgeShellState& ScriptShell = Component
 				? Component->GetBridgeShellStateForTesting()
 				: EmptyBridgeShellState;
@@ -3387,7 +3390,9 @@ namespace
 			LatestTargetReadbackMatchRatio = Diagnostics.NumTotalTargetsWritten > 0
 				? static_cast<double>(ReadbackMatches) / static_cast<double>(Diagnostics.NumTotalTargetsWritten)
 				: 0.0;
-			const FScriptedLocomotionStep ScriptStep = ResolveScriptedLocomotionStep(TimeSeconds);
+			const PhysAnimScriptedLocomotion::FStep ScriptStep = Config.bScriptedLocomotionRun
+				? Config.ScriptedLocomotionProtocol.ResolveStep(TimeSeconds)
+				: PhysAnimScriptedLocomotion::FStep();
 			Row->SetNumberField(TEXT("sequence"), PolicySequence++);
 			Row->SetNumberField(TEXT("time_sec"), TimeSeconds);
 			Row->SetStringField(TEXT("script_phase"), Config.bScriptedLocomotionRun ? ScriptStep.Phase : TEXT("Standing"));
@@ -3770,7 +3775,11 @@ namespace
 							EndPhysicalRootLocation)
 						: 0.0;
 				const TSharedRef<FJsonObject> Summary = MakeShared<FJsonObject>();
-				Summary->SetStringField(TEXT("schema_version"), TEXT("physanim-scripted-locomotion-summary/v1"));
+				Summary->SetStringField(TEXT("schema_version"), TEXT("physanim-scripted-locomotion-summary/v2"));
+				Summary->SetStringField(TEXT("protocol_id"), Config.ScriptedLocomotionProtocol.ProtocolId);
+				Summary->SetNumberField(TEXT("protocol_version"), Config.ScriptedLocomotionProtocol.Version);
+				Summary->SetStringField(TEXT("protocol_sha256"), Config.ScriptedLocomotionProtocol.Sha256);
+				Summary->SetNumberField(TEXT("nominal_speed_cm_per_sec"), Config.ScriptedLocomotionProtocol.NominalSpeedCmPerSecond);
 				Summary->SetStringField(TEXT("variant"), Config.Variant);
 				Summary->SetBoolField(TEXT("human_input"), false);
 				Summary->SetBoolField(TEXT("locomotion_gate_opened"), bLocomotionGateOpened);
@@ -3806,6 +3815,86 @@ namespace
 			Manifest->SetStringField(TEXT("fixture_authority"), Config.FixtureAuthority);
 			Manifest->SetStringField(TEXT("run_id"), Config.RunId);
 			Manifest->SetStringField(TEXT("protocol_path"), ProtocolPath);
+			if (Config.bScriptedLocomotionRun)
+			{
+				const PhysAnimScriptedLocomotion::FProtocol& Protocol = Config.ScriptedLocomotionProtocol;
+				Manifest->SetStringField(TEXT("protocol_sha256"), Protocol.Sha256);
+				Manifest->SetStringField(TEXT("protocol_schema_version"), Protocol.SchemaVersion);
+				Manifest->SetStringField(TEXT("protocol_id"), Protocol.ProtocolId);
+				Manifest->SetNumberField(TEXT("protocol_version"), Protocol.Version);
+				Manifest->SetStringField(TEXT("protocol_status"), Protocol.Status);
+				Manifest->SetStringField(TEXT("protocol_map"), Protocol.Map);
+				Manifest->SetStringField(TEXT("protocol_actor_class"), Protocol.ActorClass);
+				Manifest->SetStringField(TEXT("protocol_skeleton"), Protocol.Skeleton);
+				Manifest->SetStringField(TEXT("protocol_model_asset"), Protocol.ModelAsset);
+				Manifest->SetStringField(TEXT("protocol_test_family"), Protocol.TestFamily);
+				Manifest->SetStringField(TEXT("protocol_renderer_mode"), Protocol.RendererMode);
+
+				auto BuildPhaseRangeJson = [](const PhysAnimScriptedLocomotion::FPhaseRange& Range)
+				{
+					const TSharedRef<FJsonObject> Phase = MakeShared<FJsonObject>();
+					Phase->SetNumberField(TEXT("start_sec"), Range.StartSeconds);
+					Phase->SetNumberField(TEXT("end_sec"), Range.EndSeconds);
+					return Phase;
+				};
+				const TSharedRef<FJsonObject> ResolvedScript = MakeShared<FJsonObject>();
+				ResolvedScript->SetNumberField(TEXT("capture_window_sec"), Protocol.CaptureWindowSeconds);
+				ResolvedScript->SetNumberField(TEXT("fixed_delta_time_sec"), Protocol.FixedDeltaTimeSeconds);
+				ResolvedScript->SetNumberField(TEXT("nominal_speed_cm_per_sec"), Protocol.NominalSpeedCmPerSecond);
+				ResolvedScript->SetObjectField(TEXT("standing_hold"), BuildPhaseRangeJson(Protocol.StandingHold));
+				const TSharedRef<FJsonObject> Acceleration = BuildPhaseRangeJson(Protocol.Acceleration);
+				Acceleration->SetNumberField(TEXT("intent_start"), Protocol.Acceleration.IntentStart);
+				Acceleration->SetNumberField(TEXT("intent_end"), Protocol.Acceleration.IntentEnd);
+				ResolvedScript->SetObjectField(TEXT("acceleration"), Acceleration);
+				const TSharedRef<FJsonObject> Cruise = BuildPhaseRangeJson(Protocol.Cruise);
+				Cruise->SetNumberField(TEXT("intent"), Protocol.Cruise.Intent);
+				ResolvedScript->SetObjectField(TEXT("cruise"), Cruise);
+				const TSharedRef<FJsonObject> MovingTurn = BuildPhaseRangeJson(Protocol.MovingTurn);
+				MovingTurn->SetNumberField(TEXT("intent"), Protocol.MovingTurn.Intent);
+				MovingTurn->SetNumberField(TEXT("total_yaw_deg"), Protocol.MovingTurn.TotalYawDegrees);
+				ResolvedScript->SetObjectField(TEXT("moving_turn"), MovingTurn);
+				const TSharedRef<FJsonObject> Deceleration = BuildPhaseRangeJson(Protocol.Deceleration);
+				Deceleration->SetNumberField(TEXT("intent_start"), Protocol.Deceleration.IntentStart);
+				Deceleration->SetNumberField(TEXT("intent_end"), Protocol.Deceleration.IntentEnd);
+				ResolvedScript->SetObjectField(TEXT("deceleration"), Deceleration);
+				ResolvedScript->SetObjectField(TEXT("settle"), BuildPhaseRangeJson(Protocol.Settle));
+				Manifest->SetObjectField(TEXT("resolved_script"), ResolvedScript);
+
+				const PhysAnimScriptedLocomotion::FAcceptanceThresholds& Acceptance = Protocol.Acceptance;
+				const TSharedRef<FJsonObject> ResolvedAcceptance = MakeShared<FJsonObject>();
+				ResolvedAcceptance->SetNumberField(TEXT("startup_timeout_sec"), Acceptance.StartupTimeoutSeconds);
+				ResolvedAcceptance->SetNumberField(TEXT("minimum_shell_path_length_cm"), Acceptance.MinimumShellPathLengthCm);
+				ResolvedAcceptance->SetNumberField(TEXT("minimum_net_planar_displacement_cm"), Acceptance.MinimumNetPlanarDisplacementCm);
+				ResolvedAcceptance->SetNumberField(TEXT("minimum_abs_yaw_delta_deg"), Acceptance.MinimumAbsYawDeltaDegrees);
+				ResolvedAcceptance->SetNumberField(TEXT("maximum_abs_yaw_delta_deg"), Acceptance.MaximumAbsYawDeltaDegrees);
+				ResolvedAcceptance->SetNumberField(TEXT("minimum_pelvis_height_ratio"), Acceptance.MinimumPelvisHeightRatio);
+				ResolvedAcceptance->SetNumberField(TEXT("maximum_root_tilt_deg"), Acceptance.MaximumRootTiltDegrees);
+				ResolvedAcceptance->SetNumberField(TEXT("maximum_penetration_cm"), Acceptance.MaximumPenetrationCm);
+				ResolvedAcceptance->SetNumberField(TEXT("maximum_support_gap_ms"), Acceptance.MaximumSupportGapMs);
+				ResolvedAcceptance->SetNumberField(TEXT("minimum_policy_step_coverage"), Acceptance.MinimumPolicyStepCoverage);
+				ResolvedAcceptance->SetNumberField(TEXT("maximum_target_readback_error_deg"), Acceptance.MaximumTargetReadbackErrorDegrees);
+				ResolvedAcceptance->SetNumberField(TEXT("minimum_target_readback_match_ratio"), Acceptance.MinimumTargetReadbackMatchRatio);
+				ResolvedAcceptance->SetNumberField(TEXT("settle_window_start_sec"), Acceptance.SettleWindowStartSeconds);
+				ResolvedAcceptance->SetNumberField(TEXT("maximum_settle_planar_speed_cm_per_sec"), Acceptance.MaximumSettlePlanarSpeedCmPerSecond);
+				ResolvedAcceptance->SetStringField(TEXT("required_final_runtime_state"), Acceptance.RequiredFinalRuntimeState);
+				ResolvedAcceptance->SetNumberField(TEXT("normal_to_zero_stability_cost_ratio_max"), Acceptance.NormalToZeroStabilityCostRatioMax);
+				ResolvedAcceptance->SetBoolField(TEXT("require_all_script_phases"), Acceptance.bRequireAllScriptPhases);
+				ResolvedAcceptance->SetBoolField(TEXT("require_zero_inference_failures"), Acceptance.bRequireZeroInferenceFailures);
+				ResolvedAcceptance->SetBoolField(TEXT("require_cmc_inactive"), Acceptance.bRequireCmcInactive);
+				ResolvedAcceptance->SetBoolField(TEXT("require_no_simroot"), Acceptance.bRequireNoSimRoot);
+				ResolvedAcceptance->SetBoolField(TEXT("require_nonblank_render_capture"), Acceptance.bRequireNonblankRenderCapture);
+				Manifest->SetObjectField(TEXT("resolved_acceptance"), ResolvedAcceptance);
+
+				const TSharedRef<FJsonObject> ResolvedStabilityCost = MakeShared<FJsonObject>();
+				ResolvedStabilityCost->SetNumberField(TEXT("window_start_sec"), Protocol.StabilityCost.WindowStartSeconds);
+				ResolvedStabilityCost->SetNumberField(TEXT("window_end_sec"), Protocol.StabilityCost.WindowEndSeconds);
+				ResolvedStabilityCost->SetStringField(TEXT("formula"), Protocol.StabilityCost.Formula);
+				ResolvedStabilityCost->SetStringField(TEXT("integration"), Protocol.StabilityCost.Integration);
+				ResolvedStabilityCost->SetBoolField(TEXT("lower_is_better"), Protocol.StabilityCost.bLowerIsBetter);
+				Manifest->SetObjectField(TEXT("resolved_stability_cost"), ResolvedStabilityCost);
+				Manifest->SetNumberField(TEXT("resolved_physics_minimum_samples"), Protocol.PhysicsMinimumSamples);
+				Manifest->SetNumberField(TEXT("resolved_policy_minimum_samples"), Protocol.PolicyMinimumSamples);
+			}
 			Manifest->SetStringField(TEXT("variant"), Config.Variant);
 			Manifest->SetNumberField(TEXT("repetition"), Config.Repetition);
 			Manifest->SetStringField(TEXT("source_commit"), Config.SourceCommit);
@@ -3822,8 +3911,8 @@ namespace
 			if (Config.bScriptedLocomotionRun)
 			{
 				Manifest->SetStringField(TEXT("scenario_summary"), TEXT("scenario-summary.json"));
-				Manifest->SetStringField(TEXT("root_authority"), TEXT("Stage1_KinematicRoot"));
-				Manifest->SetStringField(TEXT("motion_source"), TEXT("Stage2A_KinematicShell"));
+				Manifest->SetStringField(TEXT("root_authority"), Config.ScriptedLocomotionProtocol.RootAuthority);
+				Manifest->SetStringField(TEXT("motion_source"), Config.ScriptedLocomotionProtocol.MotionSource);
 			}
 			Manifest->SetStringField(TEXT("policy_input_snapshot"), TEXT("policy-input-snapshot.json"));
 			Manifest->SetStringField(
@@ -3985,13 +4074,16 @@ bool FPhysAnimScriptedLocomotionProductTest::RunTest(const FString& Parameters)
 	{
 		ReviewMode->Set(Config.Variant == TEXT("ZeroActions") ? 2 : 0, ECVF_SetByCode);
 	}
-	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"), true))
+	if (!AutomationOpenMap(*Config.ScriptedLocomotionProtocol.Map, true))
 	{
-		AddError(TEXT("Unable to open the scripted-locomotion product map"));
+		AddError(FString::Printf(
+			TEXT("Unable to open scripted-locomotion protocol map '%s'"),
+			*Config.ScriptedLocomotionProtocol.Map));
 		return false;
 	}
 	const TSharedRef<FCausalStandingFixedTimeStepState> FixedTimeStepState =
-		MakeShared<FCausalStandingFixedTimeStepState>();
+		MakeShared<FCausalStandingFixedTimeStepState>(
+			Config.ScriptedLocomotionProtocol.FixedDeltaTimeSeconds);
 	AddCommand(new FConfigureCausalStandingFixedTimeStepCommand(FixedTimeStepState));
 	AddCommand(new FStartPIECommand(false));
 	AddCommand(new FCausalStandingCaptureCommand(this, Config, FixedTimeStepState));

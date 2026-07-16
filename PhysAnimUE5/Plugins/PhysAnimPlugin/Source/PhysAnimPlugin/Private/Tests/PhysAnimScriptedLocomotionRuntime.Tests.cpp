@@ -123,6 +123,27 @@ bool FPhysAnimScriptedLocomotionRuntimeTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("SCRIPTED-E68-03 Two half-intent steps travel 6 cm"), (double)Fixture.Actor->GetActorLocation().Size2D(), 6.0, 1.0e-3);
 	}
 
+	// E78 protocol authority: the scripted product seam uses the protocol speed instead of component defaults.
+	{
+		ResetToAllowed();
+		TestTrue(
+			TEXT("SCRIPTED-E78-01 Gate opens for protocol-speed test"),
+			TestComp->TryOpenStage2ALocomotionRequestGate(TEXT("ScriptedProtocolSpeedTest")));
+		TestTrue(
+			TEXT("SCRIPTED-E78-02 Protocol-supplied 60 cm/s locomotion succeeds"),
+			TestComp->TryActivateStage2AScriptedLocomotionIntent(0.05f, 0.5f, 0.0f, true, 60.0f));
+		TestEqual(
+			TEXT("SCRIPTED-E78-03 Desired speed is half of the supplied protocol speed"),
+			(double)TestComp->BridgeIntentState.DesiredSpeedCmPerSecond,
+			30.0,
+			1.0e-4);
+		TestEqual(
+			TEXT("SCRIPTED-E78-04 Displacement is derived from the supplied protocol speed"),
+			(double)TestComp->BridgeShellState.AcceptedWorldDeltaCm.Size2D(),
+			1.5,
+			1.0e-3);
+	}
+
 	// Red contract 2: destructive control applies the same shell transform but hides trajectory conditioning.
 	{
 		ResetToAllowed();

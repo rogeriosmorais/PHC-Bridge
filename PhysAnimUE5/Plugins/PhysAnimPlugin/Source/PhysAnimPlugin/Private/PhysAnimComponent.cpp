@@ -2342,7 +2342,8 @@ bool UPhysAnimComponent::TryActivateStage2AScriptedLocomotionIntent(
 	float DeltaTime,
 	float IntentMagnitude,
 	float YawDeltaDegrees,
-	bool bPublishTrajectoryConditioning)
+	bool bPublishTrajectoryConditioning,
+	float NominalSpeedCmPerSecond)
 {
 	Stage2ALastLocomotionTerminalState = EvaluateStage2ALocomotionRequestGate();
 	if (Stage2ALastLocomotionTerminalState != EStage2ALocomotionTerminalState::Allowed ||
@@ -2403,8 +2404,11 @@ bool UPhysAnimComponent::TryActivateStage2AScriptedLocomotionIntent(
 		WorldMoveDirection = FVector::ForwardVector;
 	}
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	const float DesiredSpeedCmPerSecond =
-		ResolveStage2ALocomotionSpeedCmPerSecond(EffectiveSettings) * ClampedMagnitude;
+	const float RuntimeNominalSpeedCmPerSecond = ResolveStage2ALocomotionSpeedCmPerSecond(EffectiveSettings);
+	const float EffectiveNominalSpeedCmPerSecond = NominalSpeedCmPerSecond > 0.0f
+		? NominalSpeedCmPerSecond
+		: RuntimeNominalSpeedCmPerSecond;
+	const float DesiredSpeedCmPerSecond = EffectiveNominalSpeedCmPerSecond * ClampedMagnitude;
 
 	BridgeIntentState.ActiveIntent = TEXT("ScriptedLocomotion");
 	BridgeIntentState.WorldMoveDirection = WorldMoveDirection;

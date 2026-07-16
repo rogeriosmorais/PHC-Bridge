@@ -1964,13 +1964,15 @@ public:
 		float DeltaSeconds,
 		float IntentMagnitude,
 		float YawDeltaDegrees,
-		bool bPublishTrajectoryConditioning)
+		bool bPublishTrajectoryConditioning,
+		float NominalSpeedCmPerSecond = -1.0f)
 	{
 		return TryActivateStage2AScriptedLocomotionIntent(
 			DeltaSeconds,
 			IntentMagnitude,
 			YawDeltaDegrees,
-			bPublishTrajectoryConditioning);
+			bPublishTrajectoryConditioning,
+			NominalSpeedCmPerSecond);
 	}
 	bool TestOnlyStopStage2AScriptedLocomotionAndReturnToStanding()
 	{
@@ -3478,7 +3480,8 @@ private:
 		float DeltaSeconds,
 		float IntentMagnitude,
 		float YawDeltaDegrees,
-		bool bPublishTrajectoryConditioning);
+		bool bPublishTrajectoryConditioning,
+		float NominalSpeedCmPerSecond = -1.0f);
 	bool StopStage2AScriptedLocomotionAndReturnToStanding();
 	FVector BuildStage2AWalkDeltaCm(float DeltaSeconds) const;
 	void ApplyStage2AKinematicShellWalkDelta(const FVector& DeltaCm);
