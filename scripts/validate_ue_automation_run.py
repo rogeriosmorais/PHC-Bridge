@@ -114,19 +114,22 @@ def validate_run(
                 int(report.get("failed", 0)) == 0
                 and int(report.get("inProcess", 0)) == 0
                 and int(report.get("notRun", 0)) == 0
-                and int(report.get("succeeded", 0)) >= 1
+                and (
+                    int(report.get("succeeded", 0))
+                    + int(report.get("succeededWithWarnings", 0))
+                )
+                >= 1
             )
-            test_clean = (
-                test.get("state") == "Success"
-                and int(test.get("errors", 0)) == 0
-                and int(test.get("warnings", 0)) == 0
-            )
+            # Unreal categorizes a successful test with captured runtime warnings as
+            # succeededWithWarnings. Fixture validation confirms completion and identity;
+            # warning interpretation belongs to the behavioral evaluator and evidence audit.
+            test_clean = test.get("state") == "Success" and int(test.get("errors", 0)) == 0
             checks["automation_success"] = counters_clean and test_clean
             if not checks["automation_success"]:
                 issues.append(
                     Issue(
                         "automation_not_successful",
-                        "Automation report or exact test is not a clean success",
+                        "Automation report or exact test is not a successful zero-error completion",
                         str(report_path),
                     )
                 )
