@@ -300,55 +300,6 @@ namespace
 				DataRootRotation.RotateVector(AngularVelocityInRootFrame),
 				KINDA_SMALL_NUMBER));
 
-		const FVector2D TranslationOnlyOffset =
-			UPhysAnimComponent::ResolveMimicTargetTranslationOnlyDataOffsetXY(
-				SelectedWorldRoot,
-				SelectedDataRoot);
-		TestTrue(
-			TEXT("E76 translation-only reference restores the historical selected world-to-data XY offset"),
-			TranslationOnlyOffset.Equals(FVector2D(9.0, 18.0), KINDA_SMALL_NUMBER));
-		TArray<FPhysAnimBodySample> TranslationOnlySamples;
-		UPhysAnimComponent::MakeMimicTargetTranslationOnlyBodySamples(
-			WorldFrameSamples,
-			TranslationOnlyOffset,
-			0.5f,
-			TranslationOnlySamples);
-		TestEqual(
-			TEXT("E76 translation-only conversion preserves every body sample"),
-			TranslationOnlySamples.Num(),
-			WorldFrameSamples.Num());
-		for (int32 SampleIndex = 0; SampleIndex < TranslationOnlySamples.Num(); ++SampleIndex)
-		{
-			const FPhysAnimBodySample& SourceSample = WorldFrameSamples[SampleIndex];
-			const FPhysAnimBodySample& TranslationOnlySample = TranslationOnlySamples[SampleIndex];
-			TestTrue(
-				*FString::Printf(TEXT("E76 sample %d subtracts only XY offset and ground height"), SampleIndex),
-				TranslationOnlySample.Position.Equals(
-					SourceSample.Position - FVector(TranslationOnlyOffset.X, TranslationOnlyOffset.Y, 0.5f),
-					KINDA_SMALL_NUMBER));
-			TestTrue(
-				*FString::Printf(TEXT("E76 sample %d preserves canonical rotation"), SampleIndex),
-				TranslationOnlySample.Rotation.Equals(SourceSample.Rotation, 0.0f));
-			TestTrue(
-				*FString::Printf(TEXT("E76 sample %d preserves canonical linear velocity"), SampleIndex),
-				TranslationOnlySample.LinearVelocity.Equals(SourceSample.LinearVelocity, 0.0f));
-			TestTrue(
-				*FString::Printf(TEXT("E76 sample %d preserves canonical angular velocity"), SampleIndex),
-				TranslationOnlySample.AngularVelocity.Equals(SourceSample.AngularVelocity, 0.0f));
-		}
-		TestTrue(
-			TEXT("E76 active shell locomotion uses the historical translation-only mimic reference"),
-			UPhysAnimComponent::ShouldUseLocomotionTranslationOnlyMimicReference(
-				EPhysAnimRuntimeState::LocomotionActiveShell));
-		TestFalse(
-			TEXT("E76 standing retains the full canonical world-to-data mimic frame"),
-			UPhysAnimComponent::ShouldUseLocomotionTranslationOnlyMimicReference(
-				EPhysAnimRuntimeState::BalanceActive_Standing));
-		TestFalse(
-			TEXT("E76 denied locomotion cannot enter the translation-only policy path"),
-			UPhysAnimComponent::ShouldUseLocomotionTranslationOnlyMimicReference(
-				EPhysAnimRuntimeState::LocomotionActiveShellDenied));
-
 		TestTrue(
 			TEXT("Prepare suppresses policy dispatch independently of evidence collection"),
 			UPhysAnimComponent::ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState::BalanceEntry_Prepare));

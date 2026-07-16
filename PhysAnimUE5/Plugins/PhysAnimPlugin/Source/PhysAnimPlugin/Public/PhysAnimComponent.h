@@ -3200,15 +3200,6 @@ public:
 		const FTransform& CurrentSelectedWorldRoot,
 		const FTransform& CurrentSelectedDataRoot,
 		TArray<FPhysAnimBodySample>& OutBodySamples);
-	static FVector2D ResolveMimicTargetTranslationOnlyDataOffsetXY(
-		const FTransform& CurrentSelectedWorldRoot,
-		const FTransform& CurrentSelectedDataRoot);
-	static void MakeMimicTargetTranslationOnlyBodySamples(
-		const TArray<FPhysAnimBodySample>& SourceBodySamples,
-		const FVector2D& DataOffsetXY,
-		float GroundHeight,
-		TArray<FPhysAnimBodySample>& OutBodySamples);
-	static bool ShouldUseLocomotionTranslationOnlyMimicReference(EPhysAnimRuntimeState RuntimeState);
 	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);
 	static bool ShouldPrewarmPhysicsControlActivationPose(bool bHasSkeletalMeshComponent, bool bHasLeaderPoseComponent);
 	static float ResolveTrainingAlignedMassScaleForBone(FName BoneName, float BlendAlpha);

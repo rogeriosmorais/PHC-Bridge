@@ -290,24 +290,11 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		}
 
 		TArray<FPhysAnimBodySample> MimicCurrentReferenceBodySamples;
-		if (ShouldUseLocomotionTranslationOnlyMimicReference(RuntimeState))
-		{
-			MakeMimicTargetTranslationOnlyBodySamples(
-				CurrentBodySamples,
-				ResolveMimicTargetTranslationOnlyDataOffsetXY(
-					MimicTargetReferenceWorldRoot,
-					MimicTargetReferenceDataRoot),
-				MimicTargetReferenceGroundHeight,
-				MimicCurrentReferenceBodySamples);
-		}
-		else
-		{
-			MakeMimicTargetDataFrameBodySamples(
-				CurrentBodySamples,
-				MimicTargetReferenceWorldRoot,
-				MimicTargetReferenceDataRoot,
-				MimicCurrentReferenceBodySamples);
-		}
+		MakeMimicTargetDataFrameBodySamples(
+			CurrentBodySamples,
+			MimicTargetReferenceWorldRoot,
+			MimicTargetReferenceDataRoot,
+			MimicCurrentReferenceBodySamples);
 
 		if (!PhysAnimBridge::BuildMimicTargetPoses(MimicCurrentReferenceBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, OutError))
 		{
