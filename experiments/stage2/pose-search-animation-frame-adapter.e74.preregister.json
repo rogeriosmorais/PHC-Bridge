@@ -1,0 +1,35 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E74",
+  "title": "Restore the actor-to-animation Pose Search trajectory frame adapter",
+  "baseline_commit": "54e719876835018e7f7069d69ecd59adc08e00b3",
+  "date": "2026-07-16",
+  "observed_failure": {
+    "scripted_shell_forward_axis": "actor/world +X at yaw zero",
+    "database_forward_axis": "animation-data +Y",
+    "current_selected_asset": "MF_Unarmed_Walk_Left",
+    "current_selected_asset_root_axis": "+X",
+    "normal_overall_shell_delta_xy_cm": [204.32, 31.26],
+    "normal_overall_physical_root_delta_xy_cm": [-58.66, -3.26],
+    "normal_final_root_shell_tracking_error_cm": 269.93515185370114,
+    "zero_actions_final_root_shell_tracking_error_cm": 203.05672836216857
+  },
+  "asset_contract": {
+    "MF_Unarmed_Walk_Fwd_half_second_root_delta_cm": [0.0, 150.0, 0.0],
+    "MF_Unarmed_Walk_Left_half_second_root_delta_cm": [151.830066, 0.0, 0.0],
+    "standard_manny_mesh_relative_yaw_degrees": -90.0
+  },
+  "hypothesis": "The trajectory predictor lost the actor-to-animation frame conversion. Expressing Pose Search query velocity in the authored animation frame by undoing the mesh-relative rotation will select the forward clip for actor-forward shell motion. Sampling that clip through the rotated mesh should make the physical pelvis progress with the shell rather than backward.",
+  "single_behavior_change": "Only the velocity supplied to the Pose Search trajectory predictor is frame-adapted. Convert world velocity to actor-local, apply the inverse actor-to-mesh relative rotation, then rotate back by the actor world rotation. Shell displacement, actor yaw, policy inputs, action conditioning, Physics Control gains, assets, schema, search weights, selection policy, and scenario timing remain unchanged.",
+  "tdd_contract": [
+    "With actor yaw 0 and mesh relative yaw -90, world +X maps to Pose Search +Y.",
+    "With actor yaw 30 and the same mesh-relative rotation, actor-forward maps to actor-relative +Y while preserving magnitude.",
+    "Zero velocity remains exactly zero.",
+    "The current-state velocity and every predicted future displacement use the same adapted frame.",
+    "The authoritative Normal episode selects MF_Unarmed_Walk_Fwd during sustained forward movement without an asset-name override.",
+    "Normal physical-root projected progress along the shell route is positive and exceeds ZeroActions.",
+    "Normal final root-shell tracking error is lower than ZeroActions while both retain the identical scripted shell path and turn."
+  ],
+  "rejection_rule": "Reject and revert if the forward clip is not selected, the physical root still moves backward, final tracking is not better than ZeroActions, stop-to-standing fails, or any standing/Stage2 contract regresses.",
+  "next_if_supported": "Use the fixed candidate measurements to preregister immutable scripted-locomotion protocol v2 and its full causal score before repetitions."
+}
