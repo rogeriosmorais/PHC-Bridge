@@ -1,0 +1,38 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E79",
+  "title": "Typed frame contract and deterministic locomotion replay matrix",
+  "status": "PREREGISTERED",
+  "baseline_commit": "61e0409481be1baef97f086feee0c41833a959e8",
+  "problem": "Critical locomotion values cross UE world, actor, mesh, animation-data, canonical Proto, and policy heading-local frames as plain FVector/FQuat. E74-E77 tested coordinate hypotheses in full Chaos. E77 selects Walk_Fwd but its roughly 300 cm/s authored root motion conflicts with the locked 160 cm/s shell trajectory.",
+  "single_change": "Add pure typed frame adapters and an eight-case deterministic replay matrix. E79 changes no runtime behavior.",
+  "query_contracts": [
+    "E73_ActorFacing_WorldVelocity",
+    "E74_ActorFacing_RotatedVelocity",
+    "E75_RotatedFacing_RotatedVelocity",
+    "E77_MeshFacing_WorldVelocity"
+  ],
+  "future_root_sources": [
+    "RawAnimationRootMotion",
+    "QueryTrajectoryRootMotion"
+  ],
+  "fixture": {
+    "actor_yaw_deg": 0.0,
+    "mesh_relative_yaw_deg": -90.0,
+    "requested_world_velocity_cm_per_sec": [160.0, 0.0, 0.0],
+    "walk_fwd_axis": [0.0, 1.0, 0.0],
+    "walk_fwd_half_second_delta_cm": [0.0, 150.0, 0.0],
+    "walk_left_axis": [1.0, 0.0, 0.0],
+    "walk_left_half_second_delta_cm": [151.830066, 0.0, 0.0],
+    "turn_delta_deg": 30.0
+  },
+  "acceptance": [
+    "Actor-forward resolves to authored forward.",
+    "Future root has positive route projection and speed within five percent of 160 cm/s.",
+    "Turn sign, zero velocity, and world-data-world round trips are exact.",
+    "Current and future states use one selected world-to-data transform.",
+    "Typed canonical observation and mimic tensors are finite and have locked widths.",
+    "Exactly one case survives: E77 query plus QueryTrajectoryRootMotion."
+  ],
+  "next_if_supported": "Use only the unique survivor in a separately preregistered runtime change, then run one authoritative v2 probe."
+}
