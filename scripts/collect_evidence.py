@@ -2,34 +2,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-SUCCESS_VERDICTS = {
-    "PASS",
-    "PASSED",
-    "SUCCESS",
-    "SUCCEEDED",
-    "COMPLETED",
-    "COMPLETE",
-    "PRODUCT SUCCESS",
-    "PRODUCT_SUCCESS",
-    "PRODUCT_SUCCESS_CANDIDATE",
-    "PRODUCT SUCCESS CANDIDATE",
-}
 
-FAILURE_VERDICTS = {
-    "BLOCKED",
-    "FAILED",
-    "FAIL",
-    "FAILED_VALIDATION",
-    "INCONCLUSIVE",
-}
+FINAL_DIAGNOSTIC = "DIAGNOSTIC"
+FINAL_BLOCKED = "BLOCKED"
+FINAL_CONTRADICTORY = "CONTRADICTORY"
+FINAL_INSUFFICIENT = "INSUFFICIENT_EVIDENCE"
 
-DIAGNOSTIC_VERDICTS = {
-    "DIAGNOSTIC",
-}
+PRODUCER_OBSERVED_CLASSIFICATION = "DIAGNOSTIC_ALL_SIGNALS_OBSERVED"
 
 ACTIVE_SEGMENT_STATES = {
     "ACTIVE",
@@ -40,22 +25,48 @@ ACTIVE_SEGMENT_STATES = {
     "SUCCEEDED",
 }
 
+ORDERED_SEGMENTS = (
+    "PoseSearch",
+    "PhcPolicy",
+    "PhysicsControl",
+    "Chaos",
+    "RendererFacingMotion",
+)
+
 LOG_VERDICT_RE = re.compile(
     r"\b(?:RESULT|VERDICT|STRICT\s*VERDICT|STRICT_VERDICT|STRICTVERDICT)\b"
     r"\s*[:=]\s*\{?\s*"
-    r"(PASS|PASSED|FAIL|FAILED|BLOCKED|SUCCESS|SUCCEEDED|CONTRADICTORY|INSUFFICIENT_EVIDENCE|MISSING(?:[_ ]EVIDENCE)?)\b",
+    r"(PASS|PASSED|FAIL|FAILED|BLOCKED|SUCCESS|SUCCEEDED|CONTRADICTORY|"
+    r"INSUFFICIENT_EVIDENCE|MISSING(?:[_ ]EVIDENCE)?)\b",
     re.IGNORECASE,
 )
 
-LOG_REASON_RE = re.compile(
-    r"terminal_reason=([A-Za-z0-9_]+)",
+ATTEMPT_CAPTURE_RE = re.compile(
+    r"\bPhysAnimProof:\s*AttemptCapture\s+"
+    r"uuid=(?P<uuid>\S+)\s+"
+    r"capture=(?P<capture>COMPLETED|TERMINATED)\s+"
+    r"active_standing_duration=(?P<duration>[+-]?(?:\d+(?:\.\d*)?|\.\d+))\s+"
+    r"terminal_reason=(?P<reason>[A-Za-z0-9_]+)\b",
     re.IGNORECASE,
 )
 
-TERMINAL_PROOF_PASS_LOG_RE = re.compile(
-    r"\bPHYSANIMPROOF\b.*\bATTEMPTRESULT\b.*\bVERDICT\s*=\s*PASS\b",
-    re.IGNORECASE,
+ADDITIONAL_REQUIRED_TERMINAL_FIELDS = (
+    "emitter_attempt_uuid",
+    "terminal_frame_artifact_captured",
+    "standing_window_sample_count",
+    "standing_window_max_delta_sec",
 )
+
+NONEMPTY_TERMINAL_FIELDS = {
+    "schema_version",
+    "attempt_uuid",
+    "emitter_attempt_uuid",
+    "attempt_nonce",
+    "captured_at_utc",
+    "source_commit",
+    "final_runtime_outcome",
+    "terminal_reason_name",
+}
 
 
 def repo_root_from_script() -> Path:
@@ -76,6 +87,28 @@ def truthy(value: Any) -> bool:
     return bool(value)
 
 
+def get_float(data: Dict[str, Any], key: str) -> Optional[float]:
+    value = data.get(key)
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def load_json_file(path: Optional[Path]) -> Optional[Dict[str, Any]]:
+    if path is None or not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def latest_matching_file(
     directory: Path,
     pattern: str,
@@ -83,31 +116,20 @@ def latest_matching_file(
 ) -> Optional[Path]:
     if not directory.exists():
         return None
+
     matches = list(directory.glob(pattern))
+    requested_attempt_uuid = normalize_text(attempt_uuid)
+    if requested_attempt_uuid:
+        matches = [
+            path
+            for path in matches
+            if normalize_text((load_json_file(path) or {}).get("attempt_uuid"))
+            == requested_attempt_uuid
+        ]
+
     if not matches:
         return None
-    if attempt_uuid is not None:
-        filtered_matches = []
-        for path in matches:
-            payload = load_json_file(path)
-            if not payload:
-                continue
-            if normalize_text(payload.get("attempt_uuid")) == attempt_uuid:
-                filtered_matches.append(path)
-        matches = filtered_matches
-        if not matches:
-            return None
     return max(matches, key=lambda path: (path.stat().st_mtime, path.name))
-
-
-def load_json_file(path: Optional[Path]) -> Optional[Dict[str, Any]]:
-    if path is None or not path.exists():
-        return None
-    with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if isinstance(payload, dict):
-        return payload
-    return {"value": payload}
 
 
 def read_text_lines(path: Optional[Path]) -> List[str]:
@@ -117,19 +139,187 @@ def read_text_lines(path: Optional[Path]) -> List[str]:
         return [line.rstrip("\n") for line in handle]
 
 
-def collect_log_claims(lines: Iterable[str]) -> List[str]:
-    claims = []
-    for line in lines:
-        if LOG_VERDICT_RE.search(line):
-            claims.append(line.strip())
-    return claims
-
-
 def filter_lines_for_attempt(lines: Iterable[str], attempt_uuid: Optional[str]) -> List[str]:
     requested_attempt_uuid = normalize_text(attempt_uuid)
     if not requested_attempt_uuid:
         return list(lines)
     return [line for line in lines if requested_attempt_uuid in line]
+
+
+def collect_log_claims(lines: Iterable[str]) -> List[str]:
+    return [
+        line.strip()
+        for line in lines
+        if ATTEMPT_CAPTURE_RE.search(line) or LOG_VERDICT_RE.search(line)
+    ]
+
+
+def load_required_terminal_fields() -> Tuple[List[str], Optional[str]]:
+    contract_path = repo_root_from_script() / "product-gates" / "standing-v0.v2.json"
+    contract = load_json_file(contract_path)
+    if contract is None:
+        return [], f"locked product contract unavailable: {contract_path}"
+
+    criteria = contract.get("criteria")
+    if not isinstance(criteria, list):
+        return [], f"locked product contract has no criteria list: {contract_path}"
+
+    fields: List[str] = []
+    for criterion in criteria:
+        if not isinstance(criterion, dict):
+            continue
+        fact = normalize_text(criterion.get("fact"))
+        if fact and fact not in fields:
+            fields.append(fact)
+    for fact in ADDITIONAL_REQUIRED_TERMINAL_FIELDS:
+        if fact not in fields:
+            fields.append(fact)
+    return fields, None
+
+
+def scalar_matches(actual: Any, expected: Any) -> bool:
+    if isinstance(expected, bool):
+        return isinstance(actual, bool) and actual is expected
+    if isinstance(expected, (int, float)) and not isinstance(expected, bool):
+        actual_number = finite_number(actual)
+        return actual_number is not None and actual_number == float(expected)
+    return type(actual) is type(expected) and actual == expected
+
+
+def finite_number(value: Any) -> Optional[float]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    result = float(value)
+    return result if math.isfinite(result) else None
+
+
+def is_utc_timestamp(value: Any) -> bool:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        return False
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
+def validate_contract_observations(terminal: Dict[str, Any]) -> List[str]:
+    contract_path = repo_root_from_script() / "product-gates" / "standing-v0.v2.json"
+    contract = load_json_file(contract_path)
+    if contract is None or not isinstance(contract.get("criteria"), list):
+        return []
+
+    failures: List[str] = []
+    for criterion in contract["criteria"]:
+        if not isinstance(criterion, dict):
+            continue
+        fact = normalize_text(criterion.get("fact"))
+        operator = normalize_text(criterion.get("operator"))
+        if not fact or fact not in terminal or terminal.get(fact) is None:
+            continue
+
+        actual = terminal[fact]
+        expected = criterion.get("value")
+        passed = False
+        expectation = f"{operator} {expected!r}"
+        if operator == "equals":
+            passed = scalar_matches(actual, expected)
+        elif operator == "nonempty":
+            passed = isinstance(actual, str) and bool(actual.strip())
+        elif operator == "timestamp":
+            passed = is_utc_timestamp(actual)
+        elif operator == "commit":
+            passed = isinstance(actual, str) and re.fullmatch(r"[0-9a-f]{40}", actual) is not None
+        elif operator == "one_of" and isinstance(expected, list):
+            passed = any(scalar_matches(actual, candidate) for candidate in expected)
+        elif operator in {"minimum", "maximum", "positive"}:
+            actual_number = finite_number(actual)
+            expected_number = finite_number(expected)
+            if actual_number is not None and actual_number >= 0.0:
+                if operator == "minimum" and expected_number is not None:
+                    passed = actual_number >= expected_number
+                elif operator == "maximum" and expected_number is not None:
+                    passed = actual_number <= expected_number
+                elif operator == "positive":
+                    passed = actual_number > 0.0
+        elif operator == "range":
+            actual_number = finite_number(actual)
+            minimum = finite_number(criterion.get("minimum"))
+            maximum = finite_number(criterion.get("maximum"))
+            exclusive_minimum = criterion.get("exclusive_minimum", False)
+            expectation = f"range {criterion.get('minimum')}..{criterion.get('maximum')}"
+            if exclusive_minimum is True:
+                expectation += " (exclusive minimum)"
+            if (
+                actual_number is not None
+                and minimum is not None
+                and maximum is not None
+                and minimum <= maximum
+                and isinstance(exclusive_minimum, bool)
+            ):
+                lower_passed = (
+                    actual_number > minimum
+                    if exclusive_minimum
+                    else actual_number >= minimum
+                )
+                passed = lower_passed and actual_number <= maximum
+
+        if not passed:
+            failures.append(
+                f"locked contract observation failed: {fact} {expectation}; observed {actual!r}"
+            )
+
+    invariants = contract.get("invariants")
+    if isinstance(invariants, list):
+        for invariant in invariants:
+            if not isinstance(invariant, dict) or invariant.get("operator") != "less_than_or_equal":
+                continue
+            left = normalize_text(invariant.get("left"))
+            right = normalize_text(invariant.get("right"))
+            if not left or not right or terminal.get(left) is None or terminal.get(right) is None:
+                continue
+            left_number = finite_number(terminal[left])
+            right_number = finite_number(terminal[right])
+            if left_number is None or right_number is None or left_number < 0.0 or right_number < 0.0 or left_number > right_number:
+                failures.append(
+                    f"locked contract invariant failed: {left} <= {right}; "
+                    f"observed {terminal[left]!r} > {terminal[right]!r}"
+                )
+    return failures
+
+
+def missing_terminal_fields(terminal: Dict[str, Any], required_fields: Sequence[str]) -> List[str]:
+    missing: List[str] = []
+    for field in required_fields:
+        if field not in terminal or terminal.get(field) is None:
+            missing.append(field)
+        elif field in NONEMPTY_TERMINAL_FIELDS and not normalize_text(terminal.get(field)):
+            missing.append(field)
+    return missing
+
+
+def missing_summary_structure(summary: Dict[str, Any]) -> List[str]:
+    missing: List[str] = []
+    if not normalize_text(summary.get("attempt_uuid")):
+        missing.append("attempt_uuid")
+    if "diagnostic_classification" not in summary:
+        missing.append("diagnostic_classification")
+    if not isinstance(summary.get("quality_flags"), dict):
+        missing.append("quality_flags")
+
+    segments = summary.get("segments")
+    if not isinstance(segments, list):
+        missing.append("segments")
+    else:
+        segment_names = {
+            normalize_text(segment.get("segment_name"))
+            for segment in segments
+            if isinstance(segment, dict)
+        }
+        for segment_name in ORDERED_SEGMENTS:
+            if segment_name not in segment_names:
+                missing.append(f"segments.{segment_name}")
+    return missing
 
 
 def format_key_value(name: str, value: Any) -> str:
@@ -143,65 +333,48 @@ def format_key_value(name: str, value: Any) -> str:
 
 
 def summarize_terminal(terminal: Dict[str, Any]) -> List[str]:
-    fields = [
+    fields = (
         "attempt_uuid",
-        "physical_continuity_validator_passed",
+        "emitter_attempt_uuid",
+        "schema_version",
+        "final_runtime_outcome",
         "terminal_frame_artifact_captured",
         "terminal_reason_name",
         "terminal_reason",
-        "hold_duration_sec",
-    ]
+        "balance_active_standing_continuous_sec",
+        "standing_window_sample_count",
+        "standing_window_max_delta_sec",
+        "setup_override_count",
+    )
     return [format_key_value(field, terminal.get(field)) for field in fields if field in terminal]
 
 
 def summarize_stability_metrics(terminal: Dict[str, Any]) -> List[str]:
-    metrics = [
+    metrics = (
         ("Hold Duration", "hold_duration_sec"),
+        ("Standing Window", "balance_active_standing_continuous_sec"),
+        ("Standing Samples", "standing_window_sample_count"),
+        ("Standing Max Delta", "standing_window_max_delta_sec"),
         ("Simulating Bodies", "runtime_simulating_body_count"),
         ("Max Root Tilt", "max_root_tilt_deg"),
         ("Peak Angular Speed", "peak_angular_speed_deg_per_sec"),
         ("Support Churn", "support_churn_hz"),
         ("Proxy Drift", "proxy_outside_hull_duration_ms"),
         ("Terminal Reason", "terminal_reason_name"),
-    ]
-    
-    # Stage 2A Locomotion Telemetry
-    stage2a_metrics = [
-        ("Root Mode", "root_mode"),
-        ("Locomotion Intent", "locomotion_intent"),
-        ("Policy Output Active", "policy_output_active"),
-        ("Shell Divergence Peak", "shell_divergence_peak"),
+        ("Policy Inference Success", "policy_inference_success_count"),
         ("Thigh Net Work", "thigh_net_work"),
-        ("Action Variance", "action_magnitude_variance"),
-        ("Inference Success", "policy_inference_success_count"),
-    ]
-
-    lines = []
-    for label, key in metrics:
-        if key in terminal:
-            lines.append(f"{label}={terminal.get(key)}")
-            
-    for label, key in stage2a_metrics:
-        if key in terminal:
-            lines.append(f"{label}={terminal.get(key)}")
-            
-    if "capsule_velocity_x" in terminal:
-        vx = get_float(terminal, "capsule_velocity_x")
-        vy = get_float(terminal, "capsule_velocity_y")
-        vz = get_float(terminal, "capsule_velocity_z")
-        lines.append(f"Capsule Velocity=({vx}, {vy}, {vz})")
-        
-    return lines
+    )
+    return [f"{label}={terminal.get(key)}" for label, key in metrics if key in terminal]
 
 
 def summarize_summary(summary: Dict[str, Any]) -> List[str]:
-    fields = [
+    fields = (
         "attempt_uuid",
-        "strict_verdict",
+        "diagnostic_classification",
         "terminal_reason",
         "terminal_reason_name",
         "missing_evidence",
-    ]
+    )
     lines = [format_key_value(field, summary.get(field)) for field in fields if field in summary]
     quality_flags = summary.get("quality_flags")
     if isinstance(quality_flags, dict):
@@ -224,311 +397,205 @@ def summarize_log(path: Optional[Path], lines: Sequence[str]) -> List[str]:
         return ["no log file found"]
     claims = collect_log_claims(lines)
     if not claims:
-        return [f"{path.name} | no verdict-like log lines found"]
-    preview = claims[:5]
-    result = [f"{path.name} | {len(claims)} claim-like line(s)"]
-    result.extend(format_log_claim(claim) for claim in preview)
+        return [f"{path.name} | no AttemptCapture or verdict-like lines found"]
+    result = [f"{path.name} | {len(claims)} factual/claim line(s)"]
+    result.extend(claims[:5])
     return result
 
 
-def format_log_claim(line: str) -> str:
-    if TERMINAL_PROOF_PASS_LOG_RE.search(line):
-        return f"terminal proof evidence: {line}"
-    return line
+def runtime_failure_state(terminal: Dict[str, Any]) -> Optional[bool]:
+    required_fields = (
+        "terminal_reason",
+        "terminal_reason_name",
+        "final_runtime_outcome",
+        "terminal_frame_artifact_captured",
+    )
+    if any(field not in terminal or terminal.get(field) is None for field in required_fields):
+        return None
+
+    return (
+        terminal.get("terminal_reason") not in (0, "0")
+        or normalize_upper(terminal.get("terminal_reason_name")) != "NONE"
+        or normalize_text(terminal.get("final_runtime_outcome")) != "BalanceActive_Standing"
+        or terminal.get("terminal_frame_artifact_captured") is not True
+    )
 
 
-def first_blocking_segment(summary: Optional[Dict[str, Any]]) -> str:
-    if not summary:
-        return "No evidence summary available."
-    segments = summary.get("segments")
-    if not isinstance(segments, list) or not segments:
-        return "No segment data available."
-    for segment in segments:
-        if not isinstance(segment, dict):
-            continue
-        state = normalize_upper(segment.get("state"))
-        if state in ACTIVE_SEGMENT_STATES:
-            continue
-        parts = [
-            format_key_value("segment_name", segment.get("segment_name")),
-            format_key_value("state", segment.get("state")),
-        ]
-        if segment.get("missing_required_fields"):
-            parts.append(format_key_value("missing_required_fields", segment.get("missing_required_fields")))
-        if segment.get("diagnostic_notes"):
-            parts.append(format_key_value("diagnostic_notes", segment.get("diagnostic_notes")))
-        return ", ".join(parts)
-    return "No blocking segment found."
+def validate_attempt_capture(
+    log_lines: Sequence[str],
+    attempt_uuid: str,
+    terminal: Dict[str, Any],
+) -> Tuple[List[str], List[str]]:
+    captures = []
+    for line in log_lines:
+        match = ATTEMPT_CAPTURE_RE.search(line)
+        if match and normalize_text(match.group("uuid")) == attempt_uuid:
+            captures.append(match)
+
+    missing: List[str] = []
+    contradictions: List[str] = []
+    if not captures:
+        missing.append(f"production AttemptCapture log for attempt_uuid={attempt_uuid}")
+        return missing, contradictions
+
+    if len(captures) > 1:
+        contradictions.append(f"multiple production AttemptCapture lines found for attempt_uuid={attempt_uuid}")
+        return missing, contradictions
+
+    capture = captures[0]
+    runtime_failed = runtime_failure_state(terminal)
+    if runtime_failed is not None:
+        expected_capture = "TERMINATED" if runtime_failed else "COMPLETED"
+        actual_capture = normalize_upper(capture.group("capture"))
+        if actual_capture != expected_capture:
+            contradictions.append(
+                f"log reports capture={actual_capture} but terminal facts require capture={expected_capture}"
+            )
+
+    artifact_reason = normalize_upper(terminal.get("terminal_reason_name"))
+    log_reason = normalize_upper(capture.group("reason"))
+    if artifact_reason and log_reason != artifact_reason:
+        contradictions.append(
+            f"log reports terminal_reason={log_reason} but artifact reports terminal_reason={artifact_reason}"
+        )
+
+    artifact_duration = get_float(terminal, "balance_active_standing_continuous_sec")
+    log_duration = float(capture.group("duration"))
+    if artifact_duration is not None and not math.isclose(log_duration, artifact_duration, abs_tol=0.001):
+        contradictions.append(
+            "log active_standing_duration="
+            f"{log_duration:.3f} but artifact balance_active_standing_continuous_sec={artifact_duration:.3f}"
+        )
+    return missing, contradictions
 
 
-def summary_supports_success(summary: Optional[Dict[str, Any]]) -> bool:
-    if not summary:
-        return False
-    verdict = normalize_upper(summary.get("strict_verdict"))
-    if verdict not in SUCCESS_VERDICTS:
-        return False
-
-    # Stage 2A Value Checks (if fields are present in summary)
-    if "ThighNetWork" in summary:
-        if get_float(summary, "ThighNetWork", 0.0) <= 0.5:
-            return False
-    
-    if "PolicyInferenceSuccessCount" in summary:
-        if get_float(summary, "PolicyInferenceSuccessCount", 0.0) <= 0:
-            return False
-
-    if "action_magnitude_variance" in summary:
-        if get_float(summary, "action_magnitude_variance", 0.0) <= 0:
-            return False
-    elif "ActionMagnitudeVariance" in summary:
-        if get_float(summary, "ActionMagnitudeVariance", 0.0) <= 0:
-            return False
-
-    quality_flags = summary.get("quality_flags")
-    if isinstance(quality_flags, dict):
-        if truthy(quality_flags.get("missing_evidence")):
-            return False
-        if truthy(quality_flags.get("terminal_failure")):
-            return False
-        if truthy(quality_flags.get("artifact_log_contradiction")):
-            return False
-    if truthy(summary.get("missing_evidence")):
-        return False
-    return True
-
-
-def get_float(data: dict, key: str, default: float = 0.0) -> float:
-    val = data.get(key)
-    if val is None:
-        return default
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return default
-
-
-def terminal_supports_success(terminal: Optional[Dict[str, Any]]) -> bool:
-    if not terminal:
-        return False
-
-    # 1. Fundamental Validation
-    if not truthy(terminal.get("physical_continuity_validator_passed")):
-        return False
-    if "terminal_frame_artifact_captured" in terminal and not truthy(terminal.get("terminal_frame_artifact_captured")):
-        return False
-
-    # 2. Terminal State (None/nullptr/0 is success)
-    reason = terminal.get("terminal_reason")
-    reason_name = normalize_upper(terminal.get("terminal_reason_name"))
-    if reason is not None and reason != 0 and reason != "nullptr":
-        return False
-    if reason_name and reason_name != "NONE" and reason_name != "NULLPTR":
-        return False
-
-    # 3. Stability Metrics (Authoritative Stage 1 Thresholds)
-    # Hold Duration (Min 3.0s)
-    if get_float(terminal, "hold_duration_sec", 0.0) < 3.0:
-        return False
-
-    # Max Root Tilt (Max 20.0 deg)
-    if get_float(terminal, "max_root_tilt_deg", 0.0) > 20.0:
-        return False
-
-    # Peak Angular Speed (Max 720.0 deg/s)
-    if get_float(terminal, "peak_angular_speed_deg_per_sec", 0.0) > 720.0:
-        return False
-
-    # Support Churn (Max 12.0 Hz)
-    if get_float(terminal, "support_churn_hz", 0.0) > 12.0:
-        return False
-
-    # Proxy Drift (Max 100.0 ms)
-    if get_float(terminal, "proxy_outside_hull_duration_ms", 0.0) > 100.0:
-        return False
-
-    # 4. Authority & Assistance
-    if int(terminal.get("authority_conflict_count", 0)) > 0:
-        return False
-    if int(terminal.get("shell_helper_used_count", 0)) > 0:
-        return False
-
-    # 5. AI Activation Proofs (Stage 2)
-    # Policy Inference must have at least one success
-    if get_float(terminal, "policy_inference_success_count", 0.0) <= 0:
-        return False
-
-    # Thigh Net Work (Min 0.5 Joules)
-    if get_float(terminal, "thigh_net_work", 0.0) <= 0.5:
-        # Fallback to PascalCase just in case the emitter hasn't transitioned
-        if get_float(terminal, "ThighNetWork", 0.0) <= 0.5:
-            return False
-
-    # Action Magnitude Variance (Min > 0)
-    # A frozen action (variance=0) is a failure of intent
-    if get_float(terminal, "action_magnitude_variance", 0.0) <= 0:
-        # Fallback to PascalCase
-        if get_float(terminal, "ActionMagnitudeVariance", 0.0) <= 0:
-            # Only block if the field is actually present and zero.
-            # If both are missing, it might be an older Stage 1 artifact.
-            if "action_magnitude_variance" in terminal or "ActionMagnitudeVariance" in terminal:
-                return False
-
-    # Control Target Normal Writes (Min > 0)
-    if get_float(terminal, "control_target_normal_writes", 0.0) <= 0:
-        if "control_target_normal_writes" in terminal:
-            return False
-
-    return True
-
-
-def artifact_verdict(summary: Optional[Dict[str, Any]], terminal: Optional[Dict[str, Any]]) -> str:
-    if summary is None or terminal is None:
-        return "MISSING EVIDENCE"
-    if truthy(summary.get("missing_evidence")):
-        return "MISSING EVIDENCE"
-    summary_verdict = normalize_upper(summary.get("strict_verdict"))
-    if summary_verdict in FAILURE_VERDICTS:
-        return summary_verdict.replace("_", " ")
-    if summary_verdict in DIAGNOSTIC_VERDICTS:
-        return summary_verdict
-    if summary_supports_success(summary) and terminal_supports_success(terminal):
-        return "PRODUCT SUCCESS"
-    return "BLOCKED"
-
-
-def has_log_pass_claim(log_claims: Sequence[str]) -> bool:
-    for line in log_claims:
-        if TERMINAL_PROOF_PASS_LOG_RE.search(line):
-            continue
-        upper = line.upper()
-        if "PASS" in upper or "PASSED" in upper or "SUCCESS" in upper:
-            return True
-    return False
-
-
-def has_log_fail_claim(log_claims: Sequence[str]) -> bool:
-    for line in log_claims:
-        upper = line.upper()
-        if "FAIL" in upper or "FAILED" in upper or "BLOCKED" in upper:
-            return True
-    return False
-
-
-def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[str]:
+def build_report_result(
+    repo_root: Path,
+    attempt_uuid: Optional[str] = None,
+) -> Tuple[List[str], str]:
     test_results_dir = repo_root / "test-results"
     proof_dir = test_results_dir / "proof-artifacts"
     summary_dir = test_results_dir / "evidence-summaries"
-    log_dir = repo_root / "PhysAnimUE5" / "Saved" / "Logs"
+    saved_log_dir = repo_root / "PhysAnimUE5" / "Saved" / "Logs"
+    test_log_dir = test_results_dir / "logs"
 
     requested_attempt_uuid = normalize_text(attempt_uuid) or None
-
-    # Ensure test-results/logs directory is created if needed
-    (test_results_dir / "logs").mkdir(parents=True, exist_ok=True)
-
     terminal_path = latest_matching_file(proof_dir, "*_terminal.json", requested_attempt_uuid)
-    summary_path = latest_matching_file(summary_dir, "*_evidence_summary.json", requested_attempt_uuid)
-    
     terminal = load_json_file(terminal_path)
+    resolved_attempt_uuid = requested_attempt_uuid
+    if not resolved_attempt_uuid and terminal is not None:
+        resolved_attempt_uuid = normalize_text(terminal.get("attempt_uuid")) or None
+
+    # A summary is selected only after the terminal attempt is fixed. Independent
+    # "latest" selection would merge two experiments into a synthetic result.
+    summary_path = (
+        latest_matching_file(summary_dir, "*_evidence_summary.json", resolved_attempt_uuid)
+        if resolved_attempt_uuid
+        else None
+    )
     summary = load_json_file(summary_path)
 
-    # Resolve attempt UUID from loaded artifacts if not explicitly requested
-    resolved_attempt_uuid = requested_attempt_uuid
-    if not resolved_attempt_uuid:
-        if terminal and "attempt_uuid" in terminal:
-            resolved_attempt_uuid = normalize_text(terminal.get("attempt_uuid"))
-        elif summary and "attempt_uuid" in summary:
-            resolved_attempt_uuid = normalize_text(summary.get("attempt_uuid"))
-
-    log_path = None
+    log_path: Optional[Path] = None
     if resolved_attempt_uuid:
-        attempt_log = test_results_dir / "logs" / f"{resolved_attempt_uuid}.log"
+        attempt_log = test_log_dir / f"{resolved_attempt_uuid}.log"
         if attempt_log.exists():
             log_path = attempt_log
-
     if log_path is None:
-        log_path = latest_matching_file(test_results_dir / "logs", "*.log")
-
+        log_path = latest_matching_file(test_log_dir, "*.log")
     if log_path is None:
-        log_path = latest_matching_file(log_dir, "*.log")
+        log_path = latest_matching_file(saved_log_dir, "*.log")
 
-    log_lines = filter_lines_for_attempt(read_text_lines(log_path), requested_attempt_uuid)
-    log_claims = collect_log_claims(log_lines)
+    log_lines = filter_lines_for_attempt(read_text_lines(log_path), resolved_attempt_uuid)
 
-    missing_items = []
-    if terminal_path is None:
-        if requested_attempt_uuid is None:
-            missing_items.append("terminal artifact")
-        else:
-            missing_items.append(f"terminal artifact for attempt_uuid={requested_attempt_uuid}")
-    if summary_path is None:
-        if requested_attempt_uuid is None:
-            missing_items.append("evidence summary")
-        else:
-            missing_items.append(f"evidence summary for attempt_uuid={requested_attempt_uuid}")
+    missing_items: List[str] = []
+    contradiction_items: List[str] = []
+    observation_failures: List[str] = []
 
-    explicit_missing = truthy(summary.get("missing_evidence")) if summary else False
-    if explicit_missing and "evidence summary" not in missing_items:
-        missing_items.append("evidence summary flagged missing_evidence=true")
+    if terminal_path is None or terminal is None:
+        suffix = f" for attempt_uuid={requested_attempt_uuid}" if requested_attempt_uuid else ""
+        missing_items.append(f"terminal artifact{suffix}")
 
-    # Check for mandatory fields in terminal
-    if terminal:
-        mandatory_fields = ["thigh_net_work", "policy_inference_success_count", "policy_inference_attempt_count"]
-        for field in mandatory_fields:
-            if field not in terminal or terminal.get(field) is None:
-                missing_items.append(f"missing mandatory terminal field: {field}")
+    if summary_path is None or summary is None:
+        suffix = f" for attempt_uuid={resolved_attempt_uuid}" if resolved_attempt_uuid else ""
+        missing_items.append(f"evidence summary{suffix}")
 
-    summary_success = summary_supports_success(summary)
-    terminal_success = terminal_supports_success(terminal)
+    required_fields, contract_error = load_required_terminal_fields()
+    if contract_error:
+        missing_items.append(contract_error)
 
-    contradiction_items = []
-    stability_invalid = False
+    if terminal is not None:
+        for field in missing_terminal_fields(terminal, required_fields):
+            missing_items.append(f"missing mandatory terminal field: {field}")
+        observation_failures.extend(validate_contract_observations(terminal))
 
-    # Extract terminal reason from log
-    log_terminal_reason = None
-    if terminal and "attempt_uuid" in terminal:
-        target_uuid = terminal["attempt_uuid"]
-        for line in log_claims:
-            if target_uuid in line:
-                match = LOG_REASON_RE.search(line)
-                if match:
-                    log_terminal_reason = normalize_upper(match.group(1))
-                    break
-    
-    if log_terminal_reason and terminal:
-        artifact_reason = normalize_upper(terminal.get("terminal_reason_name"))
-        if log_terminal_reason != artifact_reason:
-            contradiction_items.append(f"log reports reason={log_terminal_reason} but artifact reports reason={artifact_reason}")
+        artifact_attempt_uuid = normalize_text(terminal.get("attempt_uuid"))
+        emitter_attempt_uuid = normalize_text(terminal.get("emitter_attempt_uuid"))
+        if artifact_attempt_uuid and emitter_attempt_uuid and artifact_attempt_uuid != emitter_attempt_uuid:
+            contradiction_items.append(
+                f"artifact attempt_uuid={artifact_attempt_uuid} but emitter_attempt_uuid={emitter_attempt_uuid}"
+            )
+        if requested_attempt_uuid and artifact_attempt_uuid != requested_attempt_uuid:
+            contradiction_items.append(
+                f"requested attempt_uuid={requested_attempt_uuid} but artifact reports {artifact_attempt_uuid}"
+            )
 
-    if terminal:
-        hold_duration = terminal.get("hold_duration_sec")
-        sim_bodies = terminal.get("runtime_simulating_body_count")
+    if summary is not None:
+        for field in missing_summary_structure(summary):
+            missing_items.append(f"missing mandatory summary field: {field}")
+        if truthy(summary.get("missing_evidence")):
+            missing_items.append("evidence summary flagged missing_evidence=true")
+        quality_flags = summary.get("quality_flags")
+        if isinstance(quality_flags, dict) and truthy(quality_flags.get("missing_evidence")):
+            missing_items.append("evidence summary quality_flags.missing_evidence=true")
 
-        if hold_duration is None:
-            missing_items.append("stability field: hold_duration_sec")
-            stability_invalid = True
-        if sim_bodies is None:
-            missing_items.append("stability field: runtime_simulating_body_count")
-            stability_invalid = True
+    if terminal is not None and summary is not None:
+        terminal_uuid = normalize_text(terminal.get("attempt_uuid"))
+        summary_uuid = normalize_text(summary.get("attempt_uuid"))
+        if terminal_uuid and summary_uuid and terminal_uuid != summary_uuid:
+            contradiction_items.append(
+                f"terminal attempt_uuid={terminal_uuid} but summary attempt_uuid={summary_uuid}"
+            )
 
-        if hold_duration is not None and sim_bodies is not None:
-            # First-frame artifacts (0.033s) may have 0 sim bodies before Chaos wakes up.
-            is_first_frame = 0.0 < float(hold_duration) <= 0.04
-            if float(hold_duration) > 0.0 and int(sim_bodies) == 0 and not is_first_frame:
-                contradiction_items.append(f"hold_duration_sec={hold_duration} but runtime_simulating_body_count=0")
-                stability_invalid = True
-            if float(hold_duration) > 1000.0:
-                contradiction_items.append(f"implausible hold_duration_sec={hold_duration}")
-                stability_invalid = True
+        factual_failure = runtime_failure_state(terminal)
+        producer_classification = normalize_upper(summary.get("diagnostic_classification"))
+        if producer_classification == PRODUCER_OBSERVED_CLASSIFICATION and factual_failure is True:
+            contradiction_items.append(
+                "producer summary claims all signals observed but terminal facts report runtime failure"
+            )
 
-    if log_path is not None and has_log_pass_claim(log_claims) and not (summary_success and terminal_success):
-        contradiction_items.append("log claims PASS/PASSED/SUCCESS, but artifacts do not support product success")
-    if log_path is not None and has_log_fail_claim(log_claims) and summary_success and terminal_success:
-        contradiction_items.append("log claims failure, but artifacts support product success")
-    if summary and terminal:
-        if normalize_upper(summary.get("strict_verdict")) in SUCCESS_VERDICTS and not terminal_success:
-            contradiction_items.append("summary strict verdict implies success, but terminal artifact does not support success")
-        if normalize_upper(summary.get("strict_verdict")) in FAILURE_VERDICTS and terminal_success and has_log_pass_claim(log_claims):
-            contradiction_items.append("log PASS contradicts blocked summary verdict")
+        quality_flags = summary.get("quality_flags")
+        if (
+            factual_failure is not None
+            and isinstance(quality_flags, dict)
+            and "terminal_failure" in quality_flags
+        ):
+            claimed_failure = truthy(quality_flags.get("terminal_failure"))
+            if claimed_failure != factual_failure:
+                contradiction_items.append(
+                    "summary quality_flags.terminal_failure disagrees with terminal facts"
+                )
+
+    if terminal is not None and resolved_attempt_uuid:
+        capture_missing, capture_contradictions = validate_attempt_capture(
+            log_lines,
+            resolved_attempt_uuid,
+            terminal,
+        )
+        missing_items.extend(capture_missing)
+        contradiction_items.extend(capture_contradictions)
+
+    # Preserve order while keeping the report readable when two checks find the same gap.
+    missing_items = list(dict.fromkeys(missing_items))
+    contradiction_items = list(dict.fromkeys(contradiction_items))
+
+    if contradiction_items:
+        classification = FINAL_CONTRADICTORY
+    elif missing_items:
+        classification = FINAL_INSUFFICIENT
+    elif observation_failures or (terminal is not None and runtime_failure_state(terminal) is True):
+        classification = FINAL_BLOCKED
+    else:
+        classification = FINAL_DIAGNOSTIC
 
     actual_lines: List[str] = []
     if terminal_path is not None and terminal is not None:
@@ -540,99 +607,79 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
     else:
         actual_lines.append("evidence summary missing")
 
-    stability_metrics = summarize_stability_metrics(terminal) if terminal else ["no terminal artifact found"]
+    weak_lines = summarize_log(log_path, log_lines)
+    if summary is not None:
+        producer_classification = normalize_text(summary.get("diagnostic_classification"))
+        if producer_classification:
+            weak_lines.append(
+                "producer diagnostic_classification is reported for context and is not used as this collector's classification"
+            )
 
-    weak_lines: List[str] = []
-    if log_path is not None:
-        weak_lines.extend(summarize_log(log_path, log_lines))
-    else:
-        weak_lines.append("no log file found")
-    if not summary_success:
-        weak_lines.append("summary strict verdict does not support product success")
-    if terminal is not None and not terminal_success:
-        weak_lines.append("terminal artifact does not satisfy the success support check")
+    segment_lines: List[str] = []
+    blocking_segment: Optional[str] = None
+    if summary is not None and isinstance(summary.get("segments"), list):
+        segment_map = {
+            normalize_text(segment.get("segment_name")): normalize_text(segment.get("state"))
+            for segment in summary["segments"]
+            if isinstance(segment, dict)
+        }
+        for name in ORDERED_SEGMENTS:
+            if name not in segment_map:
+                continue
+            state = segment_map[name]
+            if normalize_upper(state) not in ACTIVE_SEGMENT_STATES:
+                segment_lines.append(f"- segment_name={name}, state={state}")
+                if blocking_segment is None:
+                    blocking_segment = name
+    if not segment_lines:
+        segment_lines = [
+            "- All reported segments are Active."
+            if summary is not None and summary.get("segments")
+            else "- No segment data available."
+        ]
 
-    missing_lines: List[str] = []
-    if missing_items:
-        for item in missing_items:
-            missing_lines.append(f"- {item}")
-    else:
-        missing_lines.append("- none")
-    if explicit_missing:
-        missing_lines.append("- summary marked missing_evidence=true, so it cannot pass")
+    blocker_line = (
+        f"Next Blocking Segment: segment_name={blocking_segment}"
+        if blocking_segment
+        else "No blocking segment identified."
+    )
 
-    segment_lines = []
-    blocking_segment = None
-    ordered_segments = ["PoseSearch", "PhcPolicy", "PhysicsControl", "Chaos", "RendererFacingMotion"]
-    
-    if summary:
-        segments = summary.get("segments")
-        if isinstance(segments, list):
-            segment_map = {s.get("segment_name"): s.get("state") for s in segments if isinstance(s, dict)}
-            for name in ordered_segments:
-                if name in segment_map:
-                    state = segment_map[name]
-                    if state != "Active":
-                        segment_lines.append(f"- segment_name={name}, state={state}")
-                    if blocking_segment is None and state != "Active":
-                        blocking_segment = name
-    
-    if not segment_lines and not blocking_segment:
-        if summary and summary.get("segments"):
-            segment_lines = ["- All reported segments are Active."]
-        else:
-            segment_lines = ["- No segment data available."]
-    elif not segment_lines:
-        segment_lines = ["- All reported segments are Active."]
-
-    if missing_items:
-        verdict = "INSUFFICIENT_EVIDENCE"
-    elif contradiction_items:
-        verdict = "CONTRADICTORY"
-    else:
-        verdict = artifact_verdict(summary, terminal)
-
-    if verdict == "PRODUCT SUCCESS":
-        blocker_line = "No blocking segment found."
-    elif blocking_segment:
-        blocker_line = f"Next Blocking Segment: segment_name={blocking_segment}"
-    else:
-        blocker_line = "No blocking segment identified."
-
-    contradiction_lines = [f"- {line}" for line in contradiction_items] if contradiction_items else ["- none"]
     lines = [
+        "Authority",
+        "- LOCAL_DIAGNOSTIC_ONLY; this report cannot satisfy the external product gate.",
+        "- Runtime facts and external oracle/receipt must be authored by separate trust domains.",
+        "",
         "Actual Evidence",
         *[f"- {line}" for line in actual_lines],
         "",
         "Stability Metrics",
-        *[f"- {line}" for line in stability_metrics],
+        *[f"- {line}" for line in (summarize_stability_metrics(terminal) if terminal else ["no terminal artifact found"])],
         "",
         "Weak Evidence",
         *[f"- {line}" for line in weak_lines],
         "",
         "Contradictions",
-        *contradiction_lines,
+        *([f"- {line}" for line in contradiction_items] if contradiction_items else ["- none"]),
         "",
         "Missing Evidence",
-        *missing_lines,
+        *([f"- {line}" for line in missing_items] if missing_items else ["- none"]),
+        "",
+        "Diagnostic Contract Findings",
+        *([f"- {line}" for line in observation_failures] if observation_failures else ["- none"]),
         "",
         "Segment Status",
         *segment_lines,
         blocker_line,
         "",
+        "Local Diagnostic Classification",
+        f"- {classification}",
     ]
+    return lines, classification
 
-    if stability_invalid:
-        lines.extend([
-            "CRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.",
-            "",
-        ])
 
-    lines.extend([
-        "Verdict",
-        f"- {verdict}",
-    ])
-    return lines
+def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[str]:
+    report, _ = build_report_result(repo_root, attempt_uuid)
+    return report
 
 
 def parse_args() -> argparse.Namespace:
@@ -653,9 +700,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     repo_root = Path(args.repo_root).resolve() if args.repo_root else repo_root_from_script()
-    report = build_report(repo_root, attempt_uuid=args.attempt_uuid)
+    report, classification = build_report_result(repo_root, attempt_uuid=args.attempt_uuid)
     print("\n".join(report))
-    return 0
+    return 0 if classification == FINAL_DIAGNOSTIC else 1
 
 
 if __name__ == "__main__":

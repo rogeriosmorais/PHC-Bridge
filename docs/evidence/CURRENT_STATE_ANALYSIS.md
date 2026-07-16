@@ -1,54 +1,96 @@
-# Project Status & Bottleneck Analysis: Evidence Baseline
+# Current Product State
 
-## Current Status: **CONTRADICTORY / BLOCKED**
-Date: 2026-06-13
+## Status
 
-The implementation of the **Evidence Baseline (PHC-Bridge)** is technically complete and verified. We now have a "harsh" reporting system that successfully separates human-readable log optimism from structured physical truth.
+The current causal-standing product behavior is **FAIL** in a development run.
+A clean committed milestone bundle has not yet been executed for this revision.
+The project is not blocked by a signer, receipt, another machine, or a sibling
+checkout.
 
-### The Verdict: Why "CONTRADICTORY"?
-Recent baseline runs (Attempt `2266F239-416B-020D-5616-6FB7C055263F`) report a `CONTRADICTORY` verdict because:
-- **Log Claims:** `Result={Success}` (Automation Controller) and `Result: PASSED` (Logs).
-- **Artifact Reality:** `strict_verdict=BLOCKED` and `support_truth_clean=False`.
-- **Arbitration:** Per **ADR-EB-003 (Artifact-First Truth Arbitration)**, structured JSON fields outrank log claims. The attempt is downgraded to prevent misleading success promotion.
+The active product contract is `product-gates/causal-standing.v1.json`. It
+requires Manny to reach and remain in `BalanceActive_Standing`, execute the
+imported PHC ONNX policy, apply and read back Physics Control targets, simulate
+the required Chaos bodies without CharacterMovement or capsule assistance,
+recover from a fixed pelvis impulse, and outperform zero actions. Dropped
+control dispatch and forced support loss must be rejected for their intended
+reasons.
 
----
+## Latest Observed Attempt
 
-## Architectural Bottlenecks
+On 2026-07-11, a renderer-enabled Normal development attempt produced a valid
+`PRODUCT_RUN` manifest, 1,194 game-tick physics samples over exactly 10 seconds,
+and a UE scene capture with 263,307 nonblank pixels. The evaluator returned
+`FAIL`, not `INVALID` or `BLOCKED`.
 
-| Segment | Status | Evidence/Reason |
-| :--- | :--- | :--- |
-| **PoseSearch** | **ACTIVE** | Successfully selecting animations (e.g., `MM_Idle`). |
-| **PHC Policy** | **NOT REACHED** | **PRIMARY BLOCKER.** Neural network policy is not loaded or not being triggered during the hold phase. |
-| **Physics Control** | **INACTIVE** | `ReachedButInactive`. Targets are identified but zero normal writes occurred because the policy (upstream) is not providing offsets. |
-| **Chaos** | **ACTIVE** | Bodies are simulating, but `support_truth_clean=False` indicates balancing logic is failing. |
-| **Renderer Motion** | **ACTIVE** | Measurable motion proxy is captured. |
+Observed failures:
 
----
+- runtime state remained `BalanceSafeDeny` during the scored window
+- Phase 1 repeatedly reset on `phase1_late_validate_upper_body_instability`
+- pelvis and support bodies did not have the required simulation ownership
+- no policy samples occurred in the standing window
+- no control target readback evidence occurred in the standing window
+- recovery could not be demonstrated
+- the pre-fix attempt also exposed active CharacterMovement and capsule
+  collision; standing defaults now disable those helpers
 
-## The Path Forward: Scenario Analysis
+The development artifact was produced from a dirty working tree and is ignored
+under `test-results/product-runs/`. It is diagnostic evidence, not a milestone
+claim.
 
-### Target Scenario: `Scenario: Activated Standing Stability Measurement` (node_d448b7850c72)
+## What Is Implemented
 
-#### 1. Is it complete?
-**NO.** The scenario is currently in the **BACKLOG**. While its requirements and acceptance criteria are defined, it lacks implemented tasks and integration tests.
+- A locked, append-only causal-standing v1 protocol.
+- An evaluator that distinguishes `PASS`, behavioral `FAIL`, malformed
+  `INVALID`, and environment `BLOCKED`.
+- Real UE PIE observation streams for physics ticks and policy steps.
+- Direct body simulation masks, pelvis height, root tilt, pose mismatch,
+  inference/action values, attempted control writes, and Physics Control
+  readback comparison.
+- A renderer-backed scene capture, not a synthetic image fixture.
+- Negative controls for zero actions, dropped Physics Control dispatch, and
+  forced support loss.
+- Standing defaults that do not preserve CharacterMovement, capsule collision,
+  or bridge-owned gameplay-shell translation. Movement smoke tests retain an
+  explicit opt-in.
 
-#### 2. Is it enough?
-**YES, as a diagnostic bridge.** It provides the necessary "Measurement Semantics" to move beyond a simple pass/fail check. It introduces tracking for:
-- Energy spikes (identifying jitter/instability).
-- Support hull metrics (fixing the `support_truth` failure).
-- Root tilt and peak angular speed.
+These capabilities improve the experiment. They do not make the humanoid
+stand.
 
-#### 3. Does it solve the Evidence Bottlenecks?
-- **PhcPolicy:** The scenario requires "Measurement only after first product success or explicit diagnostic route". This forces us to resolve the "Not Reached" state of the policy to gather data.
-- **Support Truth:** By tracking "support hull metrics" and "support churn", it provides the data needed to debug why `support_truth_clean` is failing in Chaos.
-- **Integrity Fix:** Implementing this scenario resolves the `dependency_not_done` issue reported by `done_integrity` for the `Standing Stability Regression Soak` and `Presentation Evidence Package` tasks.
+## Current Technical Blocker
 
----
+The first product blocker is now concrete: the runtime cannot complete Phase 1
+because upper-body motion repeatedly violates the late-validation quiet gate.
+It safe-denies before the causal standing window starts. Work should focus on
+the physical/control cause of that instability while keeping the v1 protocol
+unchanged.
 
-## Final Recommendation
-Proceed immediately to **PLAN** and **IMPLEMENT** `Scenario: Activated Standing Stability Measurement`. 
+The imported model is available at
+`PhysAnimUE5/Content/NNEModels/phc_policy.onnx`. Its training checkpoint is not
+available in this repository, so model retraining or checkpoint-level diagnosis
+is outside the current scope. The runtime artifact can still be evaluated
+honestly as-is.
 
-This is not just "another task"—it is the missing bridge between the **Infrastructure** we just finished and the **Physical Stability** we need to prove. Without this measurement logic, we cannot falsify why the balancing logic is failing, and we cannot move the `PhcPolicy` from `NotReached` to `Active`.
+## Test Tiers
 
----
-*Reference ADRs: ADR-EB-001 (Sidecar Design), ADR-EB-003 (Truth Arbitration).*
+- `npm run test:fast`: deterministic Python protocol/evaluator/runner tests.
+- `npm run test:runtime`: one real renderer-enabled Normal PIE attempt. A
+  behavioral `FAIL` is recorded and does not make the harness command fail.
+- `npm run test:product`: the complete clean milestone bundle with all locked
+  repetitions and negative controls. Its process exit code is the product
+  verdict.
+- `npm test`: fast, runtime, then product.
+
+The local Volta `npm` installation is currently broken independently of this
+repository. The underlying PowerShell and Python commands remain directly
+executable.
+
+## Next Product Work
+
+1. Reproduce the Phase 1 upper-body instability with raw body/control traces.
+2. Identify whether the cause is target-space mismatch, initial target
+   discontinuity, body ownership sequencing, or unsuitable controller gains.
+3. Add a deterministic regression test for the diagnosed mechanism before the
+   runtime fix.
+4. Rerun a Normal development attempt without changing causal-standing v1.
+5. Run the complete clean milestone bundle only after Normal reaches the scored
+   window reliably.

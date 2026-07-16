@@ -1,0 +1,90 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "upper-body-neck-head-restoration-e34",
+  "recorded_utc": "2026-07-15T20:14:01Z",
+  "preregistration_commit": "fefcf18bd6e62e090327ee4c1f5f8a39d3c112e1",
+  "source_commit": "d3582083b04c5874a3cfcfd80d2d1b2a602400e2",
+  "status": "VALID",
+  "hypothesis_verdict": "FALSIFIED",
+  "product_candidate_success": false,
+  "production_success": false,
+  "bundle_status": "FAIL",
+  "bundle_failed_criteria": ["causal_recovery_advantage"],
+  "fixture_authority": "PRODUCT_RUN",
+  "protocol_sha256": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+  "model_onnx_sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+  "experimental_command_line_flags": [
+    "-PhysAnimExperimentalCausalStandingUpperBody=NeckHead"
+  ],
+  "candidate_action_joint_indices": [0, 1, 2, 3, 4, 5, 6, 7, 11, 12],
+  "normal_recovery_auc": [
+    35.60785818349127,
+    35.74621925041512,
+    35.60785818349127
+  ],
+  "zero_actions_recovery_auc": [
+    41.14179622283463,
+    41.14179622283463,
+    41.14179622283463
+  ],
+  "normal_median_recovery_auc": 35.60785818349127,
+  "normal_to_zero_recovery_auc_ratio": 0.8654910930633627,
+  "locked_maximum_ratio": 0.8,
+  "normal_absolute_pass_count": 3,
+  "zero_actions_absolute_pass_count": 3,
+  "target_readback_ratio_normal": 1.0,
+  "target_readback_ratio_zero_actions": 1.0,
+  "destructive_controls": {
+    "DropControlDispatch": {
+      "status": "FAIL",
+      "failed_criteria": ["target_readback"],
+      "target_readback_match_ratio": 0.5238095238095238
+    },
+    "ForcedSupportLoss": {
+      "status": "FAIL",
+      "failed_criteria": ["support_gap"],
+      "target_readback_match_ratio": 1.0
+    }
+  },
+  "validity": {
+    "source_tree_clean_in_all_manifests": true,
+    "source_commit_matches_all_runs": true,
+    "model_hash_matches_all_runs": true,
+    "locked_protocol_hash_matches": true,
+    "only_intended_experimental_option_present": true,
+    "normal_lower_joints_nonzero_present": true,
+    "normal_torso_spine_chest_exact_zero": true,
+    "normal_neck_head_nonzero_present": true,
+    "normal_arms_exact_zero": true,
+    "zero_actions_all_conditioned_scalars_exact_zero": true,
+    "normal_strength_multiplier_transition": [1.0, 1.5],
+    "zero_actions_strength_multipliers": [1.0],
+    "zero_repetitions_deterministic": true,
+    "normal_repetitions_deterministic": false
+  },
+  "normal_trajectory_clusters": [
+    {
+      "repetitions": [1, 3],
+      "recovery_auc": 35.60785818349127,
+      "policy_input_snapshot_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "policy_sha256": "07720965CCEDAF6984D632010E7001FD84581E3216A42DD6D2DE230E9F8BBADF",
+      "physics_sha256": "F8A80CB1861639852887A61E056839D941BD3B66D3DF613F6654F646C3E5CE52"
+    },
+    {
+      "repetitions": [2],
+      "recovery_auc": 35.74621925041512,
+      "policy_input_snapshot_sha256": "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3",
+      "policy_sha256": "6DE3471CD0C4216D85C838D645CB9DB695F6B056EB5CA0C149923D302997554E",
+      "physics_sha256": "E7BD8BC2B7374FCE753203B525C1533FE4EDFCD01A2998374FE357CE2329630D"
+    }
+  ],
+  "causal_findings": [
+    "Restoring neck and head together preserves absolute standing but worsens the locked perturbation recovery score relative to the E33 lower-only production baseline.",
+    "Median recovery AUC increased from 30.374536874795023 in E33 to 35.60785818349127 in E34, producing a Normal/ZeroActions ratio of 0.8654910930633627 above the locked maximum 0.8.",
+    "The pair also introduced two Normal startup and policy trajectories while ZeroActions remained byte-deterministic, so the preregistered determinism requirement was not met.",
+    "The mask, strength path, protocol, model, target readback, and destructive controls were all valid; the failure is attributable to the restored neck/head action pair rather than a harness defect."
+  ],
+  "authoritative_bundle_artifact": "test-results/causal-standing/e34-neck-head-restoration/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/upper-body-neck-head-restoration.e34.audit.json",
+  "next": "Keep the E33 lower-only production default unchanged. Preregister separate single-joint localization experiments beginning with Proto joint 11 (Neck), followed by joint 12 (Head) only if needed."
+}

@@ -1,0 +1,47 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "lower-only-causal-standing-e25",
+  "recorded_utc": "2026-07-15T17:45:00Z",
+  "authority": "PRODUCT_CANDIDATE_EVIDENCE",
+  "product_success": false,
+  "hypothesis": "The E20-proven stable lower-body ONNX action subset supplies causal perturbation recovery while incompatible upper-body outputs are unnecessary for the locked standing product contract.",
+  "candidate_behavior": {
+    "action_axis":"mesh-component parent-bind axis from first policy",
+    "neutral_source":"captured stable standing neutral",
+    "retained_policy_actions":"Proto joints 0-7 only",
+    "constraint_range_mapping_and_projection":"enabled",
+    "actuation":"current 8 Hz acceleration-mode plant"
+  },
+  "bundle": {
+    "Normal":[1,2,3],
+    "ZeroActions":[1,2,3],
+    "DropControlDispatch":[1],
+    "ForcedSupportLoss":[1]
+  },
+  "single_changed_variable": "For policy-using variants, conditioned ONNX actions are masked to the lower-body family after raw inference; all locked product protocol parameters and evaluators remain unchanged.",
+  "locked_configuration": {
+    "runtime_behavior_commit":"c01d2d9cd609312c7b844e813aea1eb8ed877ecf",
+    "same_binary":true,
+    "protocol":"experiments/stage1/causal-standing.product-protocol.v1.json",
+    "fixed_timestep_seconds":0.016666666666666666,
+    "standing_window_seconds":10.0,
+    "baseline_window_seconds":2.0,
+    "perturbation_delta_v_cm_per_sec":15.0,
+    "post_perturbation_window_seconds":8.0,
+    "recovery_deadline_seconds":3.0,
+    "recovery_hold_seconds":2.0,
+    "normal_to_zero_recovery_auc_ratio_max":0.8,
+    "renderer":"RenderOffscreen"
+  },
+  "validity_gates": [
+    "Exactly three unique Normal and three unique ZeroActions repetitions plus one of each destructive control are present.",
+    "Every run is PRODUCT_RUN authority with the locked protocol hash and complete raw streams/render.",
+    "Normal uses nonzero lower-body policy actions; ZeroActions uses zero conditioned actions.",
+    "Target readback match ratio is at least 0.95 in Normal and ZeroActions.",
+    "DropControlDispatch fails for target_readback and ForcedSupportLoss fails for runtime_state or support_gap."
+  ],
+  "support_and_product_pass": "All Normal repetitions pass every absolute criterion, destructive controls fail for their intended reasons, and median Normal recovery AUC is at most 80 percent of median ZeroActions recovery AUC.",
+  "falsification": "Any Normal absolute failure, malformed control, or recovery AUC ratio above 0.8.",
+  "promotion_rule": "A passing development-flag bundle justifies implementing the lower-body compatibility mask as explicit product behavior, followed by a second full bundle without the development flag. It does not itself change production defaults.",
+  "next": "If the bundle passes, implement and test the product compatibility mask and rerun the complete bundle without experimental action-family arguments."
+}

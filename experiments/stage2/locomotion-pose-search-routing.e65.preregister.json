@@ -1,0 +1,22 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E65",
+  "title": "Route active shell locomotion into bridge-trajectory Pose Search",
+  "baseline_commit": "54601454209f5fed34aee5e3f029c223184e4adc",
+  "date": "2026-07-15",
+  "observed_failure": {
+    "e64_normal_selected_animation": "MM_Idle for all 300 samples",
+    "standing_idle_branch_removed": true,
+    "routing_cause": "ShouldUseBridgeOwnedMovementDrive is false in LocomotionActiveShell because it is a pre-balance shell-drive predicate and rejects balance-active/transition-owned states"
+  },
+  "hypothesis": "Pose Search routing must be distinct from ownership of the pre-balance movement drive. LocomotionActiveShell should use QueryPoseSearchWithBridgeTrajectory even though ShouldUseBridgeOwnedMovementDrive remains false, while standing and denied locomotion must not use that trajectory route.",
+  "single_behavior_change": "Add ShouldUseBridgeTrajectoryPoseSearch and use it only in QueryPoseSearch routing. Do not change ShouldUseBridgeOwnedMovementDrive or any shell movement ownership behavior.",
+  "tdd_contract": [
+    "LocomotionActiveShell routes to bridge-trajectory Pose Search.",
+    "BalanceActive_Standing does not route to bridge-trajectory Pose Search.",
+    "LocomotionActiveShellDenied does not route to bridge-trajectory Pose Search.",
+    "Existing pre-balance ShouldUseBridgeOwnedMovementDrive semantics remain unchanged.",
+    "A scripted Normal run selects a non-idle animation during at least one locomotion phase without forcing an asset by name."
+  ],
+  "next_if_supported": "Recompute Normal versus ZeroActions under the locked E60 stability-cost formula."
+}

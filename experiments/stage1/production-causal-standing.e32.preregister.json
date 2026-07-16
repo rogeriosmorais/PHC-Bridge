@@ -1,0 +1,45 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "production-causal-standing-e32",
+  "recorded_utc": "2026-07-15T20:50:00Z",
+  "authority": "PRODUCTION_PROMOTION",
+  "product_success": false,
+  "hypothesis": "Promoting the exact E31 candidate into the normal standing-policy path will reproduce the complete locked bundle PASS without any experimental command-line flags.",
+  "production_changes": [
+    "During standing policy conditioning, preserve Proto action joints 0-7 and zero joints 8-22.",
+    "For active standing modes that consume nonzero policy targets, multiply angular strength authority by 1.5 after the first active-standing policy snapshot.",
+    "ZeroActions, FixedNeutralTarget, DampingOnly, and ControlsOff retain identity authority."
+  ],
+  "non_changes": [
+    "Raw ONNX inference output and evidence",
+    "Observation construction",
+    "Action-axis and neutral semantics",
+    "Constraint-range mapping and safety projection",
+    "Damping ratio, extra damping, torque ceiling",
+    "Policy cadence, timestep, perturbation",
+    "Locked protocol, evaluator, thresholds"
+  ],
+  "tdd_contract": [
+    "Production standing-policy mask preserves all 24 lower-body scalars and zeros all 45 upper-body scalars.",
+    "The production strength resolver returns 1.5 only for active nonzero policy mode after first active-standing capture.",
+    "ZeroActions and passive modes return 1.0.",
+    "Existing development flags remain additional default-off diagnostic overlays and are not required for product behavior."
+  ],
+  "final_bundle": {
+    "Normal":[1,2,3],
+    "ZeroActions":[1,2,3],
+    "DropControlDispatch":[1],
+    "ForcedSupportLoss":[1],
+    "experimental_flags":[]
+  },
+  "validity_gates": [
+    "Clean source commit and one binary for all eight runs.",
+    "No PhysAnimExperimentalActionFamily or PhysAnimExperimentalActiveStrengthFactor argument appears in any manifest.",
+    "Normal physics evidence shows policy strength 1.5 after capture; ZeroActions remains 1.0.",
+    "Normal conditioned actions have upper-body scalars exactly zero; ZeroActions all scalars exactly zero.",
+    "All fixtures are PRODUCT_RUN with locked protocol SHA256 75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a."
+  ],
+  "production_success": "The no-flag bundle evaluator returns PASS with all Normal absolute criteria, intended destructive-control failures, and median Normal/ZeroActions AUC ratio <= 0.8.",
+  "falsification": "Any no-flag run is malformed, differs from the intended production routing, fails an absolute criterion, loses destructive-control discrimination, or exceeds ratio 0.8.",
+  "next": "If PASS, record causal standing achieved, clean the worktree, and stop the experiment sequence."
+}

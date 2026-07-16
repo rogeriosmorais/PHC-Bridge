@@ -103,6 +103,7 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibBaseline(FPhase1AutoCalibBaseline
 
 	OutSnapshot.PreviousControlTargetRotations = PreviousControlTargetRotations;
 	OutSnapshot.PolicyBlendStartControlTargetRotations = PolicyBlendStartControlTargetRotations;
+	OutSnapshot.PolicyNeutralControlTargetRotations = PolicyNeutralControlTargetRotations;
 	OutSnapshot.SelfObservationBuffer = SelfObservationBuffer;
 	OutSnapshot.MimicTargetPosesBuffer = MimicTargetPosesBuffer;
 	OutSnapshot.TerrainBuffer = TerrainBuffer;
@@ -165,6 +166,7 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibBaseline(FPhase1AutoCalibBaseline
 	OutSnapshot.bPhase1TiltDiagnosticEmitted = bPhase1TiltDiagnosticEmitted;
 	OutSnapshot.bPhase1PelvisCouplingSkipLogged = bPhase1PelvisCouplingSkipLogged;
 	OutSnapshot.bPelvisResetAppliedThisTick = bPelvisResetAppliedThisTick;
+	OutSnapshot.LastBodyModifierResetRequestCount = LastBodyModifierResetRequestCount;
 	OutSnapshot.HipQuarantineTicksRemaining = HipQuarantineTicksRemaining;
 	OutSnapshot.BalanceEntryRootOnFrameCount = BalanceEntryRootOnFrameCount;
 	OutSnapshot.BalanceEntrySettleFrameCount = BalanceEntrySettleFrameCount;
@@ -268,6 +270,7 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 
 	PreviousControlTargetRotations = Snapshot.PreviousControlTargetRotations;
 	PolicyBlendStartControlTargetRotations = Snapshot.PolicyBlendStartControlTargetRotations;
+	PolicyNeutralControlTargetRotations = Snapshot.PolicyNeutralControlTargetRotations;
 	if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
 	{
 		// Restore-side cache sync keeps the next trial from inheriting stale
@@ -344,6 +347,7 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 	bPhase1TiltDiagnosticEmitted = Snapshot.bPhase1TiltDiagnosticEmitted;
 	bPhase1PelvisCouplingSkipLogged = Snapshot.bPhase1PelvisCouplingSkipLogged;
 	bPelvisResetAppliedThisTick = Snapshot.bPelvisResetAppliedThisTick;
+	LastBodyModifierResetRequestCount = Snapshot.LastBodyModifierResetRequestCount;
 	HipQuarantineTicksRemaining = Snapshot.HipQuarantineTicksRemaining;
 	BalanceEntryRootOnFrameCount = Snapshot.BalanceEntryRootOnFrameCount;
 	BalanceEntrySettleFrameCount = Snapshot.BalanceEntrySettleFrameCount;
@@ -391,7 +395,9 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibLiveMetrics(FPhase1AutoCalibLiveM
 	OutMetrics.TransitionPhase = BalanceReadyTransition.GetPhase();
 	OutMetrics.RootLinearSpeedCmPerSecond = RootBody->GetUnrealWorldVelocity().Size();
 	OutMetrics.RootAngularSpeedDegPerSecond = FMath::RadiansToDegrees(RootBody->GetUnrealWorldAngularVelocityInRadians().Size());
-	OutMetrics.RootTiltDeg = ResolvePhase1Uprightness(MeshComponent.Get(), GetOwner(), RootBoneName, TiltSource);
+	OutMetrics.RootTiltDeg = ResolvePhase1Uprightness(
+		MeshComponent.Get(), GetOwner(), RootBoneName,
+		bHasNeutralPelvisActorRelativeRotation, NeutralPelvisActorRelativeRotation, TiltSource);
 	OutMetrics.ShellOffsetDeltaCm = GetCurrentShellPlanarOffsetDeltaCm();
 	OutMetrics.ShellVelocityDeltaCmPerSecond = GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 	OutMetrics.MaxTargetDeltaDeg = LastControlTargetDiagnostics.MaxTargetDeltaDegrees;

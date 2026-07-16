@@ -132,9 +132,598 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API inline constexpr int32 NumFutureSteps = 15;
 	PHYSANIMPLUGIN_API inline constexpr float FutureStepSeconds = 1.0f / 30.0f;
 	PHYSANIMPLUGIN_API inline constexpr float CmToMeters = 0.01f;
+	PHYSANIMPLUGIN_API inline constexpr float MetersToCm = 100.0f;
 	PHYSANIMPLUGIN_API inline constexpr float MannyRootHeightMeters = 0.912f;
 
+	struct PHYSANIMPLUGIN_API FPhysAnimProtoActionJointDescriptor
+	{
+		int32 ProtoJointIndex = INDEX_NONE;
+		FName ProtoJointName = NAME_None;
+		FName MannyBoneName = NAME_None;
+		bool bSharesMappedControl = false;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimActionJointSemanticTrace
+	{
+		int32 ProtoJointIndex = INDEX_NONE;
+		FName ProtoJointName = NAME_None;
+		FName MannyBoneName = NAME_None;
+		bool bSharesMappedControl = false;
+		FVector RawAction = FVector::ZeroVector;
+		FVector ConditionedAction = FVector::ZeroVector;
+		FQuat RawDecodedRotationUe = FQuat::Identity;
+		FQuat ConditionedDecodedRotationUe = FQuat::Identity;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimControlTargetSemanticTrace
+	{
+		FName MannyBoneName = NAME_None;
+		FName ControlName = NAME_None;
+		TArray<int32> SourceProtoJointIndices;
+		FQuat CombinedDecodedRotationUe = FQuat::Identity;
+		FQuat MannyNeutralRotation = FQuat::Identity;
+		FQuat BindComposedRotation = FQuat::Identity;
+		FQuat RangeScaledRotation = FQuat::Identity;
+		FQuat DistalScaledRotation = FQuat::Identity;
+		FQuat ConstraintRangeMappedRotation = FQuat::Identity;
+		FQuat ConstraintAdaptedRotation = FQuat::Identity;
+		FQuat BlendedRotation = FQuat::Identity;
+		FQuat PublishedRotation = FQuat::Identity;
+		FQuat ReadbackRotation = FQuat::Identity;
+		bool bHasConstraintProfile = false;
+		bool bTargetWritten = false;
+		bool bReadbackSucceeded = false;
+		int32 TwistMotion = INDEX_NONE;
+		int32 Swing1Motion = INDEX_NONE;
+		int32 Swing2Motion = INDEX_NONE;
+		float TwistLimitDegrees = 0.0f;
+		float Swing1LimitDegrees = 0.0f;
+		float Swing2LimitDegrees = 0.0f;
+		float LowerLimbRangeScale = 1.0f;
+		float DistalRangeScale = 1.0f;
+		float RawPolicyOffsetDegrees = 0.0f;
+		float RangeScaleDeltaDegrees = 0.0f;
+		float DistalScaleDeltaDegrees = 0.0f;
+		float ConstraintRangeMappingDeltaDegrees = 0.0f;
+		float ConstraintProjectionDeltaDegrees = 0.0f;
+		float AdaptedToPublishedDeltaDegrees = 0.0f;
+		float ReadbackErrorDegrees = 0.0f;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimActionSemanticTrace
+	{
+		void Reset()
+		{
+			bCaptured = false;
+			CaptureScope.Reset();
+			CaptureError.Reset();
+			ActionJoints.Reset();
+			ControlTargets.Reset();
+		}
+
+		bool bCaptured = false;
+		FString CaptureScope;
+		FString CaptureError;
+		float PolicyStepDeltaTime = 0.0f;
+		float PolicyInfluenceAlpha = 0.0f;
+		float MaxAngularStepDegrees = 0.0f;
+		bool bConstraintAdapterEnabled = false;
+		TArray<FPhysAnimActionJointSemanticTrace> ActionJoints;
+		TArray<FPhysAnimControlTargetSemanticTrace> ControlTargets;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimPolicyInferenceSnapshot
+	{
+		bool CaptureFirst(
+			TConstArrayView<float> InSelfObservation,
+			TConstArrayView<float> InMimicTargetPoses,
+			TConstArrayView<float> InTerrain,
+			TConstArrayView<float> InActions)
+		{
+			if (bCaptured)
+			{
+				return false;
+			}
+
+			SelfObservation.Append(InSelfObservation.GetData(), InSelfObservation.Num());
+			MimicTargetPoses.Append(InMimicTargetPoses.GetData(), InMimicTargetPoses.Num());
+			Terrain.Append(InTerrain.GetData(), InTerrain.Num());
+			Actions.Append(InActions.GetData(), InActions.Num());
+			bCaptured = true;
+			return true;
+		}
+
+		bool CaptureFirstIf(
+			bool bCondition,
+			TConstArrayView<float> InSelfObservation,
+			TConstArrayView<float> InMimicTargetPoses,
+			TConstArrayView<float> InTerrain,
+			TConstArrayView<float> InActions)
+		{
+			return bCondition && CaptureFirst(
+				InSelfObservation,
+				InMimicTargetPoses,
+				InTerrain,
+				InActions);
+		}
+
+		void Reset()
+		{
+			bCaptured = false;
+			SelfObservation.Reset();
+			MimicTargetPoses.Reset();
+			Terrain.Reset();
+			Actions.Reset();
+		}
+
+		bool bCaptured = false;
+		TArray<float> SelfObservation;
+		TArray<float> MimicTargetPoses;
+		TArray<float> Terrain;
+		TArray<float> Actions;
+	};
+
+
+#if WITH_DEV_AUTOMATION_TESTS
+	inline constexpr double MannyLocalFrameRoundtripAxisProbeDegrees = 10.0;
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripQuaternionMultiplication =
+		TEXT("Hamilton product; expressions are evaluated in the explicitly parenthesized order");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripActionCompositionOrder =
+		TEXT("inverse(action_axis_reference) * canonical_input * action_axis_reference * policy_neutral");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripObservationRecoveryOrder =
+		TEXT("observation_parent_bind * (manny_target * inverse(observation_bind_parent_relative)) * inverse(observation_parent_bind)");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripObservationBodySelection =
+		TEXT("lowest_source_proto_joint_index");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripActionAxisFrame =
+		TEXT("world_rotation_at_initial_control_bind_capture");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripActionBindComponentWorldFrame =
+		TEXT("component_to_world_rotation_derived_from_initial_parent_and_observation_parent_bind");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripObservationBindFrame =
+		TEXT("skeletal_mesh_component_space_bind");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripWorldAxisMode =
+		TEXT("cached_parent_world");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripComponentAxisMode =
+		TEXT("cached_parent_mesh_component");
+
+	struct PHYSANIMPLUGIN_API FPhysAnimMannyLocalFrameRoundtripCase
+	{
+		FName Label = NAME_None;
+		FQuat InputCanonicalRotationUe = FQuat::Identity;
+		FQuat MannyPreRangeTargetParentRelative = FQuat::Identity;
+		FQuat RecoveredCanonicalRotationUe = FQuat::Identity;
+		double AngularErrorDegrees = 0.0;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimMannyLocalFrameRoundtripControl
+	{
+		int32 ControlIndex = INDEX_NONE;
+		FName MannyBoneName = NAME_None;
+		FName ControlName = NAME_None;
+		FName InitialControlChildBoneName = NAME_None;
+		FName InitialControlParentBoneName = NAME_None;
+		TArray<int32> SourceProtoJointIndices;
+		TArray<FName> SourceProtoJointNames;
+		TArray<int32> ObservationBodyIndices;
+		TArray<FName> ObservationBodyNames;
+		int32 RoundtripObservationBodyIndex = INDEX_NONE;
+		FName RoundtripObservationBodyName = NAME_None;
+		int32 ObservationParentBodyIndex = INDEX_NONE;
+		FName ObservationParentBodyName = NAME_None;
+		bool bDecisiveOneToOne = false;
+		bool bOwnershipComplete = false;
+		FString EffectiveActionAxisMode;
+		FQuat CachedActionAxisReferenceRotation = FQuat::Identity;
+		FQuat ActionBindComponentWorldRotation = FQuat::Identity;
+		FQuat ComponentCorrectedActionAxisRotation = FQuat::Identity;
+		FQuat EffectiveActionAxisRotation = FQuat::Identity;
+		FQuat ActionBindParentRelativeRotation = FQuat::Identity;
+		FQuat PolicyNeutralParentRelativeRotation = FQuat::Identity;
+		FQuat ObservationParentBindComponentRotation = FQuat::Identity;
+		FQuat ObservationBodyBindComponentRotation = FQuat::Identity;
+		FQuat ObservationBindParentRelativeRotation = FQuat::Identity;
+		FQuat ActualDecodedRotationUe = FQuat::Identity;
+		FQuat ActualMannyPreRangeTargetParentRelative = FQuat::Identity;
+		double ActionAxisVsObservationParentBindAngularDeltaDegrees = 0.0;
+		double EffectiveActionAxisVsObservationParentBindComponentAngularDeltaDegrees = 0.0;
+		double ActionBindVsObservationBindParentRelativeAngularDeltaDegrees = 0.0;
+		double PolicyNeutralVsActionBindParentRelativeAngularDeltaDegrees = 0.0;
+		double PolicyNeutralVsObservationBindParentRelativeAngularDeltaDegrees = 0.0;
+		TArray<FPhysAnimMannyLocalFrameRoundtripCase> RoundtripCases;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimMannyLocalFrameRoundtripTrace
+	{
+		void Reset()
+		{
+			bCaptured = false;
+			CaptureScope.Reset();
+			CaptureError.Reset();
+			ConfiguredActionAxisMode.Reset();
+			EffectiveActionAxisMode.Reset();
+			AxisProbeDegrees = MannyLocalFrameRoundtripAxisProbeDegrees;
+			Controls.Reset();
+		}
+
+		bool bCaptured = false;
+		FString CaptureScope;
+		FString CaptureError;
+		FString ConfiguredActionAxisMode;
+		FString EffectiveActionAxisMode;
+		double AxisProbeDegrees = MannyLocalFrameRoundtripAxisProbeDegrees;
+		TArray<FPhysAnimMannyLocalFrameRoundtripControl> Controls;
+	};
+
+	PHYSANIMPLUGIN_API bool ValidateMannyLocalFrameRoundtripTrace(
+		const FPhysAnimMannyLocalFrameRoundtripTrace& Trace,
+		FString& OutError);
+
+	struct PHYSANIMPLUGIN_API FPhysAnimPolicyInputProvenanceSnapshot
+	{
+		bool CaptureFirstIf(
+			bool bCondition,
+			const FString& InRuntimeState,
+			double InWorldTimeSeconds,
+			int32 InPolicyControlTick,
+			const FString& InPoseSearchAnimation,
+			float InPoseSearchSelectedTime,
+			bool bInPoseSearchMirrored,
+			const FTransform& InOwnerActorWorldTransform,
+			const FTransform& InMeshWorldTransform,
+			const FTransform& InRootBoneWorldTransform,
+			const FTransform& InMimicTargetReferenceWorldRoot,
+			const FTransform& InMimicTargetReferenceDataRoot,
+			float InSelfObservationGroundHeight,
+			TConstArrayView<FPhysAnimBodySample> InMannyBodySamples,
+			TConstArrayView<FPhysAnimBodySample> InCanonicalBodySamples,
+			TConstArrayView<FPhysAnimBodySample> InMimicReferenceBodySamples,
+			TConstArrayView<FPhysAnimFuturePoseSample> InMannyFuturePoseSamples,
+			TConstArrayView<FPhysAnimFuturePoseSample> InCanonicalFuturePoseSamples,
+			TConstArrayView<float> InTerrainGroundHeights,
+			TConstArrayView<float> InPreviousActions)
+		{
+			if (!bCondition || bCaptured)
+			{
+				return false;
+			}
+
+			CaptureScope = TEXT("first_policy_input_pre_flattening");
+			RuntimeState = InRuntimeState;
+			WorldTimeSeconds = InWorldTimeSeconds;
+			PolicyControlTick = InPolicyControlTick;
+			PoseSearchAnimation = InPoseSearchAnimation;
+			PoseSearchSelectedTime = InPoseSearchSelectedTime;
+			bPoseSearchMirrored = bInPoseSearchMirrored;
+			OwnerActorWorldTransform = InOwnerActorWorldTransform;
+			MeshWorldTransform = InMeshWorldTransform;
+			RootBoneWorldTransform = InRootBoneWorldTransform;
+			MimicTargetReferenceWorldRoot = InMimicTargetReferenceWorldRoot;
+			MimicTargetReferenceDataRoot = InMimicTargetReferenceDataRoot;
+			SelfObservationGroundHeight = InSelfObservationGroundHeight;
+			MannyBodySamples.Append(InMannyBodySamples.GetData(), InMannyBodySamples.Num());
+			CanonicalBodySamples.Append(InCanonicalBodySamples.GetData(), InCanonicalBodySamples.Num());
+			MimicReferenceBodySamples.Append(InMimicReferenceBodySamples.GetData(), InMimicReferenceBodySamples.Num());
+			MannyFuturePoseSamples.Append(InMannyFuturePoseSamples.GetData(), InMannyFuturePoseSamples.Num());
+			CanonicalFuturePoseSamples.Append(InCanonicalFuturePoseSamples.GetData(), InCanonicalFuturePoseSamples.Num());
+			TerrainGroundHeights.Append(InTerrainGroundHeights.GetData(), InTerrainGroundHeights.Num());
+			PreviousActions.Append(InPreviousActions.GetData(), InPreviousActions.Num());
+			bCaptured = true;
+			return true;
+		}
+
+		void Reset()
+		{
+			bCaptured = false;
+			CaptureScope.Reset();
+			RuntimeState.Reset();
+			WorldTimeSeconds = 0.0;
+			PolicyControlTick = 0;
+			PoseSearchAnimation.Reset();
+			PoseSearchSelectedTime = 0.0f;
+			bPoseSearchMirrored = false;
+			OwnerActorWorldTransform = FTransform::Identity;
+			MeshWorldTransform = FTransform::Identity;
+			RootBoneWorldTransform = FTransform::Identity;
+			MimicTargetReferenceWorldRoot = FTransform::Identity;
+			MimicTargetReferenceDataRoot = FTransform::Identity;
+			SelfObservationGroundHeight = 0.0f;
+			MannyBodySamples.Reset();
+			CanonicalBodySamples.Reset();
+			MimicReferenceBodySamples.Reset();
+			MannyFuturePoseSamples.Reset();
+			CanonicalFuturePoseSamples.Reset();
+			TerrainGroundHeights.Reset();
+			PreviousActions.Reset();
+		}
+
+		bool bCaptured = false;
+		FString CaptureScope;
+		FString RuntimeState;
+		double WorldTimeSeconds = 0.0;
+		int32 PolicyControlTick = 0;
+		FString PoseSearchAnimation;
+		float PoseSearchSelectedTime = 0.0f;
+		bool bPoseSearchMirrored = false;
+		FTransform OwnerActorWorldTransform = FTransform::Identity;
+		FTransform MeshWorldTransform = FTransform::Identity;
+		FTransform RootBoneWorldTransform = FTransform::Identity;
+		FTransform MimicTargetReferenceWorldRoot = FTransform::Identity;
+		FTransform MimicTargetReferenceDataRoot = FTransform::Identity;
+		float SelfObservationGroundHeight = 0.0f;
+		TArray<FPhysAnimBodySample> MannyBodySamples;
+		TArray<FPhysAnimBodySample> CanonicalBodySamples;
+		TArray<FPhysAnimBodySample> MimicReferenceBodySamples;
+		TArray<FPhysAnimFuturePoseSample> MannyFuturePoseSamples;
+		TArray<FPhysAnimFuturePoseSample> CanonicalFuturePoseSamples;
+		TArray<float> TerrainGroundHeights;
+		TArray<float> PreviousActions;
+	};
+
+	PHYSANIMPLUGIN_API bool ValidatePolicyInputProvenanceSnapshot(
+		const FPhysAnimPolicyInputProvenanceSnapshot& Snapshot,
+		FString& OutError);
+
+	inline constexpr const TCHAR* LocomotionFrameReplayActionSignatureAlgorithm =
+		TEXT("crc32-ieee754-f32-le-v1");
+
+	struct PHYSANIMPLUGIN_API FPhysAnimLocomotionFrameReplaySnapshot
+	{
+		bool CaptureFirstIf(
+			bool bCondition,
+			const FString& InRuntimeState,
+			double InWorldTimeSeconds,
+			int32 InPolicyControlTick,
+			const FString& InPoseSearchAnimation,
+			float InPoseSearchSelectedTime,
+			bool bInPoseSearchMirrored,
+			const FTransform& InOwnerActorWorldTransform,
+			const FTransform& InMeshWorldTransform,
+			const FTransform& InSelectedAnimationWorldRootProtoMeters,
+			const FTransform& InSelectedAnimationDataRootProtoMeters,
+			TConstArrayView<float> InQueryTrajectorySampleTimesSeconds,
+			TConstArrayView<FTransform> InQueryTrajectoryWorldTransformsCm,
+			TConstArrayView<FPhysAnimBodySample> InLiveBodySamplesProtoWorldMeters,
+			TConstArrayView<FPhysAnimBodySample> InPhysicalBodySamplesProtoWorldMeters,
+			TConstArrayView<FPhysAnimBodySample> InCanonicalBodySamplesProtoMeters,
+			TConstArrayView<FPhysAnimFuturePoseSample> InRawCanonicalFuturePoseSamples,
+			TConstArrayView<FPhysAnimFuturePoseSample> InPlacedCanonicalFuturePoseSamples,
+			TConstArrayView<float> InSelfObservation,
+			TConstArrayView<float> InMimicTarget,
+			TConstArrayView<float> InTerrain,
+			TConstArrayView<float> InConditionedActions);
+
+		void Reset();
+
+		bool bCaptured = false;
+		FString CaptureScope;
+		FString RuntimeState;
+		double WorldTimeSeconds = 0.0;
+		int32 PolicyControlTick = 0;
+		FString PoseSearchAnimation;
+		float PoseSearchSelectedTime = 0.0f;
+		bool bPoseSearchMirrored = false;
+		FTransform OwnerActorWorldTransform = FTransform::Identity;
+		FTransform MeshWorldTransform = FTransform::Identity;
+		FTransform SelectedAnimationWorldRootProtoMeters = FTransform::Identity;
+		FTransform SelectedAnimationDataRootProtoMeters = FTransform::Identity;
+		TArray<float> QueryTrajectorySampleTimesSeconds;
+		TArray<FTransform> QueryTrajectoryWorldTransformsCm;
+		TArray<FPhysAnimBodySample> LiveBodySamplesProtoWorldMeters;
+		TArray<FPhysAnimBodySample> PhysicalBodySamplesProtoWorldMeters;
+		TArray<FPhysAnimBodySample> CanonicalBodySamplesProtoMeters;
+		TArray<FPhysAnimFuturePoseSample> RawCanonicalFuturePoseSamples;
+		TArray<FPhysAnimFuturePoseSample> PlacedCanonicalFuturePoseSamples;
+		TArray<float> SelfObservation;
+		TArray<float> MimicTarget;
+		TArray<float> Terrain;
+		TArray<float> ConditionedActions;
+		FString ConditionedActionSignatureAlgorithm;
+		uint32 ConditionedActionCrc32 = 0;
+	};
+
+	PHYSANIMPLUGIN_API bool ShouldCaptureLocomotionFrameReplay(
+		bool bTraceEnabled,
+		bool bPolicyInferenceEnabled,
+		bool bVariantUsesPolicyInference,
+		bool bLocomotionActive,
+		bool bAlreadyCaptured);
+
+	PHYSANIMPLUGIN_API bool ValidateLocomotionFrameReplaySnapshot(
+		const FPhysAnimLocomotionFrameReplaySnapshot& Snapshot,
+		FString& OutError);
+
+	inline constexpr const TCHAR* FirstPolicyBodySourceFingerprintAlgorithm =
+		TEXT("fnv1a64-ieee754-f64-le-v1");
+
+	struct PHYSANIMPLUGIN_API FPhysAnimFirstPolicyBodySourceRecord
+	{
+		void Reset();
+
+		bool bRecorded = false;
+		FString Stage;
+		double WorldTimeSeconds = -1.0;
+		FString RuntimeState;
+		int32 PolicyControlTick = INDEX_NONE;
+		int32 BodySampleCount = 0;
+		FString FingerprintAlgorithm;
+		FString Fingerprint;
+		TArray<FPhysAnimBodySample> BodySamples;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimFirstPolicyBodySourceTrace
+	{
+		bool CapturePriorIf(
+			bool bCondition,
+			const FString& InStage,
+			double InWorldTimeSeconds,
+			const FString& InRuntimeState,
+			int32 InPolicyControlTick,
+			TConstArrayView<FPhysAnimBodySample> InBodySamples);
+
+		bool RecordFirstPolicySourceIf(
+			bool bCondition,
+			const FString& InStage,
+			double InWorldTimeSeconds,
+			const FString& InRuntimeState,
+			int32 InPolicyControlTick,
+			TConstArrayView<FPhysAnimBodySample> InLiveBodySamples,
+			FString& OutError);
+
+		void Reset();
+
+		bool bFirstInferenceRecorded = false;
+		FString ValidationError;
+		FPhysAnimFirstPolicyBodySourceRecord Prior;
+		FPhysAnimFirstPolicyBodySourceRecord Live;
+		FPhysAnimFirstPolicyBodySourceRecord Effective;
+	};
+
+	PHYSANIMPLUGIN_API bool BuildFirstPolicyBodySourceFingerprint(
+		TConstArrayView<FPhysAnimBodySample> BodySamples,
+		FString& OutFingerprint,
+		FString& OutError);
+
+	PHYSANIMPLUGIN_API bool ValidateFirstPolicyBodySourceTrace(
+		const FPhysAnimFirstPolicyBodySourceTrace& Trace,
+		FString& OutError);
+
+	struct PHYSANIMPLUGIN_API FPhysAnimSelfObservationGroundReferenceValues
+	{
+		double BodyRootProtoZM = 0.0;
+		double RootBoneWorldZCm = 0.0;
+		bool bStaticTraceAttempted = false;
+		bool bStaticTraceSucceeded = false;
+		double StaticTraceImpactZCm = 0.0;
+		bool bHasWalkableFloor = false;
+		bool bHasBlockingFloorHit = false;
+		double FloorImpactZCm = 0.0;
+		bool bCapsuleAvailable = false;
+		double CapsuleCenterZCm = 0.0;
+		double CapsuleHalfHeightCm = 0.0;
+		double FloorDistanceCm = 0.0;
+		double FallbackGroundWorldZCm = 0.0;
+		double GroundWorldZCm = 0.0;
+		double SyntheticGroundHeightM = 0.0;
+		double FinalRootHeightM = 0.0;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimFirstPolicyGroundReferenceRecord
+	{
+		void Reset();
+
+		bool bRecorded = false;
+		FString Stage;
+		double WorldTimeSeconds = -1.0;
+		FString RuntimeState;
+		int32 PolicyControlTick = INDEX_NONE;
+		FPhysAnimSelfObservationGroundReferenceValues Values;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimFirstPolicyGroundReferenceTrace
+	{
+		bool CapturePriorIf(
+			bool bCondition,
+			const FString& InStage,
+			double InWorldTimeSeconds,
+			const FString& InRuntimeState,
+			int32 InPolicyControlTick,
+			const FPhysAnimSelfObservationGroundReferenceValues& InValues);
+
+		bool RecordFirstPolicyIf(
+			bool bCondition,
+			const FString& InStage,
+			double InWorldTimeSeconds,
+			const FString& InRuntimeState,
+			int32 InPolicyControlTick,
+			const FPhysAnimSelfObservationGroundReferenceValues& InValues,
+			FString& OutError);
+
+		void Reset();
+
+		bool bFirstPolicyRecorded = false;
+		FString ValidationError;
+		FPhysAnimFirstPolicyGroundReferenceRecord Prior;
+		FPhysAnimFirstPolicyGroundReferenceRecord Live;
+	};
+
+	PHYSANIMPLUGIN_API bool ValidateFirstPolicyGroundReferenceTrace(
+		const FPhysAnimFirstPolicyGroundReferenceTrace& Trace,
+		FString& OutError);
+
+	inline constexpr int32 MaxStartupChronologySamples = 12;
+
+	struct PHYSANIMPLUGIN_API FPhysAnimStartupChronologySample
+	{
+		int32 Sequence = 0;
+		FString Stage;
+		double WorldTimeSeconds = 0.0;
+		FString RuntimeState;
+		float PolicyUpdateAccumulatorSeconds = 0.0f;
+		int32 LastPolicyElapsedSteps = 0;
+		int32 PolicyControlTicksExecuted = 0;
+		bool bFirstPolicyInputCaptured = false;
+		FTransform OwnerActorWorldTransform = FTransform::Identity;
+		FTransform MeshWorldTransform = FTransform::Identity;
+		FTransform RootBoneWorldTransform = FTransform::Identity;
+		TArray<FPhysAnimBodySample> BodySamples;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimStartupChronologyTrace
+	{
+		bool CaptureIf(
+			bool bCondition,
+			const FString& InStage,
+			double InWorldTimeSeconds,
+			const FString& InRuntimeState,
+			float InPolicyUpdateAccumulatorSeconds,
+			int32 InLastPolicyElapsedSteps,
+			int32 InPolicyControlTicksExecuted,
+			bool bInFirstPolicyInputCaptured,
+			const FTransform& InOwnerActorWorldTransform,
+			const FTransform& InMeshWorldTransform,
+			const FTransform& InRootBoneWorldTransform,
+			TConstArrayView<FPhysAnimBodySample> InBodySamples)
+		{
+			if (!bCondition || bComplete || Samples.Num() >= MaxStartupChronologySamples)
+			{
+				return false;
+			}
+
+			FPhysAnimStartupChronologySample& Sample = Samples.AddDefaulted_GetRef();
+			Sample.Sequence = Samples.Num() - 1;
+			Sample.Stage = InStage;
+			Sample.WorldTimeSeconds = InWorldTimeSeconds;
+			Sample.RuntimeState = InRuntimeState;
+			Sample.PolicyUpdateAccumulatorSeconds = InPolicyUpdateAccumulatorSeconds;
+			Sample.LastPolicyElapsedSteps = InLastPolicyElapsedSteps;
+			Sample.PolicyControlTicksExecuted = InPolicyControlTicksExecuted;
+			Sample.bFirstPolicyInputCaptured = bInFirstPolicyInputCaptured;
+			Sample.OwnerActorWorldTransform = InOwnerActorWorldTransform;
+			Sample.MeshWorldTransform = InMeshWorldTransform;
+			Sample.RootBoneWorldTransform = InRootBoneWorldTransform;
+			Sample.BodySamples.Append(InBodySamples.GetData(), InBodySamples.Num());
+			bComplete = InStage == TEXT("post_policy") && InPolicyControlTicksExecuted > 0;
+			return true;
+		}
+
+		void Reset()
+		{
+			bComplete = false;
+			CaptureError.Reset();
+			Samples.Reset();
+		}
+
+		bool bComplete = false;
+		FString CaptureError;
+		TArray<FPhysAnimStartupChronologySample> Samples;
+	};
+
+	PHYSANIMPLUGIN_API bool ValidateStartupChronologyTrace(
+		const FPhysAnimStartupChronologyTrace& Trace,
+		FString& OutError);
+#endif
+
 	PHYSANIMPLUGIN_API const TArray<FName>& GetControlledBoneNames();
+	PHYSANIMPLUGIN_API const TArray<FPhysAnimProtoActionJointDescriptor>& GetProtoActionJointDescriptors();
 	PHYSANIMPLUGIN_API const TArray<FName>& GetRequiredBodyModifierBoneNames();
 	PHYSANIMPLUGIN_API const TArray<FName>& GetSmplObservationBoneNames();
 	PHYSANIMPLUGIN_API FName GetRootBoneName();
@@ -170,6 +759,8 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API FVector UeVectorToSmpl(const FVector& UeVector);
 	PHYSANIMPLUGIN_API FQuat SmplQuaternionToUe(const FQuat& SmplQuaternion);
 	PHYSANIMPLUGIN_API FQuat UeQuaternionToSmpl(const FQuat& UeQuaternion);
+	// Policy actions are Isaac simulator joint coordinates, not raw SMPL authoring coordinates.
+	PHYSANIMPLUGIN_API FQuat ProtoJointQuaternionToUe(const FQuat& ProtoJointQuaternion);
 	PHYSANIMPLUGIN_API FVector UeWorldPositionToProtoRuntime(const FVector& UeVector);
 	PHYSANIMPLUGIN_API FVector UeWorldVelocityToProtoRuntime(const FVector& UeVector);
 	PHYSANIMPLUGIN_API FVector UeWorldRotationVectorToProtoRuntime(const FVector& UeVector);
@@ -192,6 +783,10 @@ namespace PhysAnimBridge
 		FString& OutError);
 
 	PHYSANIMPLUGIN_API const TArray<FVector2D>& GetTerrainSampleOffsets();
+	PHYSANIMPLUGIN_API FVector BuildTerrainSampleWorldLocation(
+		const FVector& RootWorldLocationCm,
+		const FQuat& RootWorldRotation,
+		const FVector2D& LocalOffsetMeters);
 	PHYSANIMPLUGIN_API bool BuildTerrainObservation(
 		float RootHeight,
 		const TArray<float>& SampleGroundHeights,
@@ -210,6 +805,16 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API bool ConvertModelActionsToControlRotations(
 		const TArray<float>& ModelActions,
 		TMap<FName, FQuat>& OutControlRotations,
+		FString& OutError);
+
+	PHYSANIMPLUGIN_API bool BuildActionJointSemanticTrace(
+		const TArray<float>& RawActions,
+		const TArray<float>& ConditionedActions,
+		TArray<FPhysAnimActionJointSemanticTrace>& OutTrace,
+		FString& OutError);
+
+	PHYSANIMPLUGIN_API bool ValidateActionSemanticTrace(
+		const FPhysAnimActionSemanticTrace& Trace,
 		FString& OutError);
 
 	PHYSANIMPLUGIN_API FQuat LimitControlRotationStep(

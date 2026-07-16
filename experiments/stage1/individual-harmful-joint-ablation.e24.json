@@ -1,0 +1,31 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "individual-harmful-joint-ablation-e24",
+  "recorded_utc": "2026-07-15T17:40:00Z",
+  "source_commit": "bdcc7829942bff04a577bac836dc383e1056739b",
+  "runtime_behavior_commit": "c01d2d9cd609312c7b844e813aea1eb8ed877ecf",
+  "status": "VALID",
+  "hypothesis_verdict": "PARTIALLY_SUPPORTED",
+  "product_success": false,
+  "validity": {
+    "all_first_policy_snapshots_byte_identical": true,
+    "all_outside_range_conditioned_actions_exact_zero": true,
+    "all_target_readback_ratios_one": true,
+    "zero_arm_physically_stable": true
+  },
+  "arms": {
+    "zero": {"status":"PHYSICALLY_STABLE", "failed_criteria":["real_policy_action"], "minimum_pelvis_height_cm":92.89357692376973, "maximum_root_tilt_deg":5.131096839904785},
+    "torso": {"status":"FAIL", "failed_criteria":["root_angular_speed","body_linear_speed","body_angular_speed","pelvis_height","root_tilt"], "first_pelvis_below_80_percent_sec":0.3333333507180214, "first_root_tilt_above_45_deg_sec":0.35000001825392246, "minimum_pelvis_height_cm":14.390443022320937, "maximum_root_tilt_deg":113.47432708740234, "maximum_body_linear_speed_cm_per_sec":1552.2836096966732, "maximum_body_angular_speed_deg_per_sec":4097.426222524373},
+    "spine": {"status":"PASS", "minimum_pelvis_height_cm":92.8922568687916, "maximum_root_tilt_deg":5.320380687713623},
+    "chest": {"status":"PASS", "minimum_pelvis_height_cm":92.8941354059391, "maximum_root_tilt_deg":5.255631923675537},
+    "right_thorax": {"status":"PASS", "minimum_pelvis_height_cm":92.95573383722444, "maximum_root_tilt_deg":5.599557399749756},
+    "right_shoulder": {"status":"PASS", "minimum_pelvis_height_cm":92.8935800020019, "maximum_root_tilt_deg":4.849900245666504},
+    "right_elbow": {"status":"PASS", "minimum_pelvis_height_cm":92.88798390054956, "maximum_root_tilt_deg":4.071965217590332}
+  },
+  "causal_findings": [
+    "Proto joint 8 (Torso mapped to Manny spine_01) alone is sufficient for the catastrophic trunk failure.",
+    "Proto joints 9 and 10 are independently safe for ten seconds.",
+    "Proto joints 18, 19, and 20 are independently safe, so E23's right-proximal failure is an interaction rather than a single-joint defect."
+  ],
+  "next": "Test right-proximal pairs 18-19 and 19-20. Separately run the lower-only policy through the complete locked causal-standing product bundle."
+}

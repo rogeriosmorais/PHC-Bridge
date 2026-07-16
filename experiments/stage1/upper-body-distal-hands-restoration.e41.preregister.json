@@ -1,0 +1,67 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "upper-body-distal-hands-restoration-e41",
+  "preregistered_utc": "2026-07-15T21:37:06Z",
+  "production_baseline_behavior_commit": "3bbcfc54225293a185b23c8d211f25b853cb91f6",
+  "latest_evidence_commit": "70485ae351c31f73127c5559901c33e98af6a36f",
+  "hypothesis": "Restoring the distal hand action joints on both sides (L_Wrist 16, L_Hand 17, R_Wrist 21, R_Hand 22) in addition to the E40 production mask preserves the complete locked causal-standing product contract.",
+  "causal_variable": {
+    "name": "retained_policy_action_joints",
+    "control": [0,1,2,3,4,5,6,7,9,10],
+    "candidate": [0,1,2,3,4,5,6,7,9,10,16,17,21,22],
+    "candidate_region": "DistalHands",
+    "command_line_opt_in": "-PhysAnimExperimentalCausalStandingUpperBody=DistalHands"
+  },
+  "held_constant": [
+    "E40 production lower-body plus Spine/Chest mask",
+    "Torso joint 8, Neck, Head and all proximal arm joints remain exactly zero",
+    "source model and ONNX hash",
+    "locked causal-standing protocol and evaluator thresholds",
+    "component-space action-axis composition",
+    "captured standing neutral",
+    "constraint range mapping and safety projection",
+    "8 Hz acceleration-mode control plant",
+    "Normal delayed policy strength transition 1.0 to 1.5",
+    "ZeroActions strength multiplier 1.0",
+    "fixed timestep, perturbation, render capture, seed and product variants"
+  ],
+  "historical_basis": [
+    "E23 found both left distal and right distal arm subsets physically stable for ten seconds under the component-axis plant.",
+    "The distal Proto pairs collapse onto Manny hand controls, so both Wrist and Hand source joints are restored together per side.",
+    "E41 combines both safe distal sides while retaining the new E40 production baseline."
+  ],
+  "implementation_plan": [
+    "Add an automation-only DistalHands selector that changes only the standing action compatibility mask.",
+    "Write parser and exact-mask contracts before implementation: retain production joints plus 16-17 and 21-22; all other currently masked joints remain zero.",
+    "Run focused Unreal red then green and commit the candidate before product runs.",
+    "Run the complete locked bundle: Normal x3, ZeroActions x3, DropControlDispatch x1 and ForcedSupportLoss x1.",
+    "Audit exact first-active and full masks, strengths, hashes, deterministic streams, model/protocol identity and destructive controls."
+  ],
+  "acceptance": {
+    "bundle_status": "PASS",
+    "normal_absolute_pass_count": 3,
+    "zero_actions_absolute_pass_count": 3,
+    "maximum_normal_to_zero_recovery_auc_ratio": 0.8,
+    "normal_target_readback_match_ratio": 1.0,
+    "zero_target_readback_match_ratio": 1.0,
+    "drop_control_dispatch_required_status": "FAIL",
+    "drop_control_dispatch_required_failed_criteria": ["target_readback"],
+    "forced_support_loss_required_status": "FAIL",
+    "forced_support_loss_required_failed_criteria": ["support_gap"],
+    "normal_conditioned_joint_requirements": {
+      "production_indices_0_to_7_and_9_to_10": "nonzero policy behavior present",
+      "indices_16_to_17_and_21_to_22": "nonzero policy behavior present",
+      "all_other_indices": "exactly zero"
+    },
+    "zero_actions_all_conditioned_scalars": "exactly zero",
+    "normal_strength_multipliers": [1.0,1.5],
+    "zero_actions_strength_multipliers": [1.0],
+    "normal_repetitions_deterministic": true,
+    "zero_repetitions_deterministic": true
+  },
+  "decision_rule": {
+    "supported": "Record E41 as a valid experimental increment and preregister a separate production promotion before changing the default mask.",
+    "falsified": "Keep E40 production unchanged and localize left and right distal sides with separate causal bundles.",
+    "invalid": "Repeat only if a preregistered validity condition, command-line configuration, evidence artifact or protocol invariant is violated."
+  }
+}

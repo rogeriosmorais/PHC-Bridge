@@ -1,0 +1,268 @@
+{
+  "schema_version": "physanim-evidence-driven-investigation/v1",
+  "experiment_id": "real-onnx-preintervention-determinism-e5",
+  "recorded_utc": "2026-07-14T18:03:50Z",
+  "experiment_type": "unchanged-runtime-repetition-control",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "NONE",
+  "hypothesis": "The standing-plant fixture has launch-to-launch variation before the active-standing intervention, so nominally identical runs can enter different first-policy input modes and invalidate semantic A/B comparisons.",
+  "supporting_evidence_before_experiment": {
+    "source_experiment": "experiments/stage1/active-standing-constraint-range-remap-bypass.e4.json",
+    "first_policy_input_snapshot_hash_identical": false,
+    "self_observation_max_abs_difference": 0.002320558,
+    "mimic_target_max_abs_difference": 0.002570421,
+    "terrain_max_abs_difference": 0.000044107,
+    "first_action_max_abs_difference": 0.008536816
+  },
+  "competing_explanations": [
+    "E4's baseline was an isolated malformed launch and unchanged repetitions will otherwise be bit-identical.",
+    "The E4 bypass flag indirectly changed startup state before its active-standing-only branch executed.",
+    "The repetition or run identity fields alter runtime state rather than serving only as artifact metadata."
+  ],
+  "single_changed_variable": {
+    "name": "launch_repetition",
+    "values": [
+      1,
+      2,
+      3
+    ],
+    "runtime_behavior_override": "none",
+    "action_semantic_trace_enabled": true,
+    "constraint_range_remap_enabled": true,
+    "constraint_range_remap_bypass_enabled": false,
+    "production_default_changed": false,
+    "activation_contract_changed": false,
+    "serialization_contract_changed": false,
+    "acceptance_thresholds_changed": false
+  },
+  "expected_if_hypothesis_correct": "At least two unchanged repetitions produce different exact first-policy snapshot hashes with nonzero policy-input and first-action differences.",
+  "falsification_observation": "All three first-policy snapshots and first actions are bit-identical.",
+  "locked_judges": {
+    "protocol": "product-gates/standing-plant-ladder.v2.json",
+    "protocol_version": 2,
+    "protocol_status": "LOCKED",
+    "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+    "evaluator": "scripts/evaluate_standing_plant.py",
+    "automation_test": "PhysAnim.Development.StandingPlant.RealOnnxPolicy",
+    "variant": "RealOnnxPolicy",
+    "fixed_delta_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "perturbation": "none_for_standing_plant_layer",
+    "deterministic_seed": "unchanged_harness_default_no_override",
+    "initial_pose": "unchanged_standing_plant_fixture",
+    "acceptance_threshold_changes": "none",
+    "primary_metrics": [
+      "exact first-policy snapshot hash",
+      "per-section first-policy maximum absolute and RMS differences",
+      "first-action maximum absolute and RMS differences",
+      "exact active-standing snapshot and semantic-trace hashes",
+      "exact physics and policy stream hashes",
+      "locked evaluator status and failed-criteria set",
+      "target write and readback completeness"
+    ]
+  },
+  "implementation": {
+    "source_commit": "5de9aeb47c52b663b65ac8768a7ed3372dc9889f",
+    "source_tree_dirty": false,
+    "commit_subject": "Record invalid constraint remap bypass experiment",
+    "behavior_or_code_change": "none",
+    "model_path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+    "model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19"
+  },
+  "metadata_only_identity_audit": {
+    "graphify_query_result": "The existing graph did not contain a useful path for the harness identity fields.",
+    "serena_status": "UNAVAILABLE_IN_SESSION",
+    "fallback": "Targeted rg inspection of build.ps1 and PhysAnimCausalStanding.Tests.cpp.",
+    "product_repetition_usage": [
+      "build.ps1 forwards PhysAnimProductRepetition",
+      "the test parses and validates the value",
+      "the test writes the value to manifest.repetition"
+    ],
+    "run_id_usage": [
+      "the test parses and validates the value",
+      "the test writes the value to manifest.run_id"
+    ],
+    "runtime_seed_pose_policy_or_physics_usage_found": false,
+    "conclusion": "Repetition and run identity are artifact metadata in this harness and do not explain the observed input-mode change through an intentional runtime branch."
+  },
+  "baseline": {
+    "configuration": "Repetitions 1 and 2; identical binary, model, runtime flags, fixed step, initial pose, default seed, capture window, evaluator, trace enabled, and range remap enabled.",
+    "runs": [
+      {
+        "run_id": "RealOnnxPolicy-determinism-e5-r1",
+        "repetition": 1,
+        "artifact_root": "test-results/adapter-preintervention-determinism-e5/RealOnnxPolicy-determinism-e5-r1",
+        "automation_status": "PASS",
+        "evaluator_status": "FAIL",
+        "failed_criteria": [
+          "body_linear_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "target_readback_match_ratio": 1.0
+      },
+      {
+        "run_id": "RealOnnxPolicy-determinism-e5-r2",
+        "repetition": 2,
+        "artifact_root": "test-results/adapter-preintervention-determinism-e5/RealOnnxPolicy-determinism-e5-r2",
+        "automation_status": "PASS",
+        "evaluator_status": "FAIL",
+        "failed_criteria": [
+          "body_linear_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "target_readback_match_ratio": 1.0
+      }
+    ],
+    "exact_raw_equivalence_between_runs": true,
+    "sha256_shared_by_repetitions_1_and_2": {
+      "first_policy_input_snapshot": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_policy_input_snapshot": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201"
+    },
+    "key_metrics_shared_by_repetitions_1_and_2": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.986961,
+      "minimum_pelvis_height_ratio": 0.153366,
+      "maximum_root_tilt_deg": 105.401276,
+      "maximum_root_linear_speed_cm_per_sec": 818.946884,
+      "maximum_root_angular_speed_deg_per_sec": 558.735126,
+      "maximum_body_linear_speed_cm_per_sec": 1119.794147,
+      "maximum_body_angular_speed_deg_per_sec": 1742.669912,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0
+    },
+    "semantic_trace_shared_by_repetitions_1_and_2": {
+      "captured": true,
+      "capture_error": "",
+      "action_joint_count": 23,
+      "control_target_count": 21,
+      "first_active_action_l2": 0.95511,
+      "mean_constraint_range_mapping_delta_deg": 19.008891,
+      "maximum_constraint_range_mapping_delta_deg": 72.824051,
+      "mean_constraint_projection_delta_deg": 0.689942,
+      "maximum_constraint_projection_delta_deg": 8.858796,
+      "target_write_count": 21,
+      "readback_success_count": 21,
+      "maximum_readback_error_deg": 0.0
+    }
+  },
+  "experimental_repetition": {
+    "configuration": "Repetition 3; identical binary, model, runtime flags, fixed step, initial pose, default seed, capture window, evaluator, trace enabled, and range remap enabled. Only artifact identity paths and repetition metadata differ.",
+    "attempts": [
+      {
+        "artifact_root": "test-results/adapter-preintervention-determinism-e5/RealOnnxPolicy-determinism-e5-r3-interrupted",
+        "run_status": "INVALID",
+        "invalid_reason": "The command wrapper timed out and no manifest or evaluator result was produced."
+      },
+      {
+        "artifact_root": "test-results/adapter-preintervention-determinism-e5/RealOnnxPolicy-determinism-e5-r3-render-crash",
+        "run_status": "INVALID",
+        "invalid_reason": "UE access violation in FCausalStandingCaptureCommand::CaptureRender at PhysAnimCausalStanding.Tests.cpp:1078; no manifest or evaluator result was produced."
+      },
+      {
+        "artifact_root": "test-results/adapter-preintervention-determinism-e5/RealOnnxPolicy-determinism-e5-r3",
+        "run_status": "INVALID",
+        "invalid_reason": "UE access violation in FCausalStandingCaptureCommand::CaptureRender at PhysAnimCausalStanding.Tests.cpp:1078; no manifest or evaluator result was produced."
+      }
+    ],
+    "repeat_rule_decision": "Stopped after the repeated unchanged CaptureRender failure; no fourth repetition-3 attempt was run.",
+    "raw_measurement_integrity": {
+      "physics_sample_count_each_attempt": 601,
+      "semantic_trace_captured_each_attempt": true,
+      "all_five_raw_artifact_hashes_identical_across_three_attempts": true,
+      "manifest_present": false,
+      "evaluation_present": false,
+      "full_run_behavioral_status": "INVALID"
+    },
+    "sha256_shared_by_all_repetition_3_attempts": {
+      "first_policy_input_snapshot": "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3",
+      "active_standing_policy_input_snapshot": "EE89DC5EF0B6B6C67493F3F95E8E8EB768CEE941590851BC3BEDFC0E422B23A2",
+      "action_semantic_trace": "1A6FB6B24244421EB4311B6DADC39CC85FCAA4F9174AAA8A583CF4F944602B80",
+      "physics": "65D4BADF2DCBA0AF322837AF9A21A90403FE10E97B97AA49788E319AF080DE6A",
+      "policy": "4D5265BC845AB0C58228A7D9B9490C6AD453D56653DE79719CF18D30AF2282D8"
+    },
+    "raw_diagnostic_metrics_not_a_behavioral_verdict": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 93.565464,
+      "minimum_pelvis_height_ratio": 1.025937,
+      "maximum_root_tilt_deg": 16.436069,
+      "maximum_root_linear_speed_cm_per_sec": 86.248182,
+      "maximum_root_angular_speed_deg_per_sec": 222.158022,
+      "maximum_body_linear_speed_cm_per_sec": 239.175538,
+      "maximum_body_angular_speed_deg_per_sec": 726.896748,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "warning": "These values come from malformed runs without a manifest/evaluator result and cannot be reported as a locked standing-plant or product pass."
+    },
+    "semantic_trace_shared_by_all_attempts": {
+      "captured": true,
+      "capture_error": "",
+      "action_joint_count": 23,
+      "control_target_count": 21,
+      "first_active_action_l2": 1.237694,
+      "mean_constraint_range_mapping_delta_deg": 24.996493,
+      "maximum_constraint_range_mapping_delta_deg": 70.083061,
+      "mean_constraint_projection_delta_deg": 0.615158,
+      "maximum_constraint_projection_delta_deg": 9.190308,
+      "target_write_count": 21,
+      "readback_success_count": 21,
+      "maximum_readback_error_deg": 0.0
+    }
+  },
+  "pre_intervention_comparison": {
+    "repetitions_1_and_2_identical": true,
+    "repetitions_1_or_2_vs_repetition_3_identical": false,
+    "self_observation": {
+      "width": 358,
+      "maximum_absolute_difference": 0.002320558,
+      "rms_difference": 0.000439617
+    },
+    "mimic_target_poses": {
+      "width": 6495,
+      "maximum_absolute_difference": 0.002570421,
+      "rms_difference": 0.000108575
+    },
+    "terrain": {
+      "width": 256,
+      "maximum_absolute_difference": 0.000044107,
+      "rms_difference": 0.000044107
+    },
+    "first_action": {
+      "width": 69,
+      "maximum_absolute_difference": 0.008536816,
+      "rms_difference": 0.002517887,
+      "repetition_1_and_2_l2": 1.000538,
+      "repetition_3_l2": 0.996767
+    },
+    "e4_mode_reproduction": {
+      "e4_baseline_first_snapshot_hash": "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3",
+      "matches_e5_repetition_3": true,
+      "e4_experimental_first_snapshot_hash": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "matches_e5_repetitions_1_and_2": true
+    }
+  },
+  "conclusion": {
+    "hypothesis_status": "SUPPORTED",
+    "experiment_status": "SUPPORTED_BY_PREINTERVENTION_RAW_EVIDENCE_WITH_INVALID_FULL_RUNS",
+    "summary": "The unchanged baseline produced two exact first-policy modes. Repetitions 1 and 2 were byte-identical valid development runs; every repetition-3 attempt produced a second byte-identical raw mode whose first input differed across self observation, mimic targets, and terrain and changed the first action. The two hashes exactly reproduce the two pre-intervention modes that confounded E4. The repetition and run ID fields are metadata-only, so no intentional runtime branch explains the split. Repetition-3 full-run outcomes remain INVALID because CaptureRender failed before manifest publication.",
+    "what_was_learned": "E4's pre-intervention mismatch was not an isolated malformed snapshot and was not caused by the remap-bypass branch. The fixture can enter at least two reproducible startup modes before semantic action intervention. Because the alternate raw mode also changes later actions and physics materially, semantic A/B experiments must first identify and lock the shared upstream observation source.",
+    "promotion_decision": "NO_PRODUCTION_CHANGE",
+    "causal_standing_status": "NOT_PROVEN"
+  },
+  "next_highest_information_experiment": {
+    "status": "SELECTED_NOT_RUN",
+    "name": "First-policy observation provenance trace",
+    "hypothesis": "The two first-policy modes originate in a shared initial root/pose observation source before tensor flattening, rather than in NNE inference or action decoding.",
+    "behavior_change": "none",
+    "instrumentation": "Behind a development-only trace flag, capture the first policy step's actor and skeletal-component transforms, live root transform, per-body transforms used by self observation, PoseSearch selection/time and target root, previous-action state, and terrain sample origin/raw height before normalization and tensor packing.",
+    "method": "First prove trace-on versus trace-off raw streams are bit-identical. Then run unchanged launches with the same binary until both known first-snapshot hashes appear and compare the earliest provenance field that differs.",
+    "expected_if_correct": "One shared pre-flattening root, pose, or terrain-origin value separates the two known snapshot hashes before NNE execution.",
+    "falsifier": "All captured pre-flattening sources are identical while the packed first-policy tensors differ; investigation then moves to tensor assembly or memory ownership.",
+    "locked_metrics": "Exact physics/policy/snapshot hashes for trace neutrality, exact known first-snapshot hashes, per-source transform deltas, PoseSearch identity/time, previous-action equality, and existing locked standing-plant metrics without threshold changes."
+  }
+}

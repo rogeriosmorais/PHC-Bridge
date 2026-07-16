@@ -1,0 +1,19 @@
+{
+  "schema_version": "physanim-preregistration/v1",
+  "experiment_id": "scaled-delayed-torso-e57",
+  "preregistered_utc": "2026-07-16T03:35:00Z",
+  "fixed_baseline_commit": "f09679c67c1c6ff7ccf247c0ebf30d4f7a601b71",
+  "single_variable": "Enable Torso joint 8 at scale 0.0000152587890625 after the first completed active-standing policy inference.",
+  "development_arguments": [
+    "-PhysAnimExperimentalCausalStandingScaledRegion=Torso",
+    "-PhysAnimExperimentalCausalStandingScaledScale=0.0000152587890625"
+  ],
+  "execution": "-onethread",
+  "acceptance": [
+    "Locked 3 Normal + 3 ZeroActions + 2 destructive-control bundle passes.",
+    "Normal and ZeroActions streams are byte-deterministic.",
+    "Normal/ZeroActions recovery-AUC ratio is <= 0.8.",
+    "First-active Torso scalars are exactly zero and later Torso scalars are finite and nonzero.",
+    "Every other production joint region remains active."
+  ]
+}

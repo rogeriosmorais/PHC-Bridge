@@ -1,0 +1,39 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "policy-action-baseline-residual-e27",
+  "recorded_utc": "2026-07-15T18:45:00Z",
+  "authority": "DEVELOPMENT_CAUSAL_EVIDENCE",
+  "product_success": false,
+  "hypothesis": "The policy's absolute standing action bias causes E25's persistent pose error; conditioning the deviation from the first active-standing raw policy action will preserve state-responsive action changes while removing the steady Manny-incompatible offset.",
+  "arms": [
+    {"name":"control_lower_absolute", "variant":"Normal", "action_family":"LowerOnly", "baseline_residual":false},
+    {"name":"experimental_lower_residual", "variant":"Normal", "action_family":"LowerOnly", "baseline_residual":true},
+    {"name":"zero_residual_guard", "variant":"ZeroActions", "action_family":"LowerOnly", "baseline_residual":true}
+  ],
+  "single_changed_variable": "Whether the first active-standing raw action snapshot is subtracted from the current raw action vector before the unchanged conditioning, lower-only mask, decode, range mapping, projection, and dispatch stages.",
+  "locked_configuration": {
+    "same_binary":true,
+    "test":"PhysAnim.Product.CausalStanding",
+    "protocol":"locked causal-standing v1",
+    "action_axis":"mesh-component parent-bind axis from first policy",
+    "neutral_source":"captured stable standing neutral",
+    "retained_actions":"Proto joints 0-7",
+    "range_mapping_and_projection":"enabled",
+    "actuation":"current 8 Hz acceleration-mode plant",
+    "fixed_timestep_seconds":0.016666666666666666,
+    "perturbation_delta_v_cm_per_sec":15.0,
+    "capture_window_seconds":10.0,
+    "renderer":"RenderOffscreen"
+  },
+  "validity_gates": [
+    "Control and experimental Normal first-policy snapshots, including all raw actions, are byte-identical.",
+    "Raw action evidence remains the unmodified ONNX output in every arm.",
+    "The experimental first conditioned action is zero within float tolerance because current equals captured baseline.",
+    "ZeroActions conditioned output remains exactly zero despite the residual flag.",
+    "Target readback is 1.0 and all raw streams/render are complete."
+  ],
+  "support": "Experimental Normal passes every absolute criterion and recovery AUC is <= 32.913436978267704, while control reproduces E25 and ZeroActions remains unchanged.",
+  "partial_support": "Residualization materially lowers AUC but does not cross the locked threshold; use the result to test baseline capture timing or residual scale without promotion.",
+  "falsification": "Residualization fails absolute standing, does not lower AUC, or corrupts ZeroActions/raw evidence.",
+  "next": "If supported, run the complete 3+3+2 bundle behind the residual flag, then implement explicit product behavior and rerun without development flags."
+}

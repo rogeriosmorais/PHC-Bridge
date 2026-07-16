@@ -1,9 +1,11 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimLogger.h"
+#include "PhysAnimProtoMannyAdapter.h"
 
 void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 {
+	LastBodyModifierResetRequestCount = 0;
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
 	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
@@ -72,6 +74,7 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		EResetToCachedTargetBehavior::ResetDuringUpdateControls,
 		true,
 		false);
+	LastBodyModifierResetRequestCount = ModifierNamesToReset.Num();
 
 	for (const FName ModifierName : ModifierNamesToReset)
 	{
@@ -153,8 +156,10 @@ void UPhysAnimComponent::ApplyControlTargets(
 	bool bApplyNewPolicyStepThisTick,
 	FString& OutError)
 {
-	// Evaluate cached targets reset before updating controls so we don't clobber the frame's true targets.
-	ResetPendingBodyModifiersToCachedTargets();
+	if (!IsCausalPolicyControlRuntimeState(RuntimeState))
+	{
+		ResetPendingBodyModifiersToCachedTargets();
+	}
 
 	// Consecutive active frame tracking is now handled at the end of ApplyControlTargets to ensure it only increments on successful writes.
 
@@ -167,6 +172,16 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return;
 	}
 
+#if WITH_DEV_AUTOMATION_TESTS
+	if (IsCausalPolicyControlRuntimeState(RuntimeState) &&
+		!FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(StandingVariantForTesting))
+	{
+		LastControlTargetDiagnostics = {};
+		bPolicyTargetsAppliedLastFrame = false;
+		return;
+	}
+#endif
+
 	USkeletalMeshComponent* const Mesh = GetMeshComponent();
 	const FBodyInstance* const PelvisBodyScope = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 
@@ -177,12 +192,15 @@ void UPhysAnimComponent::ApplyControlTargets(
 	const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
 	const bool bApplyPhase1HoldPoseThisFrame = bPhase1Prepare || bPhase1LateValidate;
 	const bool bPolicyInfluenceActive =
-		PolicyInfluenceRampStartTimeSeconds >= 0.0 &&
-		(
+		RuntimeState == EPhysAnimRuntimeState::Standing_PolicyBlend ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell ||
+		(PolicyInfluenceRampStartTimeSeconds >= 0.0 &&
+			(
 			RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
 			IsBalanceActiveState(RuntimeState) ||
 			bPhase1RootOn ||
-			bPhase1Settle);
+			bPhase1Settle));
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
 	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
@@ -195,15 +213,6 @@ void UPhysAnimComponent::ApplyControlTargets(
 	}
 
 	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
-
-	if (EffectiveSettings.bForceZeroActions)
-	{
-		PreviousControlTargetRotations.Reset();
-		PolicyBlendStartControlTargetRotations.Reset();
-		LastControlTargetDiagnostics = {};
-		bPolicyTargetsAppliedLastFrame = false;
-		return;
-	}
 
 	if (!bPolicyInfluenceActive && !bApplyPhase1HoldPoseThisFrame)
 	{
@@ -229,16 +238,109 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	const float MaxAngularStepDegrees =
 		FMath::Max(0.0f, EffectiveSettings.MaxAngularStepDegreesPerSecond) * PolicyStepDeltaTime;
+	const bool bUseCausalStandingComponentActionAxisThisStep =
+		ShouldUseCausalStandingComponentActionAxis(RuntimeState);
+	bool bUseComponentActionAxisThisStep = bUseCausalStandingComponentActionAxisThisStep;
+	bool bUseBindNeutralThisStep = false;
+	bool bBypassConstraintRangeRemapThisStep = false;
+#if WITH_DEV_AUTOMATION_TESTS
+	PhysAnimBridge::FPhysAnimActionSemanticTrace PendingActionSemanticTrace;
+	TMap<FName, PhysAnimBridge::FPhysAnimControlTargetSemanticTrace> PendingControlTargetSemanticTraces;
+	PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace PendingMannyLocalFrameRoundtripTrace;
+	TMap<FName, PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl>
+		PendingMannyLocalFrameRoundtripControls;
+	const bool bUseExperimentalComponentActionAxisThisStep =
+		ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
+			bExperimentalComponentActionAxisEnabledForTesting,
+			RuntimeState) ||
+		ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
+			bExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting,
+			RuntimeState);
+	bUseComponentActionAxisThisStep =
+		bUseComponentActionAxisThisStep || bUseExperimentalComponentActionAxisThisStep;
+	bUseBindNeutralThisStep =
+		ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
+			bExperimentalBindNeutralFromFirstPolicyEnabledForTesting,
+			RuntimeState);
+	bBypassConstraintRangeRemapThisStep =
+		ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
+			bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting,
+			RuntimeState);
+	bool bCaptureActionSemanticTraceThisStep =
+		bActionSemanticTraceEnabledForTesting &&
+		StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
+		!FirstActiveStandingActionSemanticTrace.bCaptured &&
+		FirstActiveStandingActionSemanticTrace.CaptureError.IsEmpty();
+	if (bCaptureActionSemanticTraceThisStep)
+	{
+		PendingActionSemanticTrace.CaptureScope = TEXT("first_active_standing_target_write");
+		PendingActionSemanticTrace.PolicyStepDeltaTime = PolicyStepDeltaTime;
+		PendingActionSemanticTrace.PolicyInfluenceAlpha = PolicyInfluenceAlpha;
+		PendingActionSemanticTrace.MaxAngularStepDegrees = MaxAngularStepDegrees;
+		PendingActionSemanticTrace.bConstraintAdapterEnabled =
+			EffectiveSettings.bEnableProtoMannyConstraintAdapter;
+		FString TraceError;
+		if (!PhysAnimBridge::BuildActionJointSemanticTrace(
+			ActionOutputBuffer,
+			ConditionedActionBuffer,
+			PendingActionSemanticTrace.ActionJoints,
+			TraceError))
+		{
+			FirstActiveStandingActionSemanticTrace.Reset();
+			FirstActiveStandingActionSemanticTrace.CaptureScope =
+				PendingActionSemanticTrace.CaptureScope;
+			FirstActiveStandingActionSemanticTrace.CaptureError = TraceError;
+			bCaptureActionSemanticTraceThisStep = false;
+		}
+	}
+	const bool bCaptureMannyLocalFrameRoundtripThisStep =
+		bMannyLocalFrameRoundtripTraceEnabledForTesting &&
+		StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
+		!FirstActiveStandingMannyLocalFrameRoundtripTrace.bCaptured &&
+		FirstActiveStandingMannyLocalFrameRoundtripTrace.CaptureError.IsEmpty();
+	if (bCaptureMannyLocalFrameRoundtripThisStep)
+	{
+		PendingMannyLocalFrameRoundtripTrace.CaptureScope =
+			TEXT("first_active_standing_pre_range_target");
+		PendingMannyLocalFrameRoundtripTrace.ConfiguredActionAxisMode =
+			bUseComponentActionAxisThisStep
+				? PhysAnimBridge::MannyLocalFrameRoundtripComponentAxisMode
+				: PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode;
+		PendingMannyLocalFrameRoundtripTrace.AxisProbeDegrees =
+			PhysAnimBridge::MannyLocalFrameRoundtripAxisProbeDegrees;
+	}
+#endif
 	const bool bUseSkeletalAnimationTargetRepresentation =
 		ShouldUseSkeletalAnimationTargetRepresentation(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
 			bPolicyInfluenceActive);
 	UPhysicsAsset* const PhysicsAsset = Mesh ? Mesh->GetPhysicsAsset() : nullptr;
+	AActor* const OwnerActor = GetOwner();
+	const UPhysAnimStage1InitializerComponent* const Stage1Initializer = OwnerActor
+		? OwnerActor->FindComponentByClass<UPhysAnimStage1InitializerComponent>()
+		: nullptr;
+	const UPhysicsControlInitializerComponent* const PhysicsControlInitializer =
+		OwnerActor && !Stage1Initializer
+			? OwnerActor->FindComponentByClass<UPhysicsControlInitializerComponent>()
+			: nullptr;
+	auto FindInitialControl = [Stage1Initializer, PhysicsControlInitializer](const FName ControlName) -> const FInitialPhysicsControl*
+	{
+		if (Stage1Initializer)
+		{
+			return Stage1Initializer->InitialControls.Find(ControlName);
+		}
+		return PhysicsControlInitializer
+			? PhysicsControlInitializer->InitialControls.Find(ControlName)
+			: nullptr;
+	};
 
 
 	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
 	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
-	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0;
+	const bool bHipQuarantineActiveThisFrame =
+		!IsCausalPolicyControlRuntimeState(RuntimeState) && HipQuarantineTicksRemaining > 0;
 	float ThighLDeltaPre = 0.0f;
 	float ThighRDeltaPre = 0.0f;
 	const float OwnerPlanarSpeedCmPerSec = [this]() -> float
@@ -253,7 +355,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return FVector(OwnerVelocity.X, OwnerVelocity.Y, 0.0f).Size();
 	}();
 
-	const bool bIsPhase1PolicyLoopSuppressed = (bPhase1Prepare || bPhase1LateValidate) && !bEnableLiveRuntimeEvidenceProof;
+	const bool bIsPhase1PolicyLoopSuppressed = ShouldSuppressPolicyDispatchForTransitionState(RuntimeState);
 	bool bSuppressPostShellPolicy = false;
 
 	const float TargetWriteDeltaTime =
@@ -340,9 +442,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (bApplyNewPolicyStepThisTick)
 	{
-		// Phase 1 Transition Rule: Normally no normal policy writes during Prepare/LateValidate.
-		// HOWEVER, if bEnableLiveRuntimeEvidenceProof is active, we ALLOW these writes to provide 
-		// authentic telemetry of the policy's intent during the validation hold.
+		// Prepare/LateValidate preserve the parent-relative seed. Evidence collection never changes dispatch.
 
 
 		bool bPolicyTargetsAppliedThisTick = true;
@@ -373,22 +473,24 @@ void UPhysAnimComponent::ApplyControlTargets(
 		// Continuous rebase during settlement provides "Active Damping" (Strength*0 + Damping*Vel).
 		if ((bKineticGateReleasedThisFrame || bInSettlementWindow) && Mesh)
 		{
-			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			TMap<FName, FPhysAnimControlTargetSeed> CurrentPhysicalPoseSeeds;
+			FString CurrentPhysicalPoseError;
+			if (!GatherCurrentPoseControlTargetSeeds(CurrentPhysicalPoseSeeds, CurrentPhysicalPoseError))
 			{
-				const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
-				
-				const FQuat ChildWorldRot = Mesh->GetBoneQuaternion(BoneName, EBoneSpaces::WorldSpace);
-				const FName ParentBoneName = Mesh->GetParentBone(BoneName);
-				const FQuat ParentWorldRot = (ParentBoneName != NAME_None) ? 
-					Mesh->GetBoneQuaternion(ParentBoneName, EBoneSpaces::WorldSpace) : 
-					FQuat::Identity;
+				OutError = FString::Printf(
+					TEXT("Could not capture the physical parent-relative target seed during settlement: %s"),
+					*CurrentPhysicalPoseError);
+				return;
+			}
 
-				const FQuat LocalRot = (ParentWorldRot.Inverse() * ChildWorldRot).GetNormalized();
-				PreviousControlTargetRotations.Add(ControlName, LocalRot);
+			for (const TPair<FName, FPhysAnimControlTargetSeed>& Pair : CurrentPhysicalPoseSeeds)
+			{
+				const FQuat& ParentRelativeTarget = Pair.Value.ParentRelativeTargetRotation;
+				PreviousControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
 
-				// During settlement, we keep updating the blend start so it carries the final settled pose 
-				// into the handover phase at Tick 21.
-				PolicyBlendStartControlTargetRotations.Add(ControlName, LocalRot);
+				// Settlement remains policy-free. Capture its latest physical pose as the seed,
+				// then preserve that seed unchanged once the handover ramp starts.
+				PolicyBlendStartControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
 			}
 		}
 
@@ -485,84 +587,226 @@ void UPhysAnimComponent::ApplyControlTargets(
 					return;
 				}
 
-				if (bRebaseControlTargetHistoryThisFrame)
+				if (bRebaseControlTargetHistoryThisFrame &&
+					(!PreviousControlTargetRotations.Contains(ControlName) ||
+					 !PolicyBlendStartControlTargetRotations.Contains(ControlName)))
 				{
-					if (!PreviousControlTargetRotations.Contains(ControlName))
-					{
-						PreviousControlTargetRotations.Add(ControlName, Pair.Value);
-					}
-					if (!PolicyBlendStartControlTargetRotations.Contains(ControlName))
-					{
-						PolicyBlendStartControlTargetRotations.Add(ControlName, Pair.Value);
-					}
-				}
-
-				// §EPIC-13.2 - Phase 3 Soft Handover
-				FQuat BasePolicyRotation = Pair.Value;
-				if (bIsPhase3HandoverBlend && EffectiveHandoverAlpha < 1.0f - KINDA_SMALL_NUMBER)
-				{
-					// Blend from the physically settled pose (captured at Tick 20) to the current policy target
-					const FQuat* const StartRotPtr = PolicyBlendStartControlTargetRotations.Find(ControlName);
-					if (StartRotPtr)
-					{
-						BasePolicyRotation = FQuat::Slerp(*StartRotPtr, Pair.Value, EffectiveHandoverAlpha).GetNormalized();
-					}
-				}
-				else if (bInSettlementWindow)
-				{
-					// During settlement, strictly follow the rebased physical pose
-					const FQuat* const SettledRotPtr = PreviousControlTargetRotations.Find(ControlName);
-					if (SettledRotPtr)
-					{
-						BasePolicyRotation = *SettledRotPtr;
-					}
+					OutError = FString::Printf(
+						TEXT("Missing captured parent-relative seed for control '%s' on the first policy frame."),
+						*ControlName.ToString());
+					return;
 				}
 
 				const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
 				const FQuat* const BlendStartRotation = PolicyBlendStartControlTargetRotations.Find(ControlName);
+				const FPhysAnimControlTargetSeed* const BindSeed = CachedTPoseControlTargetSeeds.Find(ControlName);
+				if (!BindSeed)
+				{
+					OutError = FString::Printf(
+						TEXT("Missing T-pose bind calibration for control '%s' during target write."),
+						*ControlName.ToString());
+					return;
+				}
+				const FQuat* const StableNeutralRotation =
+					PolicyNeutralControlTargetRotations.Find(ControlName);
+				if (!StableNeutralRotation)
+				{
+					OutError = FString::Printf(
+						TEXT("Missing captured stable neutral for control '%s' during target write."),
+						*ControlName.ToString());
+					return;
+				}
+				const FQuat MannyPolicyNeutralRotation = bUseBindNeutralThisStep
+					? BindSeed->ParentRelativeTargetRotation.GetNormalized()
+					: StableNeutralRotation->GetNormalized();
+				FQuat EffectiveActionAxisRotation =
+					BindSeed->ParentActionAxisReferenceRotation.GetNormalized();
+				FQuat AbsoluteBindCalibratedPolicyRotation =
+					ComposeProtoPolicyTargetAroundMannyNeutral(
+						*BindSeed,
+						MannyPolicyNeutralRotation,
+						Pair.Value);
+				if (bUseComponentActionAxisThisStep)
+				{
+					const FInitialPhysicsControl* const InitialControl =
+						FindInitialControl(ControlName);
+					const TArray<FName>& ObservationBodyNames =
+						PhysAnimBridge::GetSmplObservationBoneNames();
+					const int32 ObservationParentBodyIndex = InitialControl
+						? ObservationBodyNames.IndexOfByKey(InitialControl->ParentBoneName)
+						: INDEX_NONE;
+					if (!InitialControl ||
+						!ObservationBodyNames.IsValidIndex(ObservationParentBodyIndex) ||
+						!CachedSmplObservationRestBodyComponentRotations.IsValidIndex(
+							ObservationParentBodyIndex))
+					{
+						OutError = FString::Printf(
+							TEXT("Component action axis cannot resolve parent bind for '%s'."),
+							*ControlName.ToString());
+						return;
+					}
+					const FQuat ObservationParentBindComponentRotation =
+						CachedSmplObservationRestBodyComponentRotations[
+							ObservationParentBodyIndex].GetNormalized();
+					const FQuat ActionBindComponentWorldRotation =
+						(BindSeed->ParentWorldRotation *
+						 ObservationParentBindComponentRotation.Inverse()).GetNormalized();
+					EffectiveActionAxisRotation =
+						ExpressCachedWorldActionAxisInMeshComponent(
+							ActionBindComponentWorldRotation,
+							BindSeed->ParentActionAxisReferenceRotation);
+					AbsoluteBindCalibratedPolicyRotation =
+						ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxis(
+							EffectiveActionAxisRotation,
+							MannyPolicyNeutralRotation,
+							Pair.Value);
+				}
+#if WITH_DEV_AUTOMATION_TESTS
+				const FString EffectiveActionAxisMode = bUseComponentActionAxisThisStep
+					? PhysAnimBridge::MannyLocalFrameRoundtripComponentAxisMode
+					: PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode;
+				if (bCaptureMannyLocalFrameRoundtripThisStep &&
+					PendingMannyLocalFrameRoundtripTrace.CaptureError.IsEmpty())
+				{
+					const FInitialPhysicsControl* const RoundtripInitialControl =
+						FindInitialControl(ControlName);
+					if (!RoundtripInitialControl)
+					{
+						PendingMannyLocalFrameRoundtripTrace.CaptureError = FString::Printf(
+							TEXT("Missing initial control ownership for '%s'."),
+							*ControlName.ToString());
+					}
+					else
+					{
+						PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl TraceEntry;
+						FString RoundtripError;
+						const int32 ControlIndex =
+							PhysAnimBridge::GetControlledBoneNames().IndexOfByKey(Pair.Key);
+						if (!BuildMannyLocalFrameRoundtripControlForTesting(
+							ControlIndex,
+							Pair.Key,
+							ControlName,
+							RoundtripInitialControl->ChildBoneName,
+							RoundtripInitialControl->ParentBoneName,
+							*BindSeed,
+							MannyPolicyNeutralRotation,
+							Pair.Value,
+							AbsoluteBindCalibratedPolicyRotation,
+							EffectiveActionAxisMode,
+							EffectiveActionAxisRotation,
+							TraceEntry,
+							RoundtripError))
+						{
+							PendingMannyLocalFrameRoundtripTrace.CaptureError = RoundtripError;
+						}
+						else
+						{
+							PendingMannyLocalFrameRoundtripControls.Add(Pair.Key, MoveTemp(TraceEntry));
+						}
+					}
+				}
+#endif
 
 				const bool bApplyTrainingAlignedLowerLimbTargetRangePolicy =
-				ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
-					EffectiveSettings.bApplyTrainingAlignedLowerLimbTargetRangePolicy,
-					EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend);
-			const float LowerLimbTargetRangeScale = bApplyTrainingAlignedLowerLimbTargetRangePolicy
-				? ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(
-					Pair.Key,
-					EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend)
-				: 1.0f;
-			const bool bApplyTrainingAlignedDistalLocomotionTargetPolicy =
-				ShouldApplyTrainingAlignedDistalLocomotionTargetPolicy(
-					EffectiveSettings.bApplyTrainingAlignedDistalLocomotionTargetPolicy,
-					EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend,
-					OwnerPlanarSpeedCmPerSec,
-					EffectiveSettings.DistalLocomotionTargetPolicyActivationSpeedCmPerSec);
-			const float DistalLocomotionTargetScale = bApplyTrainingAlignedDistalLocomotionTargetPolicy
-				? ResolveTrainingAlignedDistalLocomotionTargetScaleForBone(
-					Pair.Key,
-					EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend)
-				: 1.0f;
-			const float RawPolicyOffsetDegrees = BlendStartRotation
-				? CalculateControlTargetDeltaDegrees(*BlendStartRotation, BasePolicyRotation)
-				: 0.0f;
-			const FQuat RangeAlignedPolicyRotation = BlendStartRotation
-				? BlendPolicyTargetRotation(*BlendStartRotation, BasePolicyRotation, LowerLimbTargetRangeScale)
-				: BasePolicyRotation;
+					ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
+						EffectiveSettings.bApplyTrainingAlignedLowerLimbTargetRangePolicy,
+						EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend);
+				const float LowerLimbTargetRangeScale = bApplyTrainingAlignedLowerLimbTargetRangePolicy
+					? ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(
+						Pair.Key,
+						EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend)
+					: 1.0f;
+				const bool bApplyTrainingAlignedDistalLocomotionTargetPolicy =
+					ShouldApplyTrainingAlignedDistalLocomotionTargetPolicy(
+						EffectiveSettings.bApplyTrainingAlignedDistalLocomotionTargetPolicy,
+						EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend,
+						OwnerPlanarSpeedCmPerSec,
+						EffectiveSettings.DistalLocomotionTargetPolicyActivationSpeedCmPerSec);
+				const float DistalLocomotionTargetScale = bApplyTrainingAlignedDistalLocomotionTargetPolicy
+					? ResolveTrainingAlignedDistalLocomotionTargetScaleForBone(
+						Pair.Key,
+						EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend)
+					: 1.0f;
+				const float RawPolicyOffsetDegrees = CalculateControlTargetDeltaDegrees(
+					MannyPolicyNeutralRotation,
+					AbsoluteBindCalibratedPolicyRotation);
+				const FQuat RangeAlignedPolicyRotation = BlendPolicyTargetRotation(
+					MannyPolicyNeutralRotation,
+					AbsoluteBindCalibratedPolicyRotation,
+					LowerLimbTargetRangeScale);
+				const FQuat DistalLocomotionAlignedPolicyRotation = BlendPolicyTargetRotation(
+					MannyPolicyNeutralRotation,
+					RangeAlignedPolicyRotation,
+					DistalLocomotionTargetScale);
+				FQuat ConstraintAdaptedPolicyRotation = DistalLocomotionAlignedPolicyRotation;
+#if WITH_DEV_AUTOMATION_TESTS
+				FQuat TraceConstraintRangeMappedRotation = DistalLocomotionAlignedPolicyRotation;
+				FPhysAnimMannyConstraintProfile TraceConstraintProfile;
+				bool bTraceHasConstraintProfile = false;
+#endif
+				if (EffectiveSettings.bEnableProtoMannyConstraintAdapter && PhysicsAsset)
+				{
+					const FInitialPhysicsControl* const InitialControl = FindInitialControl(ControlName);
+					FPhysAnimMannyConstraintProfile ConstraintProfile;
+					if (InitialControl && PhysAnimProtoMannyAdapter::BuildConstraintProfile(
+						PhysicsAsset,
+						InitialControl->ChildBoneName,
+						InitialControl->ParentBoneName,
+						ConstraintProfile))
+					{
+						const FQuat RangeMappedPolicyRotation =
+							bBypassConstraintRangeRemapThisStep
+								? DistalLocomotionAlignedPolicyRotation
+								: PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
+									DistalLocomotionAlignedPolicyRotation,
+									MannyPolicyNeutralRotation,
+									ConstraintProfile);
+						ConstraintAdaptedPolicyRotation = PhysAnimProtoMannyAdapter::AdaptParentRelativeTarget(
+							RangeMappedPolicyRotation,
+							MannyPolicyNeutralRotation,
+							ConstraintProfile);
+#if WITH_DEV_AUTOMATION_TESTS
+						if (bCaptureActionSemanticTraceThisStep)
+						{
+							TraceConstraintRangeMappedRotation = RangeMappedPolicyRotation;
+							TraceConstraintProfile = ConstraintProfile;
+							bTraceHasConstraintProfile = true;
+						}
+#endif
+					}
+				}
+				const float RangeAlignedPolicyOffsetDegrees = CalculateControlTargetDeltaDegrees(
+					MannyPolicyNeutralRotation,
+					ConstraintAdaptedPolicyRotation);
 
-			const FQuat DistalLocomotionAlignedPolicyRotation = BlendStartRotation
-				? BlendPolicyTargetRotation(*BlendStartRotation, RangeAlignedPolicyRotation, DistalLocomotionTargetScale)
-				: RangeAlignedPolicyRotation;
-			const float RangeAlignedPolicyOffsetDegrees = BlendStartRotation
-				? CalculateControlTargetDeltaDegrees(*BlendStartRotation, DistalLocomotionAlignedPolicyRotation)
-				: 0.0f;
-			const FQuat BlendedPolicyRotation = BlendStartRotation
-				? BlendPolicyTargetRotation(*BlendStartRotation, DistalLocomotionAlignedPolicyRotation, PolicyInfluenceAlpha)
-				: DistalLocomotionAlignedPolicyRotation;
-			const float TargetDeltaDegrees = PreviousRotation
-				? CalculateControlTargetDeltaDegrees(*PreviousRotation, BlendedPolicyRotation)
-				: 0.0f;
-			FQuat LimitedRotation = PreviousRotation
-				? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
-				: BlendedPolicyRotation;
+				// ProtoMotions mimic_residual_control is false for this checkpoint: actions
+				// are absolute SMPL joint targets. The synchronized body calibration defines
+				// Proto axes; the captured activation pose is Manny's retargeted policy zero.
+				FQuat BasePolicyRotation = ConstraintAdaptedPolicyRotation;
+				if (bIsPhase3HandoverBlend && EffectiveHandoverAlpha < 1.0f - KINDA_SMALL_NUMBER)
+				{
+					if (BlendStartRotation)
+					{
+						BasePolicyRotation = FQuat::Slerp(
+							*BlendStartRotation,
+							ConstraintAdaptedPolicyRotation,
+							EffectiveHandoverAlpha).GetNormalized();
+					}
+				}
+				else if (bInSettlementWindow && PreviousRotation)
+				{
+					BasePolicyRotation = *PreviousRotation;
+				}
+
+				const FQuat BlendedPolicyRotation = BlendStartRotation
+					? BlendPolicyTargetRotation(*BlendStartRotation, BasePolicyRotation, PolicyInfluenceAlpha)
+					: BasePolicyRotation;
+				const float TargetDeltaDegrees = PreviousRotation
+					? CalculateControlTargetDeltaDegrees(*PreviousRotation, BlendedPolicyRotation)
+					: 0.0f;
+				FQuat LimitedRotation = PreviousRotation
+					? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
+					: BlendedPolicyRotation;
 
 			if (bHipQuarantineActiveThisFrame && (Pair.Key == "thigh_l" || Pair.Key == "thigh_r") && Mesh)
 			{
@@ -631,6 +875,12 @@ void UPhysAnimComponent::ApplyControlTargets(
 					bDistalLocomotionCompositionModeActive,
 					TargetWriteDeltaTime);
 
+#if WITH_DEV_AUTOMATION_TESTS
+			if (bProductControlDispatchDroppedForTesting)
+			{
+				continue;
+			}
+#endif
 			PhysicsControl->SetControlTargetOrientation(
 				ControlName,
 				LimitedRotation.Rotator(),
@@ -639,7 +889,149 @@ void UPhysAnimComponent::ApplyControlTargets(
 				false,
 				true,
 				false);
+#if WITH_DEV_AUTOMATION_TESTS
+			if (bCaptureActionSemanticTraceThisStep)
+			{
+				PhysAnimBridge::FPhysAnimControlTargetSemanticTrace& TraceEntry =
+					PendingControlTargetSemanticTraces.FindOrAdd(Pair.Key);
+				TraceEntry.MannyBoneName = Pair.Key;
+				TraceEntry.ControlName = ControlName;
+				for (const PhysAnimBridge::FPhysAnimProtoActionJointDescriptor& Descriptor :
+					PhysAnimBridge::GetProtoActionJointDescriptors())
+				{
+					if (Descriptor.MannyBoneName == Pair.Key)
+					{
+						TraceEntry.SourceProtoJointIndices.Add(Descriptor.ProtoJointIndex);
+					}
+				}
+				TraceEntry.CombinedDecodedRotationUe = Pair.Value.GetNormalized();
+				TraceEntry.MannyNeutralRotation = MannyPolicyNeutralRotation;
+				TraceEntry.BindComposedRotation = AbsoluteBindCalibratedPolicyRotation;
+				TraceEntry.RangeScaledRotation = RangeAlignedPolicyRotation;
+				TraceEntry.DistalScaledRotation = DistalLocomotionAlignedPolicyRotation;
+				TraceEntry.ConstraintRangeMappedRotation = TraceConstraintRangeMappedRotation;
+				TraceEntry.ConstraintAdaptedRotation = ConstraintAdaptedPolicyRotation;
+				TraceEntry.BlendedRotation = BlendedPolicyRotation;
+				TraceEntry.PublishedRotation = LimitedRotation.GetNormalized();
+				TraceEntry.bHasConstraintProfile = bTraceHasConstraintProfile;
+				TraceEntry.bTargetWritten = true;
+				if (bTraceHasConstraintProfile)
+				{
+					TraceEntry.TwistMotion = static_cast<int32>(TraceConstraintProfile.TwistMotion);
+					TraceEntry.Swing1Motion = static_cast<int32>(TraceConstraintProfile.Swing1Motion);
+					TraceEntry.Swing2Motion = static_cast<int32>(TraceConstraintProfile.Swing2Motion);
+					TraceEntry.TwistLimitDegrees = TraceConstraintProfile.TwistLimitDegrees;
+					TraceEntry.Swing1LimitDegrees = TraceConstraintProfile.Swing1LimitDegrees;
+					TraceEntry.Swing2LimitDegrees = TraceConstraintProfile.Swing2LimitDegrees;
+				}
+				TraceEntry.LowerLimbRangeScale = LowerLimbTargetRangeScale;
+				TraceEntry.DistalRangeScale = DistalLocomotionTargetScale;
+				TraceEntry.RawPolicyOffsetDegrees = RawPolicyOffsetDegrees;
+				TraceEntry.RangeScaleDeltaDegrees = CalculateControlTargetDeltaDegrees(
+					AbsoluteBindCalibratedPolicyRotation,
+					RangeAlignedPolicyRotation);
+				TraceEntry.DistalScaleDeltaDegrees = CalculateControlTargetDeltaDegrees(
+					RangeAlignedPolicyRotation,
+					DistalLocomotionAlignedPolicyRotation);
+				TraceEntry.ConstraintRangeMappingDeltaDegrees = CalculateControlTargetDeltaDegrees(
+					DistalLocomotionAlignedPolicyRotation,
+					TraceConstraintRangeMappedRotation);
+				TraceEntry.ConstraintProjectionDeltaDegrees = CalculateControlTargetDeltaDegrees(
+					TraceConstraintRangeMappedRotation,
+					ConstraintAdaptedPolicyRotation);
+				TraceEntry.AdaptedToPublishedDeltaDegrees = CalculateControlTargetDeltaDegrees(
+					ConstraintAdaptedPolicyRotation,
+					LimitedRotation);
+
+				FPhysicsControlTarget Readback;
+				TraceEntry.bReadbackSucceeded = PhysicsControl->GetControlTarget(ControlName, Readback);
+				if (TraceEntry.bReadbackSucceeded)
+				{
+					TraceEntry.ReadbackRotation = Readback.TargetOrientation.Quaternion().GetNormalized();
+					TraceEntry.ReadbackErrorDegrees = CalculateControlTargetDeltaDegrees(
+						TraceEntry.PublishedRotation,
+						TraceEntry.ReadbackRotation);
+				}
+				else
+				{
+					TraceEntry.ReadbackErrorDegrees = 180.0f;
+				}
 			}
+#endif
+			}
+#if WITH_DEV_AUTOMATION_TESTS
+			if (bCaptureActionSemanticTraceThisStep)
+			{
+				for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+				{
+					const PhysAnimBridge::FPhysAnimControlTargetSemanticTrace* const TraceEntry =
+						PendingControlTargetSemanticTraces.Find(BoneName);
+					if (!TraceEntry)
+					{
+						PendingActionSemanticTrace.CaptureError = FString::Printf(
+							TEXT("No action semantic target trace was captured for '%s'."),
+							*BoneName.ToString());
+						break;
+					}
+					PendingActionSemanticTrace.ControlTargets.Add(*TraceEntry);
+				}
+
+				PendingActionSemanticTrace.bCaptured =
+					PendingActionSemanticTrace.CaptureError.IsEmpty();
+				if (PendingActionSemanticTrace.bCaptured)
+				{
+					FString ValidationError;
+					if (!PhysAnimBridge::ValidateActionSemanticTrace(
+						PendingActionSemanticTrace,
+						ValidationError))
+					{
+						PendingActionSemanticTrace.bCaptured = false;
+						PendingActionSemanticTrace.CaptureError = ValidationError;
+					}
+				}
+				FirstActiveStandingActionSemanticTrace = MoveTemp(PendingActionSemanticTrace);
+			}
+			if (bCaptureMannyLocalFrameRoundtripThisStep)
+			{
+				for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+				{
+					const PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl* const TraceEntry =
+						PendingMannyLocalFrameRoundtripControls.Find(BoneName);
+					if (!TraceEntry)
+					{
+						if (PendingMannyLocalFrameRoundtripTrace.CaptureError.IsEmpty())
+						{
+							PendingMannyLocalFrameRoundtripTrace.CaptureError = FString::Printf(
+								TEXT("No Manny local-frame round-trip trace was captured for '%s'."),
+								*BoneName.ToString());
+						}
+						break;
+					}
+					PendingMannyLocalFrameRoundtripTrace.Controls.Add(*TraceEntry);
+				}
+				if (!PendingMannyLocalFrameRoundtripTrace.Controls.IsEmpty())
+				{
+					PendingMannyLocalFrameRoundtripTrace.EffectiveActionAxisMode =
+						PendingMannyLocalFrameRoundtripTrace.Controls[0].EffectiveActionAxisMode;
+				}
+
+				PendingMannyLocalFrameRoundtripTrace.bCaptured =
+					PendingMannyLocalFrameRoundtripTrace.CaptureError.IsEmpty();
+				if (PendingMannyLocalFrameRoundtripTrace.bCaptured)
+				{
+					FString ValidationError;
+					if (!PhysAnimBridge::ValidateMannyLocalFrameRoundtripTrace(
+						PendingMannyLocalFrameRoundtripTrace,
+						ValidationError))
+					{
+						PendingMannyLocalFrameRoundtripTrace.bCaptured = false;
+						PendingMannyLocalFrameRoundtripTrace.CaptureError = ValidationError;
+					}
+				}
+				FirstActiveStandingMannyLocalFrameRoundtripTrace =
+					MoveTemp(PendingMannyLocalFrameRoundtripTrace);
+			}
+#endif
 		}
 	}
 
@@ -759,11 +1151,17 @@ void UPhysAnimComponent::ApplyControlTargets(
 }
 
 
-FQuat UPhysAnimComponent::BuildCurrentPoseControlTargetOrientation(
+FPhysAnimControlTargetSeed UPhysAnimComponent::BuildCurrentPoseControlTargetSeed(
 	const FQuat& ParentWorldRotation,
 	const FQuat& ChildWorldRotation)
 {
-	return (ParentWorldRotation.Inverse() * ChildWorldRotation).GetNormalized();
+	FPhysAnimControlTargetSeed Seed;
+	Seed.ParentWorldRotation = ParentWorldRotation.GetNormalized();
+	Seed.ChildWorldRotation = ChildWorldRotation.GetNormalized();
+	Seed.ParentActionAxisReferenceRotation = Seed.ParentWorldRotation;
+	Seed.ParentRelativeTargetRotation =
+		(Seed.ParentWorldRotation.Inverse() * Seed.ChildWorldRotation).GetNormalized();
+	return Seed;
 }
 
 
@@ -877,7 +1275,11 @@ bool UPhysAnimComponent::ShouldDeferStartupProxyTerminalForProof(
 	const bool bStartupProofRuntime =
 		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
 		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation ||
-		(RuntimeState == EPhysAnimRuntimeState::BridgeActive && bLiveProofEnabled && !bProofComplete);
+		((RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
+		  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+		  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+		  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+		  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) && bLiveProofEnabled && !bProofComplete);
 
 	return bStartupProofRuntime &&
 		!bProxySupportHandoffArmed &&

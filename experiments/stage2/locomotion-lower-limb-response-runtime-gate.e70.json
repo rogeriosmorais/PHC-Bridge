@@ -1,0 +1,17 @@
+{
+  "schema_version": "physanim-experiment-result/v1",
+  "experiment_id": "E70",
+  "status": "UNSUPPORTED_NO_EFFECT",
+  "baseline_commit": "0f19e223d599d7571907f53fc3560eab0b600b32",
+  "behavior_commit": "f6fb057b6c8b85715ef199e20097bf5e7c0d6757",
+  "screen_run": "test-results/scripted-locomotion/e70-lower-limb-response/Normal-1",
+  "observed": {
+    "scenario_summary_matches_e69": true,
+    "physics_stream_behavior_matches_e69": true,
+    "stability_cost_auc": 83.57994904837547,
+    "e69_stability_cost_auc": 83.57994904837547,
+    "moving_phase_metrics_changed": false
+  },
+  "diagnosis": "The helper was routed only through ApplyRuntimeControlTuning. LocomotionActiveShell is intentionally classified as a causal policy-control state, and TickLogic skips ApplyRuntimeControlTuning for all causal policy-control states. Production locomotion gains are republished by PublishStandingActivationFrame instead, so E70 could not affect active controls.",
+  "decision": "Reject E70 and revert its behavior changes. Test the same existing lower-limb damping profile in the authoritative production gain publisher as a separately preregistered experiment."
+}

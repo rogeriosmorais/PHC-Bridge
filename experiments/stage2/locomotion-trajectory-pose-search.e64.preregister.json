@@ -1,0 +1,30 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E64",
+  "title": "Use trajectory-driven Pose Search during active shell locomotion",
+  "baseline_commit": "41de070408ae780cb2d79bec95359d5daf3831ba",
+  "date": "2026-07-15",
+  "observed_failure": {
+    "normal_to_zero_stability_cost_ratio": 1.1447380436698007,
+    "normal_selected_animation": "MM_Idle for all 300 policy samples",
+    "zero_selected_animation": "MM_Idle for all 300 policy samples",
+    "code_cause": "QueryPoseSearch enters the balance-idle branch because IsBalanceActiveState includes LocomotionActiveShell"
+  },
+  "hypothesis": "Active shell locomotion must retain balance physics while bypassing the standing-only idle Pose Search branch. When LocomotionActiveShell uses the existing bridge trajectory query, the selected reference animation and policy outputs will respond to the scripted movement trajectory, while BalanceActive_Standing remains locked to idle.",
+  "single_behavior_change": "Introduce an explicit standing-idle Pose Search predicate used only by QueryPoseSearch, excluding LocomotionActiveShell and LocomotionActiveShellDenied; include locomotion in inference attempt/success evidence counters.",
+  "explicit_exclusions": [
+    "Do not change IsBalanceActiveState globally.",
+    "Do not change motion database assets, trajectory thresholds, shell speed, script timing, policy scales, gains, root authority, or causal criterion.",
+    "Do not force a walk animation by name.",
+    "Do not accept fallback idle as locomotion success."
+  ],
+  "tdd_contract": [
+    "BalanceActive_Standing uses the balance-idle Pose Search path.",
+    "LocomotionActiveShell does not use the balance-idle Pose Search path.",
+    "LocomotionActiveShellDenied does not use the balance-idle Pose Search path.",
+    "RunInference attempt/success metrics include LocomotionActiveShell.",
+    "A Normal scripted product run selects at least one non-idle animation during Acceleration/Cruise/MovingTurn/Deceleration.",
+    "DropTrajectoryConditioning does not publish bridge trajectory conditioning and must not satisfy the locomotion-reference criterion."
+  ],
+  "next_if_supported": "Rerun Normal-1 and ZeroActions-1, recalculate the locked stability-cost ratio, then proceed to the complete E60 bundle if ratio <= 0.9."
+}

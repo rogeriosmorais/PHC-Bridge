@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimProtoMannyAdapter.h"
 
 bool UPhysAnimComponent::QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError)
 {
@@ -18,7 +19,7 @@ bool UPhysAnimComponent::QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchRe
 		return false;
 	}
 
-	if (IsBalanceActiveState(RuntimeState))
+	if (ShouldUseBalanceIdlePoseSearchState(RuntimeState))
 	{
 		if (bHasBalanceIdlePoseSearchResult && BalanceIdlePoseSearchResult.SelectedAnim != nullptr)
 		{
@@ -59,7 +60,8 @@ bool UPhysAnimComponent::QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchRe
 	}
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	if (ShouldUseBridgeOwnedMovementDrive(EffectiveSettings))
+	if (ShouldUseBridgeTrajectoryPoseSearchState(RuntimeState) ||
+		ShouldUseBridgeOwnedMovementDrive(EffectiveSettings))
 	{
 		FString TrajectoryError;
 		if (QueryPoseSearchWithBridgeTrajectory(OutSearchResult, TrajectoryError))
@@ -140,6 +142,12 @@ bool UPhysAnimComponent::SampleFuturePoses(
 	OutFutureSamples.Reserve(FutureOffsets.Num());
 
 	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
+	TArray<FQuat> BindBoneRotations;
+	BindBoneRotations.Reserve(CachedSmplObservationRestComponentTransforms.Num());
+	for (const FTransform& RestTransform : CachedSmplObservationRestComponentTransforms)
+	{
+		BindBoneRotations.Add(RestTransform.GetRotation().GetNormalized());
+	}
 
 	for (const float FutureOffset : FutureOffsets)
 	{
@@ -158,6 +166,9 @@ bool UPhysAnimComponent::SampleFuturePoses(
 			FutureOffset,
 			AnimationLength);
 		FutureSample.BodyTransforms.Reserve(PhysAnimBridge::NumSmplBodies);
+		TArray<FQuat> SampleBoneRotations;
+		SampleBoneRotations.Reserve(PhysAnimBridge::NumSmplBodies);
+		FQuat RootCanonicalRotation = FQuat::Identity;
 
 		for (int32 i = 0; i < BoneNames.Num(); ++i)
 		{
@@ -167,6 +178,7 @@ bool UPhysAnimComponent::SampleFuturePoses(
 
 			FTransform CorrectedTransform = WorldTransform;
 			CorrectedTransform.NormalizeRotation();
+			SampleBoneRotations.Add(CorrectedTransform.GetRotation().GetNormalized());
 
 			FQuat CorrectedRotation = CorrectedTransform.GetRotation().GetNormalized();
 			if (CachedSmplObservationRestComponentTransforms.IsValidIndex(i))
@@ -176,11 +188,36 @@ bool UPhysAnimComponent::SampleFuturePoses(
 				const FMatrix CorrectedComponentMatrix = SampledComponentMatrix * RestComponentMatrix.InverseFast();
 				CorrectedRotation = FQuat(CorrectedComponentMatrix).GetNormalized();
 			}
+			if (i == 0)
+			{
+				RootCanonicalRotation = CorrectedRotation;
+			}
 
 			FutureSample.BodyTransforms.Add(FTransform(
 				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CorrectedRotation),
 				PhysAnimBridge::UeWorldPositionToProtoRuntime(WorldTransform.GetLocation()),
 				WorldTransform.GetScale3D()));
+		}
+
+		TArray<FQuat> CanonicalGlobalRotations;
+		FString AdapterError;
+		if (!PhysAnimProtoMannyAdapter::BuildCanonicalSmplRotationsFromBonePose(
+			RootCanonicalRotation,
+			BindBoneRotations,
+			SampleBoneRotations,
+			CachedSmplObservationRestBodyComponentRotations,
+			CanonicalGlobalRotations,
+			AdapterError))
+		{
+			OutFutureSamples.Reset();
+			OutError = FString::Printf(TEXT("Could not adapt PoseSearch Manny rotations to SMPL: %s"), *AdapterError);
+			return false;
+		}
+
+		for (int32 BodyIndex = 0; BodyIndex < FutureSample.BodyTransforms.Num(); ++BodyIndex)
+		{
+			FutureSample.BodyTransforms[BodyIndex].SetRotation(
+				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CanonicalGlobalRotations[BodyIndex]));
 		}
 
 		OutFutureSamples.Add(MoveTemp(FutureSample));
@@ -190,9 +227,10 @@ bool UPhysAnimComponent::SampleFuturePoses(
 }
 
 
-bool UPhysAnimComponent::ResolveMimicTargetReferenceDataOffset(
+bool UPhysAnimComponent::ResolveMimicTargetReferenceDataFrame(
 	const FPoseSearchBlueprintResult& SearchResult,
-	FVector2D& OutDataOffsetXY,
+	FTransform& OutWorldRoot,
+	FTransform& OutDataRoot,
 	FString& OutError) const
 {
 	const UAnimInstance* const LocalAnimInstance = this->AnimInstance.Get();
@@ -229,9 +267,29 @@ bool UPhysAnimComponent::ResolveMimicTargetReferenceDataOffset(
 		UPoseSearchAssetSamplerLibrary::GetTransformByName(WorldPose, PhysAnimBridge::GetRootBoneName(), EPoseSearchAssetSamplerSpace::World);
 	const FTransform DataRootTransform =
 		UPoseSearchAssetSamplerLibrary::GetTransformByName(DataPose, PhysAnimBridge::GetRootBoneName(), EPoseSearchAssetSamplerSpace::World);
+	if (!CachedSmplObservationRestComponentTransforms.IsValidIndex(0))
+	{
+		OutError = TEXT("Mimic target reference alignment requires the cached Manny root rest frame.");
+		return false;
+	}
+	const FQuat RestRootComponentRotation =
+		CachedSmplObservationRestComponentTransforms[0].GetRotation().GetNormalized();
+	const FQuat CanonicalWorldRootRotation =
+		PhysAnimProtoMannyAdapter::BuildCanonicalSmplRootRotationFromBonePose(
+			FQuat::Identity,
+			RestRootComponentRotation,
+			WorldRootTransform.GetRotation());
+	const FQuat CanonicalDataRootRotation =
+		PhysAnimProtoMannyAdapter::BuildCanonicalSmplRootRotationFromBonePose(
+			FQuat::Identity,
+			RestRootComponentRotation,
+			DataRootTransform.GetRotation());
 
-	OutDataOffsetXY = ResolveMimicTargetReferenceDataOffsetXY(
-		PhysAnimBridge::UeWorldPositionToProtoRuntime(WorldRootTransform.GetLocation()),
+	OutWorldRoot = FTransform(
+		PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CanonicalWorldRootRotation),
+		PhysAnimBridge::UeWorldPositionToProtoRuntime(WorldRootTransform.GetLocation()));
+	OutDataRoot = FTransform(
+		PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CanonicalDataRootRotation),
 		PhysAnimBridge::UeWorldPositionToProtoRuntime(DataRootTransform.GetLocation()));
 	return true;
 }

@@ -1,0 +1,186 @@
+{
+  "acceptance_checks": {
+    "bundle_pass": false,
+    "normal_deterministic": true,
+    "ratio_at_most_0_8": false,
+    "timing_and_mask_contract": true,
+    "zero_deterministic": true
+  },
+  "bundle_failed_criteria": [
+    "causal_recovery_advantage"
+  ],
+  "bundle_status": "FAIL",
+  "first_active_checks": {
+    "DropControlDispatch-1": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "ForcedSupportLoss-1": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "Normal-1": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "Normal-2": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "Normal-3": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "ZeroActions-1": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "ZeroActions-2": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    },
+    "ZeroActions-3": {
+      "captured": true,
+      "selected_region_first_exact_zero": true,
+      "width": 69
+    }
+  },
+  "hypothesis_verdict": "FALSIFIED",
+  "manifest_checks": {
+    "DropControlDispatch-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ForcedSupportLoss-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-2": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-3": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-2": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-3": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_matches": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    }
+  },
+  "normal_deterministic": true,
+  "normal_hash_sets": {
+    "first-active-conditioned-actions.json": [
+      "16E59670B752C59AA44EEBDB63C4CEE4D3708BBA6E2EA68C06D6024888A87602"
+    ],
+    "physics.jsonl": [
+      "D1252B4AF4DFD309B73F30727993738A182646D7E9A8060DE73A25EC227B29DB"
+    ],
+    "policy-input-snapshot.json": [
+      "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    ],
+    "policy.jsonl": [
+      "DD67436290508CD3C21987F2F8E205893D1E1376142BA68938F8A19662A8718D"
+    ]
+  },
+  "normal_to_zero_recovery_auc_ratio": 0.8131602972588441,
+  "policy_checks": {
+    "DropControlDispatch-1": {},
+    "ForcedSupportLoss-1": {},
+    "Normal-1": {
+      "LeftProximal_exact_zero": true,
+      "RightProximal_exact_zero": true,
+      "Torso_exact_zero": true,
+      "selected_region_later_nonzero": true
+    },
+    "Normal-2": {
+      "LeftProximal_exact_zero": true,
+      "RightProximal_exact_zero": true,
+      "Torso_exact_zero": true,
+      "selected_region_later_nonzero": true
+    },
+    "Normal-3": {
+      "LeftProximal_exact_zero": true,
+      "RightProximal_exact_zero": true,
+      "Torso_exact_zero": true,
+      "selected_region_later_nonzero": true
+    },
+    "ZeroActions-1": {
+      "all_conditioned_scalars_exact_zero": true
+    },
+    "ZeroActions-2": {
+      "all_conditioned_scalars_exact_zero": true
+    },
+    "ZeroActions-3": {
+      "all_conditioned_scalars_exact_zero": true
+    }
+  },
+  "region": "Neck",
+  "runner_contains_onethread": true,
+  "runner_experimental_tokens": [
+    "PhysAnimExperimentalCausalStandingScaledRegion=Neck",
+    "PhysAnimExperimentalCausalStandingScaledScale=0.5"
+  ],
+  "scale": 0.5,
+  "schema_version": "physanim-e49-audit/v1",
+  "status": "VALID",
+  "validity_checks_pass": true,
+  "zero_deterministic": true,
+  "zero_hash_sets": {
+    "first-active-conditioned-actions.json": [
+      "0CDB154D0961A673CE36BC8D9A3F51D7E0221857E686EDFE917A8E23F038D3F3"
+    ],
+    "physics.jsonl": [
+      "3218349B7C4E2074FFFBB62832795A10D4A3AA4241BF8A453E35BC0D3E78C379"
+    ],
+    "policy-input-snapshot.json": [
+      "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    ],
+    "policy.jsonl": [
+      "2F714337B24256890CECE5FE16974CB6994F15FE432D5C6EAD02372CF4D65BE5"
+    ]
+  }
+}

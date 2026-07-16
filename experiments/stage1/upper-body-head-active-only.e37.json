@@ -1,0 +1,36 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "upper-body-head-active-only-e37",
+  "recorded_utc": "2026-07-15T20:44:52Z",
+  "preregistration_commit": "8fc076359a94d8cb8679eb939f8b566e3cdc0ff2",
+  "source_commit": "8790c33379e90a33fa7944ab1dabf59a59957146",
+  "status": "VALID",
+  "hypothesis_verdict": "PARTIALLY_SUPPORTED",
+  "product_candidate_success": false,
+  "production_success": false,
+  "bundle_status": "PASS",
+  "bundle_failed_criteria": [],
+  "experimental_command_line_flags": ["-PhysAnimExperimentalCausalStandingUpperBody=HeadActiveOnly"],
+  "normal_recovery_auc": [30.172577171659153,30.03198403803842,30.172577171659153],
+  "zero_actions_recovery_auc": [41.14179622283463,41.14179622283463,41.14179622283463],
+  "normal_median_recovery_auc": 30.172577171659153,
+  "normal_to_zero_recovery_auc_ratio": 0.733380161824648,
+  "locked_maximum_ratio": 0.8,
+  "normal_absolute_pass_count": 3,
+  "zero_actions_absolute_pass_count": 3,
+  "normal_repetitions_deterministic": false,
+  "zero_repetitions_deterministic": true,
+  "destructive_controls": {
+    "DropControlDispatch": {"status":"FAIL","failed_criteria":["target_readback"],"target_readback_match_ratio":0.5714285714285714},
+    "ForcedSupportLoss": {"status":"FAIL","failed_criteria":["support_gap"],"target_readback_match_ratio":1.0}
+  },
+  "causal_findings": [
+    "Active-standing-only Head restoration preserves and slightly improves the causal recovery advantage.",
+    "The median ratio 0.733380161824648 passes the locked causal threshold.",
+    "Normal still splits into the same two first-active input trajectories, proving state entry alone is not a sufficiently late activation boundary.",
+    "The next exact boundary is after FirstActiveStandingPolicyInferenceSnapshot capture, which occurs before action conditioning in the active inference call."
+  ],
+  "authoritative_bundle_artifact": "test-results/causal-standing/e37-head-active-only/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/upper-body-head-active-only.e37.audit.json",
+  "next": "Preregister E38 to restore Head only after the first active-standing policy snapshot is captured."
+}

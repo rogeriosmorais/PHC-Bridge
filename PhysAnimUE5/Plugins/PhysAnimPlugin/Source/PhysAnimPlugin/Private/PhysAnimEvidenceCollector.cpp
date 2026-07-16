@@ -228,8 +228,8 @@ namespace
 	{
 		switch (Verdict)
 		{
-		case EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate:
-			return TEXT("ProductSuccessCandidate");
+		case EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved:
+			return TEXT("DiagnosticAllSignalsObserved");
 		case EPhysAnimEvidenceBaselineVerdict::Diagnostic:
 			return TEXT("Diagnostic");
 		case EPhysAnimEvidenceBaselineVerdict::Blocked:
@@ -574,7 +574,7 @@ namespace
 
 		if (EvidenceSummary.bFound)
 		{
-			Input.bHoldThresholdSatisfied = EvidenceSummary.Summary.StrictVerdict == EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate;
+			Input.bHoldThresholdSatisfied = EvidenceSummary.Summary.StrictVerdict == EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved;
 		}
 
 		return Input;

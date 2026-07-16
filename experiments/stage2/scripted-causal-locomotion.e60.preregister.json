@@ -1,0 +1,46 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E60",
+  "title": "Scripted causal locomotion product episode",
+  "baseline_commit": "a2dba3bdc3eb04c6f1ce2503a88e95a6bb0315c7",
+  "date": "2026-07-15",
+  "protocol": "product-gates/scripted-locomotion.v1.json",
+  "hypothesis": "The all-joint production policy can remain physically stable and causally beneficial during a fully scripted stand-accelerate-cruise-turn-decelerate-stop-settle episode driven by the kinematic shell, with no human input and no bridge reset.",
+  "scenario": [
+    { "phase": "StandingHold", "start_sec": 0.0, "end_sec": 1.0 },
+    { "phase": "Acceleration", "start_sec": 1.0, "end_sec": 2.0 },
+    { "phase": "Cruise", "start_sec": 2.0, "end_sec": 4.0 },
+    { "phase": "MovingTurn", "start_sec": 4.0, "end_sec": 5.0, "yaw_deg": 30.0 },
+    { "phase": "Deceleration", "start_sec": 5.0, "end_sec": 6.0 },
+    { "phase": "Settle", "start_sec": 6.0, "end_sec": 10.0 }
+  ],
+  "variants": {
+    "Normal": 3,
+    "ZeroActions": 3,
+    "DropTrajectoryConditioning": 1,
+    "SuppressStopTransition": 1
+  },
+  "fixed_variables": {
+    "model": "phc_policy.onnx",
+    "root_authority": "Stage1_KinematicRoot",
+    "physics_control_configuration": "E58 production",
+    "joint_scales": "E58 production",
+    "fixed_timestep": "60 Hz",
+    "execution": "-onethread",
+    "human_input": false,
+    "map": "/Game/ThirdPerson/Lvl_ThirdPerson"
+  },
+  "causal_test": "Normal median locomotion stability-cost AUC must be at most 0.9 times ZeroActions median under an identical scripted shell trajectory.",
+  "absolute_acceptance": [
+    "Normal completes all phases and returns to BalanceActive_Standing.",
+    "Path length, net displacement, and yaw satisfy the locked protocol.",
+    "Standing physics topology, support, target readback, inference, and collision contracts remain valid.",
+    "The final two-second settle window has zero shell speed and stable standing."
+  ],
+  "destructive_controls": {
+    "DropTrajectoryConditioning": "Expected failure only trajectory_conditioning.",
+    "SuppressStopTransition": "Expected failure only stop_transition."
+  },
+  "determinism": "Normal and ZeroActions repetitions must be byte-identical for physics.jsonl, policy.jsonl, scenario-summary.json, and policy-input-snapshot.json.",
+  "stop_condition": "Do not promote the milestone unless the complete 3+3+1+1 bundle passes and the source/model/protocol audit is valid."
+}

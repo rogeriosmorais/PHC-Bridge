@@ -1,0 +1,104 @@
+{
+  "schema_version": "physanim-product-protocol/v1",
+  "protocol_id": "scripted-causal-locomotion",
+  "version": 1,
+  "status": "LOCKED",
+  "change_control": "Never edit this file after its protocol commit. Add a new version and record why the acceptance contract changed.",
+  "scope_root": "F:\\NewEngine-AgentB",
+  "map": "/Game/ThirdPerson/Lvl_ThirdPerson",
+  "actor_class": "/Game/Characters/Mannequins/Blueprints/BP_PhysAnimCharacter.BP_PhysAnimCharacter_C",
+  "skeleton": "Manny",
+  "model_asset": "/Game/NNEModels/phc_policy.phc_policy",
+  "root_authority": "Stage1_KinematicRoot",
+  "motion_source": "Stage2A_KinematicShell",
+  "human_input": false,
+  "test_family": "PhysAnim.Product.ScriptedLocomotion",
+  "renderer_mode": "RenderOffscreen",
+  "variants": [
+    "Normal",
+    "ZeroActions",
+    "DropTrajectoryConditioning",
+    "SuppressStopTransition"
+  ],
+  "repetitions": {
+    "Normal": 3,
+    "ZeroActions": 3,
+    "DropTrajectoryConditioning": 1,
+    "SuppressStopTransition": 1
+  },
+  "script": {
+    "capture_window_sec": 10.0,
+    "fixed_delta_time_sec": 0.016666666666666666,
+    "standing_hold": { "start_sec": 0.0, "end_sec": 1.0 },
+    "acceleration": { "start_sec": 1.0, "end_sec": 2.0, "intent_start": 0.1, "intent_end": 1.0 },
+    "cruise": { "start_sec": 2.0, "end_sec": 4.0, "intent": 1.0 },
+    "moving_turn": { "start_sec": 4.0, "end_sec": 5.0, "intent": 0.8, "total_yaw_deg": 30.0 },
+    "deceleration": { "start_sec": 5.0, "end_sec": 6.0, "intent_start": 0.8, "intent_end": 0.05 },
+    "settle": { "start_sec": 6.0, "end_sec": 10.0 },
+    "nominal_speed_cm_per_sec": 60.0
+  },
+  "sample_streams": {
+    "physics": {
+      "clock": "game_tick",
+      "minimum_samples": 590,
+      "required_fields": [
+        "sequence", "time_sec", "script_phase", "runtime_state",
+        "actor_location_x_cm", "actor_location_y_cm", "actor_location_z_cm", "actor_yaw_deg",
+        "script_intent_magnitude", "trajectory_conditioning_published",
+        "shell_accepted_speed_cm_per_sec", "shell_path_length_cm",
+        "pelvis_height_cm", "root_tilt_deg", "max_penetration_cm", "support_gap_ms",
+        "critical_body_valid_mask", "critical_body_simulating_mask",
+        "support_body_valid_mask", "support_body_simulating_mask",
+        "pose_rms_error_deg", "target_readback_match_ratio"
+      ]
+    },
+    "policy": {
+      "clock": "policy_step",
+      "minimum_samples": 270,
+      "required_fields": [
+        "sequence", "time_sec", "script_phase", "inference_attempted", "inference_succeeded",
+        "raw_action_l2", "conditioned_action_l2", "target_write_attempt_count",
+        "target_readback_match_count", "target_readback_max_error_deg"
+      ]
+    }
+  },
+  "acceptance": {
+    "startup_timeout_sec": 20.0,
+    "minimum_shell_path_length_cm": 180.0,
+    "minimum_net_planar_displacement_cm": 160.0,
+    "minimum_abs_yaw_delta_deg": 25.0,
+    "maximum_abs_yaw_delta_deg": 35.0,
+    "minimum_pelvis_height_ratio": 0.7,
+    "maximum_root_tilt_deg": 45.0,
+    "maximum_penetration_cm": 2.0,
+    "maximum_support_gap_ms": 100.0,
+    "minimum_policy_step_coverage": 0.9,
+    "maximum_target_readback_error_deg": 0.5,
+    "minimum_target_readback_match_ratio": 0.95,
+    "settle_window_start_sec": 8.0,
+    "maximum_settle_planar_speed_cm_per_sec": 0.1,
+    "required_final_runtime_state": "BalanceActive_Standing",
+    "normal_to_zero_stability_cost_ratio_max": 0.9,
+    "require_all_script_phases": true,
+    "require_zero_inference_failures": true,
+    "require_cmc_inactive": true,
+    "require_no_simroot": true,
+    "require_nonblank_render_capture": true
+  },
+  "stability_cost": {
+    "window_start_sec": 1.0,
+    "window_end_sec": 10.0,
+    "formula": "pose_rms_error_deg + 0.5 * root_tilt_deg + 0.1 * abs(pelvis_height_cm - reference_pelvis_height_cm)",
+    "integration": "trapezoidal_auc",
+    "lower_is_better": true
+  },
+  "destructive_control_contract": {
+    "DropTrajectoryConditioning": "The shell follows the same script, but bridge intent/trajectory publication is absent; evaluator must reject trajectory_conditioning.",
+    "SuppressStopTransition": "The shell stops receiving scripted steps but the explicit locomotion-to-standing transition is omitted; evaluator must reject stop_transition."
+  },
+  "bundle_verdict": {
+    "PASS": "All three Normal repetitions pass absolute criteria; all three ZeroActions repetitions are valid and measurable; Normal median stability cost is at most 90 percent of ZeroActions median; DropTrajectoryConditioning fails only trajectory_conditioning; SuppressStopTransition fails only stop_transition; Normal and ZeroActions streams are deterministic.",
+    "FAIL": "The bundle is valid but one or more behavioral, causal, destructive-control, or deterministic criteria fail.",
+    "INVALID": "Identity, protocol linkage, streams, cadence, source cleanliness, model hash, or scripted schedule evidence is malformed or incomplete."
+  }
+}

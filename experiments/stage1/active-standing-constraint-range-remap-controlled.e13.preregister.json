@@ -1,0 +1,113 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "active-standing-constraint-range-remap-controlled-e13",
+  "preregistered_utc": "2026-07-14T23:30:09.6260616Z",
+  "base_commit": "7ed558d3c084a3273a58d9846b1b104850ef3171",
+  "authority": "DEVELOPMENT_EXPERIMENT_PREREGISTRATION_ONLY",
+  "product_success_authority": false,
+  "hypothesis": "The full-range-to-Manny constraint remapping is a causal active-standing distortion; bypassing only MapProtoPolicyTargetToMannyConstraintRange while retaining AdaptParentRelativeTarget safety projection will strictly improve the locked standing verdict.",
+  "supporting_runtime_evidence": [
+    "E3 localized the dominant first-active-standing target transformation to the range mapper: 14 controls changed, the eight lower-body controls changed by 27.156594 degrees on average, and foot_l changed by 47.093262 degrees.",
+    "The physical plant has already demonstrated that it can stand under controlled targets with the same fully simulated topology.",
+    "E12 explained the Mode-A/Mode-B launch confound that invalidated E4 and showed all startup modes converge to byte-identical active-standing input and downstream baseline behavior."
+  ],
+  "competing_explanations": [
+    "The range mapper is required to translate ProtoMotions full-range targets into Manny's authored constraint ranges; bypassing it will increase safety projection and worsen behavior.",
+    "The range mapper is not the causal defect because the policy actions, neutral reference, constraint frames, or another action-decoding stage are already semantically wrong before range adaptation."
+  ],
+  "single_changed_variable": {
+    "name": "active_standing_constraint_range_remap",
+    "baseline_value": "enabled",
+    "experimental_value": "bypassed",
+    "activation": "-PhysAnimExperimentalConstraintRangeRemapBypass",
+    "scope": "WITH_DEV_AUTOMATION_TESTS, RealOnnxPolicy, and BalanceActive_Standing only",
+    "held_constant": [
+      "first-policy and first-active-standing observations and model actions",
+      "Manny neutral and bind composition",
+      "lower-limb and distal scaling",
+      "AdaptParentRelativeTarget safety projection",
+      "policy timing and blend",
+      "Physics Control publication and readback",
+      "Chaos settings and topology",
+      "protocol, evaluator, and thresholds"
+    ]
+  },
+  "expected_if_hypothesis_correct": "Both variants satisfy exact pre-intervention equivalence; the experimental trace shows no material range-mapping delta while safety projection, publication, and readback remain valid; the locked failed-criteria set strictly shrinks without any new failed criterion.",
+  "falsification_observation": "Both variants satisfy exact pre-intervention equivalence and the trace verifies the range mapper was bypassed, but the locked failure set is unchanged or worse, a new criterion fails, or safety projection absorbs the unremapped targets without a verdict improvement.",
+  "invalid_run_conditions": [
+    "Either first-policy input is not exact Mode A.",
+    "The two first-policy snapshots are not byte-identical or any float32 section differs.",
+    "The two first-active-standing policy-input snapshots are not byte-identical before target adaptation.",
+    "The configured bypass is not evidenced by an approximately zero range-mapping delta while the baseline has a material nonzero delta.",
+    "The action semantic trace is incomplete or invalid, safety projection is not retained, target publication/readback is incomplete, or a raw artifact is malformed or missing.",
+    "Source commit, binary, model, protocol, timestep, seed, initial pose, perturbation, capture window, diagnostics, or evaluator differs between arms."
+  ],
+  "arms": [
+    {
+      "name": "remap_enabled",
+      "role": "fresh unchanged baseline",
+      "override": "none",
+      "expected_first_policy_raw_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "expected_active_standing_snapshot_sha256": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9"
+    },
+    {
+      "name": "remap_bypassed",
+      "role": "primary experimental arm",
+      "override": "-PhysAnimExperimentalConstraintRangeRemapBypass",
+      "expected_first_policy_raw_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "expected_active_standing_snapshot_sha256": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9"
+    }
+  ],
+  "locked_judges": {
+    "protocol": {
+      "path": "product-gates/standing-plant-ladder.v2.json",
+      "sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB"
+    },
+    "model": {
+      "path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+      "sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19"
+    },
+    "first_policy_mode_oracle": "experiments/stage1/oracles/real-onnx-first-policy-modes.v1.json",
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "initial_pose": "unchanged standing-plant harness default",
+    "perturbation": "none",
+    "seed": "unchanged standing-plant harness default",
+    "evaluator": "scripts/evaluate_standing_plant.py",
+    "required_diagnostics": [
+      "action semantic trace",
+      "policy-input provenance trace",
+      "startup chronology trace"
+    ],
+    "exact_pre_intervention_metrics": [
+      "first-policy raw snapshot SHA-256",
+      "first-policy self-observation, mimic-target, terrain, and action float32 section SHA-256",
+      "first-active-standing policy-input snapshot SHA-256",
+      "policy-input provenance outside run identity",
+      "startup chronology"
+    ],
+    "intervention_metrics": [
+      "mean and maximum constraint-range-mapping delta",
+      "mean and maximum constraint safety-projection delta",
+      "per-bone lower-body range-mapping and projection deltas",
+      "target write/readback counts and maximum readback error"
+    ],
+    "behavioral_metrics": [
+      "exact failed-criteria set",
+      "minimum pelvis height and ratio",
+      "maximum root tilt",
+      "maximum root and body linear and angular speeds",
+      "maximum support gap and penetration",
+      "target readback match ratio"
+    ],
+    "success_rule": "The failed-criteria set strictly shrinks without a new failure; thresholds and evaluator remain unchanged.",
+    "failure_rule": "With a valid run and exact pre-intervention equivalence, the failed-criteria set is unchanged, expands, or gains any new failure."
+  },
+  "implementation_constraints": [
+    "Reuse the existing default-off E4 development-only flag; do not change production code or defaults merely to run E13.",
+    "Do not change the activation contract, serialization, permanent readback requirements, protocol, thresholds, physics, dispatch, or action trace schema.",
+    "Run a fresh unchanged baseline adjacent to the experiment on one clean commit and reused binary.",
+    "Record the exact raw artifacts and verdict before deleting or separately promoting experimental behavior."
+  ]
+}

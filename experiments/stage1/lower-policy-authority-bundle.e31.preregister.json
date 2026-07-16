@@ -1,0 +1,49 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "lower-policy-authority-bundle-e31",
+  "recorded_utc": "2026-07-15T20:25:00Z",
+  "authority": "PRODUCT_CANDIDATE_EVIDENCE",
+  "product_success": false,
+  "hypothesis": "The E30 candidate—lower-body policy actions with delayed 1.5 acceleration-strength authority—will satisfy every absolute, destructive-control, and causal recovery criterion across the complete locked product bundle.",
+  "bundle": {
+    "Normal":[1,2,3],
+    "ZeroActions":[1,2,3],
+    "DropControlDispatch":[1],
+    "ForcedSupportLoss":[1]
+  },
+  "candidate_behavior": {
+    "policy_using_variants": {
+      "retained_actions":"Proto joints 0-7",
+      "active_strength_factor":1.5,
+      "factor_activation":"after first active-standing policy snapshot"
+    },
+    "zero_action_variant": {
+      "conditioned_actions":"exact zero",
+      "active_strength_factor":1.0
+    },
+    "shared": {
+      "action_axis":"mesh-component parent-bind axis from first policy",
+      "neutral_source":"captured stable standing neutral",
+      "range_mapping_and_projection":"enabled",
+      "angular_damping_ratio_multiplier":1.5,
+      "angular_extra_damping_multiplier":2.4,
+      "torque_multiplier":1.0,
+      "fixed_timestep_seconds":0.016666666666666666,
+      "perturbation_delta_v_cm_per_sec":15.0,
+      "capture_window_seconds":10.0
+    }
+  },
+  "locked_protocol":"experiments/stage1/causal-standing.product-protocol.v1.json",
+  "validity_gates": [
+    "Exactly three unique Normal and three unique ZeroActions repetitions plus both destructive controls are complete PRODUCT_RUN fixtures.",
+    "All runs use one binary and the locked protocol SHA256 75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a.",
+    "Normal runs record strength 1.0 at capture and 1.5 thereafter; ZeroActions remains 1.0.",
+    "Normal uses nonzero lower-only policy actions; ZeroActions remains exactly zero.",
+    "Target readback is at least 0.95 and render/raw streams are complete.",
+    "DropControlDispatch fails target_readback and ForcedSupportLoss fails support_gap or runtime_state."
+  ],
+  "product_candidate_pass": "All three Normal repetitions pass absolute criteria, both controls fail for intended reasons, and median Normal recovery AUC / median ZeroActions recovery AUC <= 0.8.",
+  "falsification": "Any malformed run, Normal absolute failure, destructive-control mismatch, or recovery ratio above 0.8.",
+  "promotion_rule": "A passing development-flag bundle authorizes implementing lower-only policy compatibility and 1.5 policy-mode authority as explicit product behavior, followed by a second complete bundle with no experimental flags.",
+  "next": "If PASS, promote behavior through TDD and run the no-flag product bundle."
+}

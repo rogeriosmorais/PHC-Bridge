@@ -1,6 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "PhysAnimProtoMannyAdapter.h"
 
 bool UPhysAnimComponent::IsPelvisSimulatingNow() const
 {
@@ -23,24 +24,15 @@ bool UPhysAnimComponent::IsInitialPoseSearchWaitTimedOut(double ElapsedSeconds, 
 
 bool UPhysAnimComponent::ShouldApplyPolicyTargetToBone(FName BoneName, bool bPolicyInfluenceActive)
 {
-	if (!bPolicyInfluenceActive)
-	{
-		return false;
-	}
+	(void)BoneName;
+	return bPolicyInfluenceActive;
+}
 
-	return BoneName != TEXT("clavicle_l") &&
-		BoneName != TEXT("spine_01") &&
-		BoneName != TEXT("spine_02") &&
-		BoneName != TEXT("spine_03") &&
-		BoneName != TEXT("upperarm_l") &&
-		BoneName != TEXT("lowerarm_l") &&
-		BoneName != TEXT("hand_l") &&
-		BoneName != TEXT("neck_01") &&
-		BoneName != TEXT("head") &&
-		BoneName != TEXT("clavicle_r") &&
-		BoneName != TEXT("upperarm_r") &&
-		BoneName != TEXT("lowerarm_r") &&
-		BoneName != TEXT("hand_r");
+
+bool UPhysAnimComponent::ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState RuntimeState)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
 }
 
 
@@ -48,7 +40,11 @@ bool UPhysAnimComponent::ShouldUseSkeletalAnimationTargetRepresentation(
 	bool bConfiguredUseSkeletalAnimationTargets,
 	bool bPolicyInfluenceActive)
 {
-	return bConfiguredUseSkeletalAnimationTargets || bPolicyInfluenceActive;
+	(void)bConfiguredUseSkeletalAnimationTargets;
+	(void)bPolicyInfluenceActive;
+	// Standing targets are an explicit parent-relative contract. Skeletal-animation
+	// offsets would change their reference frame and make policy activation discontinuous.
+	return false;
 }
 
 
@@ -56,7 +52,9 @@ bool UPhysAnimComponent::ShouldResetAllControlOffsetsForPolicyTargetRepresentati
 	bool bUseSkeletalAnimationTargetRepresentation,
 	bool bFirstPolicyEnabledFrame)
 {
-	return bUseSkeletalAnimationTargetRepresentation && bFirstPolicyEnabledFrame;
+	(void)bUseSkeletalAnimationTargetRepresentation;
+	(void)bFirstPolicyEnabledFrame;
+	return false;
 }
 
 
@@ -76,16 +74,58 @@ float UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(
 	bool bDistalLocomotionCompositionModeActive,
 	float DeltaTime)
 {
-	if (bDistalLocomotionCompositionModeActive &&
-		ShouldForceExplicitOnlyDistalLocomotionTargetMode(BoneName))
+	(void)BoneName;
+	(void)bUseSkeletalAnimationTargetRepresentation;
+	(void)bFirstPolicyEnabledFrame;
+	(void)bDistalLocomotionCompositionModeActive;
+	(void)DeltaTime;
+
+	// ProtoMotions v2.3 publishes only a DOF position target through
+	// Isaac Gym's built-in PD drive. A nonzero delta time here makes Physics
+	// Control synthesize a target angular velocity that the source controller
+	// never had, turning ordinary 30 Hz action changes into feed-forward kicks.
+	return 0.0f;
+}
+
+
+float UPhysAnimComponent::CalculateNeutralCalibratedPelvisTiltDegrees(
+	const FQuat& CurrentPelvisWorldRotation,
+	const FQuat& NeutralPelvisActorRelativeRotation,
+	const FQuat& ActorWorldRotation)
+{
+	const FQuat ExpectedNeutralWorldRotation =
+		(ActorWorldRotation * NeutralPelvisActorRelativeRotation).GetNormalized();
+	const FQuat NeutralToCurrentWorldDelta =
+		(CurrentPelvisWorldRotation * ExpectedNeutralWorldRotation.Inverse()).GetNormalized();
+	const FVector CurrentUpFromNeutral = NeutralToCurrentWorldDelta.RotateVector(FVector::UpVector);
+	return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(
+		FVector::DotProduct(CurrentUpFromNeutral, FVector::UpVector),
+		-1.0f,
+		1.0f)));
+}
+
+
+bool UPhysAnimComponent::TryMeasureNeutralCalibratedPelvisTiltDegrees(float& OutTiltDegrees) const
+{
+	OutTiltDegrees = 180.0f;
+	const AActor* const OwnerActor = GetOwner();
+	const USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	if (!OwnerActor || !Mesh || !bHasNeutralPelvisActorRelativeRotation)
 	{
-		return 0.0f;
+		return false;
 	}
 
-	return ResolvePolicyTargetWriteDeltaTime(
-		bUseSkeletalAnimationTargetRepresentation,
-		bFirstPolicyEnabledFrame,
-		DeltaTime);
+	const FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
+	if (!PelvisBody || !PelvisBody->IsValidBodyInstance())
+	{
+		return false;
+	}
+
+	OutTiltDegrees = CalculateNeutralCalibratedPelvisTiltDegrees(
+		PelvisBody->GetUnrealWorldTransform().GetRotation(),
+		NeutralPelvisActorRelativeRotation,
+		OwnerActor->GetActorQuat());
+	return FMath::IsFinite(OutTiltDegrees);
 }
 
 
@@ -93,6 +133,8 @@ float UPhysAnimComponent::ResolvePhase1Uprightness(
 	USkeletalMeshComponent* SkeletalMesh,
 	AActor* Owner,
 	const FName& PelvisBoneName,
+	bool bHasNeutralPelvisOrientation,
+	const FQuat& NeutralPelvisActorRelativeRotation,
 	FString& OutSourceName)
 {
 	if (!SkeletalMesh)
@@ -105,8 +147,16 @@ float UPhysAnimComponent::ResolvePhase1Uprightness(
 	if (const FBodyInstance* const PelvisBody = SkeletalMesh->GetBodyInstance(PelvisBoneName))
 	{
 		const FTransform PelvisTransform = PelvisBody->GetUnrealWorldTransform();
+		if (bHasNeutralPelvisOrientation && Owner)
+		{
+			OutSourceName = TEXT("pelvis_body_neutral_calibrated");
+			return CalculateNeutralCalibratedPelvisTiltDegrees(
+				PelvisTransform.GetRotation(),
+				NeutralPelvisActorRelativeRotation,
+				Owner->GetActorQuat());
+		}
 		
-		// Robustly find the axis most aligned with World Up
+		// Fallback for callers that have not completed the startup neutral capture.
 		const FVector AxisX = PelvisTransform.GetUnitAxis(EAxis::X);
 		const FVector AxisY = PelvisTransform.GetUnitAxis(EAxis::Y);
 		const FVector AxisZ = PelvisTransform.GetUnitAxis(EAxis::Z);
@@ -140,6 +190,33 @@ float UPhysAnimComponent::ResolvePhase1Uprightness(
 
 	OutSourceName = TEXT("mesh_root_world");
 	return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(MeshRootUp, FVector::UpVector), -1.0f, 1.0f)));
+}
+
+
+float UPhysAnimComponent::ResolveObservationGroundWorldZ(
+	bool bHasStaticGroundTrace,
+	float StaticGroundTraceZ,
+	bool bHasWalkableFloor,
+	bool bHasBlockingFloorHit,
+	float FloorImpactPointZ,
+	float CapsuleCenterZ,
+	float CapsuleHalfHeight,
+	float FloorDistance,
+	float FallbackGroundWorldZ)
+{
+	if (bHasStaticGroundTrace)
+	{
+		return StaticGroundTraceZ;
+	}
+
+	return ResolveObservationGroundWorldZFromFloor(
+		bHasWalkableFloor,
+		bHasBlockingFloorHit,
+		FloorImpactPointZ,
+		CapsuleCenterZ,
+		CapsuleHalfHeight,
+		FloorDistance,
+		FallbackGroundWorldZ);
 }
 
 
@@ -189,28 +266,24 @@ void UPhysAnimComponent::MakeGroundRelativeCurrentReferenceBodySamples(
 }
 
 
-FVector2D UPhysAnimComponent::ResolveMimicTargetReferenceDataOffsetXY(
-	const FVector& CurrentSelectedWorldRootPosition,
-	const FVector& CurrentSelectedDataRootPosition)
-{
-	return FVector2D(
-		CurrentSelectedWorldRootPosition.X - CurrentSelectedDataRootPosition.X,
-		CurrentSelectedWorldRootPosition.Y - CurrentSelectedDataRootPosition.Y);
-}
-
-
-void UPhysAnimComponent::MakeMimicTargetCurrentReferenceBodySamples(
+void UPhysAnimComponent::MakeMimicTargetDataFrameBodySamples(
 	const TArray<FPhysAnimBodySample>& SourceBodySamples,
-	const FVector2D& DataOffsetXY,
-	float GroundWorldZ,
+	const FTransform& CurrentSelectedWorldRoot,
+	const FTransform& CurrentSelectedDataRoot,
 	TArray<FPhysAnimBodySample>& OutBodySamples)
 {
+	const FQuat WorldToDataRotation =
+		(CurrentSelectedDataRoot.GetRotation() * CurrentSelectedWorldRoot.GetRotation().Inverse()).GetNormalized();
+	const FVector WorldRootPosition = CurrentSelectedWorldRoot.GetLocation();
+	const FVector DataRootPosition = CurrentSelectedDataRoot.GetLocation();
+
 	OutBodySamples = SourceBodySamples;
 	for (FPhysAnimBodySample& BodySample : OutBodySamples)
 	{
-		BodySample.Position.X -= DataOffsetXY.X;
-		BodySample.Position.Y -= DataOffsetXY.Y;
-		BodySample.Position.Z -= GroundWorldZ;
+		BodySample.Position = DataRootPosition + WorldToDataRotation.RotateVector(BodySample.Position - WorldRootPosition);
+		BodySample.Rotation = (WorldToDataRotation * BodySample.Rotation).GetNormalized();
+		BodySample.LinearVelocity = WorldToDataRotation.RotateVector(BodySample.LinearVelocity);
+		BodySample.AngularVelocity = WorldToDataRotation.RotateVector(BodySample.AngularVelocity);
 	}
 }
 
@@ -735,6 +808,743 @@ bool UPhysAnimComponent::AdvancePolicyControlAccumulator(
 }
 
 
+FQuat UPhysAnimComponent::ComposeProtoPolicyTargetInMannyBindFrame(
+	const FPhysAnimControlTargetSeed& MannyBindSeed,
+	const FQuat& ProtoPolicyRotationUe)
+{
+	return ComposeProtoPolicyTargetAroundMannyNeutral(
+		MannyBindSeed,
+		MannyBindSeed.ParentRelativeTargetRotation,
+		ProtoPolicyRotationUe);
+}
+
+
+FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
+	const FPhysAnimControlTargetSeed& MannyBindSeed,
+	const FQuat& MannyNeutralParentRelativeRotation,
+	const FQuat& ProtoPolicyRotationUe)
+{
+	const FQuat ParentBindWorldRotation = MannyBindSeed.ParentActionAxisReferenceRotation.GetNormalized();
+	const FQuat PolicyRotationInParentBindFrame =
+		(ParentBindWorldRotation.Inverse() *
+		 ProtoPolicyRotationUe.GetNormalized() *
+		 ParentBindWorldRotation).GetNormalized();
+	return (PolicyRotationInParentBindFrame *
+		MannyNeutralParentRelativeRotation.GetNormalized()).GetNormalized();
+}
+
+void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+	bool bStandingPolicyMode,
+	TArray<float>& InOutActions)
+{
+	ApplyCausalStandingPolicyActionCompatibility(
+		bStandingPolicyMode,
+		true,
+		false,
+		false,
+		true,
+		InOutActions);
+}
+
+void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+	bool bStandingPolicyMode,
+	bool bRestoreNeckHead,
+	TArray<float>& InOutActions)
+{
+	ApplyCausalStandingPolicyActionCompatibility(
+		bStandingPolicyMode,
+		bRestoreNeckHead,
+		bRestoreNeckHead,
+		InOutActions);
+}
+
+void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+	bool bStandingPolicyMode,
+	bool bRestoreNeck,
+	bool bRestoreHead,
+	TArray<float>& InOutActions)
+{
+	ApplyCausalStandingPolicyActionCompatibility(
+		bStandingPolicyMode,
+		false,
+		bRestoreNeck,
+		bRestoreHead,
+		InOutActions);
+}
+
+void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+	bool bStandingPolicyMode,
+	bool bRestoreSpineChest,
+	bool bRestoreNeck,
+	bool bRestoreHead,
+	TArray<float>& InOutActions)
+{
+	ApplyCausalStandingPolicyActionCompatibility(
+		bStandingPolicyMode,
+		bRestoreSpineChest,
+		bRestoreNeck,
+		bRestoreHead,
+		false,
+		InOutActions);
+}
+
+void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+	bool bStandingPolicyMode,
+	bool bRestoreSpineChest,
+	bool bRestoreNeck,
+	bool bRestoreHead,
+	bool bRestoreDistalHands,
+	TArray<float>& InOutActions)
+{
+	ApplyCausalStandingPolicyActionScales(
+		bStandingPolicyMode,
+		0.0f,
+		bRestoreSpineChest ? 1.0f : 0.0f,
+		bRestoreNeck ? 1.0f : 0.0f,
+		bRestoreHead ? 1.0f : 0.0f,
+		0.0f,
+		bRestoreDistalHands ? 1.0f : 0.0f,
+		0.0f,
+		bRestoreDistalHands ? 1.0f : 0.0f,
+		InOutActions);
+}
+
+void UPhysAnimComponent::ApplyCausalStandingPolicyActionScales(
+	bool bStandingPolicyMode,
+	float TorsoScale,
+	float SpineChestScale,
+	float NeckScale,
+	float HeadScale,
+	float LeftProximalScale,
+	float LeftDistalScale,
+	float RightProximalScale,
+	float RightDistalScale,
+	TArray<float>& InOutActions)
+{
+	if (!bStandingPolicyMode)
+	{
+		return;
+	}
+
+	TorsoScale = FMath::Clamp(TorsoScale, 0.0f, 1.0f);
+	SpineChestScale = FMath::Clamp(SpineChestScale, 0.0f, 1.0f);
+	NeckScale = FMath::Clamp(NeckScale, 0.0f, 1.0f);
+	HeadScale = FMath::Clamp(HeadScale, 0.0f, 1.0f);
+	LeftProximalScale = FMath::Clamp(LeftProximalScale, 0.0f, 1.0f);
+	LeftDistalScale = FMath::Clamp(LeftDistalScale, 0.0f, 1.0f);
+	RightProximalScale = FMath::Clamp(RightProximalScale, 0.0f, 1.0f);
+	RightDistalScale = FMath::Clamp(RightDistalScale, 0.0f, 1.0f);
+
+	for (int32 ScalarIndex = 0; ScalarIndex < InOutActions.Num(); ++ScalarIndex)
+	{
+		const int32 JointIndex = ScalarIndex / 3;
+		float Scale = 1.0f;
+		if (JointIndex == 8)
+		{
+			Scale = TorsoScale;
+		}
+		else if (JointIndex >= 9 && JointIndex < 11)
+		{
+			Scale = SpineChestScale;
+		}
+		else if (JointIndex == 11)
+		{
+			Scale = NeckScale;
+		}
+		else if (JointIndex == 12)
+		{
+			Scale = HeadScale;
+		}
+		else if (JointIndex >= 13 && JointIndex < 16)
+		{
+			Scale = LeftProximalScale;
+		}
+		else if (JointIndex >= 16 && JointIndex < 18)
+		{
+			Scale = LeftDistalScale;
+		}
+		else if (JointIndex >= 18 && JointIndex < 21)
+		{
+			Scale = RightProximalScale;
+		}
+		else if (JointIndex >= 21)
+		{
+			Scale = RightDistalScale;
+		}
+		if (Scale <= 0.0f)
+		{
+			InOutActions[ScalarIndex] = 0.0f;
+		}
+		else if (Scale < 1.0f)
+		{
+			InOutActions[ScalarIndex] *= Scale;
+		}
+	}
+}
+
+bool UPhysAnimComponent::IsCausalPolicyControlRuntimeState(
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return IsStandingActivationRuntimeState(InRuntimeState) ||
+		InRuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell;
+}
+
+bool UPhysAnimComponent::ShouldUseBalanceIdlePoseSearchState(
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+}
+
+bool UPhysAnimComponent::ShouldUseBridgeTrajectoryPoseSearchState(
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return InRuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell;
+}
+
+float UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
+	bool bStandingPolicyMode,
+	bool bFirstActiveStandingPolicyCaptured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bStandingPolicyMode &&
+		bFirstActiveStandingPolicyCaptured &&
+		(InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		 InRuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell)
+			? 1.5f
+			: 1.0f;
+}
+
+bool UPhysAnimComponent::ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bFirstActiveStandingPolicyCapturedBeforeCurrentInference &&
+		(InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		 InRuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell);
+}
+
+float UPhysAnimComponent::ResolveCausalStandingNeckScaleAfterFirstPolicy(
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+		bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		InRuntimeState)
+		? 0.25f
+		: 0.0f;
+}
+
+float UPhysAnimComponent::ResolveCausalStandingLeftProximalScaleAfterFirstPolicy(
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+		bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		InRuntimeState)
+		? 0.25f
+		: 0.0f;
+}
+
+float UPhysAnimComponent::ResolveCausalStandingRightProximalScaleAfterFirstPolicy(
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+		bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		InRuntimeState)
+		? 0.03125f
+		: 0.0f;
+}
+
+float UPhysAnimComponent::ResolveCausalStandingTorsoScaleAfterFirstPolicy(
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+		bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		InRuntimeState)
+		? 0.0000152587890625f
+		: 0.0f;
+}
+
+bool UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return IsCausalPolicyControlRuntimeState(InRuntimeState);
+}
+
+FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponent(
+	const FQuat& ActionBindComponentWorldRotation,
+	const FQuat& CachedWorldActionAxisRotation)
+{
+	return (ActionBindComponentWorldRotation.GetNormalized().Inverse() *
+		CachedWorldActionAxisRotation.GetNormalized()).GetNormalized();
+}
+
+FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxis(
+	const FQuat& EffectiveActionAxisRotation,
+	const FQuat& MannyNeutralParentRelativeRotation,
+	const FQuat& ProtoPolicyRotationUe)
+{
+	const FQuat NormalizedActionAxis = EffectiveActionAxisRotation.GetNormalized();
+	const FQuat PolicyRotationInEffectiveAxisFrame =
+		(NormalizedActionAxis.Inverse() *
+		 ProtoPolicyRotationUe.GetNormalized() *
+		 NormalizedActionAxis).GetNormalized();
+	return (PolicyRotationInEffectiveAxisFrame *
+		MannyNeutralParentRelativeRotation.GetNormalized()).GetNormalized();
+}
+
+#if WITH_DEV_AUTOMATION_TESTS
+bool UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
+	bool bConfigured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bConfigured && InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+}
+
+bool UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
+	bool bConfigured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bConfigured && IsStandingActivationRuntimeState(InRuntimeState);
+}
+
+bool UPhysAnimComponent::ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
+	bool bConfigured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bConfigured && IsStandingActivationRuntimeState(InRuntimeState);
+}
+
+bool UPhysAnimComponent::ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
+	bool bConfigured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bConfigured && IsStandingActivationRuntimeState(InRuntimeState);
+}
+
+bool UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+	bool bHeadEnabled,
+	bool bActiveOnly,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	if (!bHeadEnabled)
+	{
+		return false;
+	}
+	return bActiveOnly
+		? InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing
+		: IsStandingActivationRuntimeState(InRuntimeState);
+}
+
+bool UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
+	bool bHeadEnabled,
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bHeadEnabled &&
+		ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+			InRuntimeState);
+}
+
+bool UPhysAnimComponent::CaptureFirstActiveStandingConditionedActionsForTesting(
+	bool bActiveStanding,
+	TConstArrayView<float> ConditionedActions,
+	bool& bInOutCaptured,
+	TArray<float>& OutActions)
+{
+	if (!bActiveStanding || bInOutCaptured)
+	{
+		return false;
+	}
+
+	OutActions.Reset(ConditionedActions.Num());
+	OutActions.Append(ConditionedActions.GetData(), ConditionedActions.Num());
+	bInOutCaptured = true;
+	return true;
+}
+
+bool UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
+	bool bConfigured,
+	bool bFirstActiveStandingPolicyCaptured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bConfigured &&
+		bFirstActiveStandingPolicyCaptured &&
+		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+}
+
+bool UPhysAnimComponent::ShouldUseExperimentalCheckpointForcePdForRuntimeStateForTesting(
+	bool bConfigured,
+	bool bFirstActiveStandingPolicyCaptured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bConfigured &&
+		bFirstActiveStandingPolicyCaptured &&
+		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+}
+
+bool UPhysAnimComponent::TryBuildCheckpointForcePdControlDataForTesting(
+	FName BoneName,
+	const FPhysicsControlData& BaselineData,
+	FPhysicsControlData& OutControlData)
+{
+	float KpNmPerRad = 0.0f;
+	float KdNmSecPerRad = 0.0f;
+	if (BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
+		BoneName == TEXT("calf_l") || BoneName == TEXT("calf_r") ||
+		BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r"))
+	{
+		KpNmPerRad = 800.0f;
+		KdNmSecPerRad = 80.0f;
+	}
+	else if (BoneName == TEXT("ball_l") || BoneName == TEXT("ball_r"))
+	{
+		KpNmPerRad = 500.0f;
+		KdNmSecPerRad = 50.0f;
+	}
+	else if (BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03"))
+	{
+		KpNmPerRad = 1000.0f;
+		KdNmSecPerRad = 100.0f;
+	}
+	else if (BoneName == TEXT("neck_01") || BoneName == TEXT("head") ||
+		BoneName == TEXT("clavicle_l") || BoneName == TEXT("clavicle_r") ||
+		BoneName == TEXT("upperarm_l") || BoneName == TEXT("upperarm_r") ||
+		BoneName == TEXT("lowerarm_l") || BoneName == TEXT("lowerarm_r"))
+	{
+		KpNmPerRad = 500.0f;
+		KdNmSecPerRad = 50.0f;
+	}
+	else if (BoneName == TEXT("hand_l") || BoneName == TEXT("hand_r"))
+	{
+		KpNmPerRad = 300.0f;
+		KdNmSecPerRad = 30.0f;
+	}
+	else
+	{
+		return false;
+	}
+
+	constexpr float EngineTorqueUnitsPerNewtonMeter = 10000.0f;
+	const float KpEnginePerRad = KpNmPerRad * EngineTorqueUnitsPerNewtonMeter;
+	OutControlData = BaselineData;
+	OutControlData.AngularStrength = FMath::Sqrt(KpEnginePerRad) / (2.0f * PI);
+	OutControlData.AngularDampingRatio = 0.0f;
+	OutControlData.AngularExtraDamping = KdNmSecPerRad * EngineTorqueUnitsPerNewtonMeter;
+	OutControlData.MaxTorque = 500.0f * EngineTorqueUnitsPerNewtonMeter;
+	return true;
+}
+
+void UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
+	EPhysAnimExperimentalActionFamilyMask Mask,
+	TArray<float>& InOutActions)
+{
+	if (Mask == EPhysAnimExperimentalActionFamilyMask::All)
+	{
+		return;
+	}
+
+	for (int32 ScalarIndex = 0; ScalarIndex < InOutActions.Num(); ++ScalarIndex)
+	{
+		const int32 JointIndex = ScalarIndex / 3;
+		const bool bKeep =
+			(Mask == EPhysAnimExperimentalActionFamilyMask::LowerOnly && JointIndex < 8) ||
+			(Mask == EPhysAnimExperimentalActionFamilyMask::AxialOnly && JointIndex >= 8 && JointIndex < 13) ||
+			(Mask == EPhysAnimExperimentalActionFamilyMask::ArmsOnly && JointIndex >= 13);
+		if (!bKeep)
+		{
+			InOutActions[ScalarIndex] = 0.0f;
+		}
+	}
+}
+
+void UPhysAnimComponent::ApplyExperimentalActionJointRangeForTesting(
+	int32 StartJointIndex,
+	int32 JointCount,
+	TArray<float>& InOutActions)
+{
+	if (StartJointIndex == INDEX_NONE)
+	{
+		return;
+	}
+
+	const int32 ClampedStartJoint = FMath::Clamp(StartJointIndex, 0, PhysAnimBridge::NumActionFloats / 3);
+	const int32 ClampedEndJoint = FMath::Clamp(
+		ClampedStartJoint + FMath::Max(0, JointCount),
+		ClampedStartJoint,
+		PhysAnimBridge::NumActionFloats / 3);
+	for (int32 ScalarIndex = 0; ScalarIndex < InOutActions.Num(); ++ScalarIndex)
+	{
+		const int32 JointIndex = ScalarIndex / 3;
+		if (JointIndex < ClampedStartJoint || JointIndex >= ClampedEndJoint)
+		{
+			InOutActions[ScalarIndex] = 0.0f;
+		}
+	}
+}
+
+bool UPhysAnimComponent::ApplyExperimentalPolicyActionBaselineResidualForTesting(
+	bool bConfigured,
+	bool bForceZeroActions,
+	TConstArrayView<float> BaselineActions,
+	TArray<float>& InOutActions)
+{
+	if (!bConfigured || bForceZeroActions || BaselineActions.Num() != InOutActions.Num())
+	{
+		return false;
+	}
+
+	for (int32 ActionIndex = 0; ActionIndex < InOutActions.Num(); ++ActionIndex)
+	{
+		InOutActions[ActionIndex] -= BaselineActions[ActionIndex];
+	}
+	return true;
+}
+
+bool UPhysAnimComponent::ApplyExperimentalPolicyActionZeroUntilBaselineForTesting(
+	bool bConfigured,
+	bool bBaselineAvailable,
+	bool bForceZeroActions,
+	TArray<float>& InOutActions)
+{
+	if (!bConfigured || bBaselineAvailable || bForceZeroActions)
+	{
+		return false;
+	}
+
+	InOutActions.Init(0.0f, InOutActions.Num());
+	return true;
+}
+
+FVector UPhysAnimComponent::SelectObservationWorldPositionForTesting(
+	bool bUsePhysicsBodyPosition,
+	const FVector& BoneWorldPosition,
+	const FVector& PhysicsBodyWorldPosition)
+{
+	return bUsePhysicsBodyPosition ? PhysicsBodyWorldPosition : BoneWorldPosition;
+}
+
+float UPhysAnimComponent::ResolveExperimentalActiveStrengthFactorForTesting(
+	float ConfiguredFactor,
+	bool bFirstActiveStandingPolicyCaptured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	if (!bFirstActiveStandingPolicyCaptured ||
+		InRuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		return 1.0f;
+	}
+	return FMath::Max(0.0f, ConfiguredFactor);
+}
+
+FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
+	const FQuat& ActionBindComponentWorldRotation,
+	const FQuat& CachedWorldActionAxisRotation)
+{
+	return ExpressCachedWorldActionAxisInMeshComponent(
+		ActionBindComponentWorldRotation,
+		CachedWorldActionAxisRotation);
+}
+
+FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+	const FQuat& EffectiveActionAxisRotation,
+	const FQuat& MannyNeutralParentRelativeRotation,
+	const FQuat& ProtoPolicyRotationUe)
+{
+	return ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxis(
+		EffectiveActionAxisRotation,
+		MannyNeutralParentRelativeRotation,
+		ProtoPolicyRotationUe);
+}
+
+bool UPhysAnimComponent::BuildMannyLocalFrameRoundtripControlForTesting(
+	int32 ControlIndex,
+	FName MannyBoneName,
+	FName ControlName,
+	FName InitialControlChildBoneName,
+	FName InitialControlParentBoneName,
+	const FPhysAnimControlTargetSeed& MannyBindSeed,
+	const FQuat& MannyNeutralParentRelativeRotation,
+	const FQuat& ActualDecodedRotationUe,
+	const FQuat& ActualMannyPreRangeTargetParentRelative,
+	const FString& EffectiveActionAxisMode,
+	const FQuat& EffectiveActionAxisRotation,
+	PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl& OutTrace,
+	FString& OutError) const
+{
+	OutTrace = {};
+	OutTrace.ControlIndex = ControlIndex;
+	OutTrace.MannyBoneName = MannyBoneName;
+	OutTrace.ControlName = ControlName;
+	OutTrace.InitialControlChildBoneName = InitialControlChildBoneName;
+	OutTrace.InitialControlParentBoneName = InitialControlParentBoneName;
+	OutTrace.EffectiveActionAxisMode = EffectiveActionAxisMode;
+	if (EffectiveActionAxisMode != PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode &&
+		EffectiveActionAxisMode != PhysAnimBridge::MannyLocalFrameRoundtripComponentAxisMode)
+	{
+		OutError = FString::Printf(
+			TEXT("Unsupported effective action-axis mode '%s'."),
+			*EffectiveActionAxisMode);
+		return false;
+	}
+
+	const TArray<FName>& ObservationBodyNames = PhysAnimBridge::GetSmplObservationBoneNames();
+	if (CachedSmplObservationRestBodyComponentRotations.Num() != PhysAnimBridge::NumSmplBodies ||
+		ObservationBodyNames.Num() != PhysAnimBridge::NumSmplBodies)
+	{
+		OutError = TEXT("The synchronized SMPL observation bind frames are incomplete.");
+		return false;
+	}
+
+	for (const PhysAnimBridge::FPhysAnimProtoActionJointDescriptor& Descriptor :
+		PhysAnimBridge::GetProtoActionJointDescriptors())
+	{
+		if (Descriptor.MannyBoneName != MannyBoneName)
+		{
+			continue;
+		}
+		const int32 ObservationBodyIndex = Descriptor.ProtoJointIndex + 1;
+		if (!ObservationBodyNames.IsValidIndex(ObservationBodyIndex))
+		{
+			OutError = FString::Printf(
+				TEXT("Proto joint %d for '%s' has no corresponding observation body."),
+				Descriptor.ProtoJointIndex,
+				*MannyBoneName.ToString());
+			return false;
+		}
+		OutTrace.SourceProtoJointIndices.Add(Descriptor.ProtoJointIndex);
+		OutTrace.SourceProtoJointNames.Add(Descriptor.ProtoJointName);
+		OutTrace.ObservationBodyIndices.Add(ObservationBodyIndex);
+		OutTrace.ObservationBodyNames.Add(ObservationBodyNames[ObservationBodyIndex]);
+	}
+
+	if (OutTrace.SourceProtoJointIndices.IsEmpty())
+	{
+		OutError = FString::Printf(
+			TEXT("Control '%s' has no Proto action owner."),
+			*ControlName.ToString());
+		return false;
+	}
+
+	OutTrace.RoundtripObservationBodyIndex = OutTrace.ObservationBodyIndices[0];
+	OutTrace.RoundtripObservationBodyName =
+		ObservationBodyNames[OutTrace.RoundtripObservationBodyIndex];
+	OutTrace.ObservationParentBodyIndex =
+		ObservationBodyNames.IndexOfByKey(InitialControlParentBoneName);
+	if (!ObservationBodyNames.IsValidIndex(OutTrace.ObservationParentBodyIndex))
+	{
+		OutError = FString::Printf(
+			TEXT("Control '%s' parent '%s' is not an SMPL observation body."),
+			*ControlName.ToString(),
+			*InitialControlParentBoneName.ToString());
+		return false;
+	}
+	OutTrace.ObservationParentBodyName =
+		ObservationBodyNames[OutTrace.ObservationParentBodyIndex];
+	OutTrace.bDecisiveOneToOne =
+		OutTrace.SourceProtoJointIndices.Num() == 1 &&
+		OutTrace.ObservationBodyIndices.Num() == 1;
+	OutTrace.bOwnershipComplete =
+		InitialControlChildBoneName == MannyBoneName &&
+		OutTrace.RoundtripObservationBodyName == MannyBoneName &&
+		OutTrace.ObservationParentBodyName == InitialControlParentBoneName;
+
+	OutTrace.CachedActionAxisReferenceRotation =
+		MannyBindSeed.ParentActionAxisReferenceRotation.GetNormalized();
+	OutTrace.ActionBindParentRelativeRotation =
+		MannyBindSeed.ParentRelativeTargetRotation.GetNormalized();
+	OutTrace.PolicyNeutralParentRelativeRotation =
+		MannyNeutralParentRelativeRotation.GetNormalized();
+	OutTrace.ObservationParentBindComponentRotation =
+		CachedSmplObservationRestBodyComponentRotations[
+			OutTrace.ObservationParentBodyIndex].GetNormalized();
+	OutTrace.ActionBindComponentWorldRotation =
+		(MannyBindSeed.ParentWorldRotation *
+		 OutTrace.ObservationParentBindComponentRotation.Inverse()).GetNormalized();
+	OutTrace.ComponentCorrectedActionAxisRotation =
+		ExpressCachedWorldActionAxisInMeshComponentForTesting(
+			OutTrace.ActionBindComponentWorldRotation,
+			OutTrace.CachedActionAxisReferenceRotation);
+	OutTrace.EffectiveActionAxisRotation = EffectiveActionAxisRotation.GetNormalized();
+	OutTrace.ObservationBodyBindComponentRotation =
+		CachedSmplObservationRestBodyComponentRotations[
+			OutTrace.RoundtripObservationBodyIndex].GetNormalized();
+	OutTrace.ObservationBindParentRelativeRotation =
+		(OutTrace.ObservationParentBindComponentRotation.Inverse() *
+		 OutTrace.ObservationBodyBindComponentRotation).GetNormalized();
+	OutTrace.ActualDecodedRotationUe = ActualDecodedRotationUe.GetNormalized();
+	OutTrace.ActualMannyPreRangeTargetParentRelative =
+		ActualMannyPreRangeTargetParentRelative.GetNormalized();
+	OutTrace.ActionAxisVsObservationParentBindAngularDeltaDegrees =
+		FMath::RadiansToDegrees(
+			(OutTrace.ActionBindComponentWorldRotation.Inverse() *
+			 OutTrace.CachedActionAxisReferenceRotation).GetNormalized().AngularDistance(
+				OutTrace.ObservationParentBindComponentRotation));
+	const FQuat EffectiveActionAxisInObservationComponent =
+		EffectiveActionAxisMode == PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode
+			? (OutTrace.ActionBindComponentWorldRotation.Inverse() *
+			   OutTrace.EffectiveActionAxisRotation).GetNormalized()
+			: OutTrace.EffectiveActionAxisRotation;
+	OutTrace.EffectiveActionAxisVsObservationParentBindComponentAngularDeltaDegrees =
+		FMath::RadiansToDegrees(
+			EffectiveActionAxisInObservationComponent.AngularDistance(
+				OutTrace.ObservationParentBindComponentRotation));
+	OutTrace.ActionBindVsObservationBindParentRelativeAngularDeltaDegrees =
+		FMath::RadiansToDegrees(
+			OutTrace.ActionBindParentRelativeRotation.AngularDistance(
+				OutTrace.ObservationBindParentRelativeRotation));
+	OutTrace.PolicyNeutralVsActionBindParentRelativeAngularDeltaDegrees =
+		FMath::RadiansToDegrees(
+			OutTrace.PolicyNeutralParentRelativeRotation.AngularDistance(
+				OutTrace.ActionBindParentRelativeRotation));
+	OutTrace.PolicyNeutralVsObservationBindParentRelativeAngularDeltaDegrees =
+		FMath::RadiansToDegrees(
+			OutTrace.PolicyNeutralParentRelativeRotation.AngularDistance(
+				OutTrace.ObservationBindParentRelativeRotation));
+
+	auto AddRoundtripCase = [&OutTrace](
+		const FName Label,
+		const FQuat& CanonicalInput)
+	{
+		PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripCase& Case =
+			OutTrace.RoundtripCases.AddDefaulted_GetRef();
+		Case.Label = Label;
+		Case.InputCanonicalRotationUe = CanonicalInput.GetNormalized();
+		Case.MannyPreRangeTargetParentRelative =
+			ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+				OutTrace.EffectiveActionAxisRotation,
+				OutTrace.PolicyNeutralParentRelativeRotation,
+				Case.InputCanonicalRotationUe);
+		Case.RecoveredCanonicalRotationUe =
+			PhysAnimProtoMannyAdapter::RecoverCanonicalJointRotation(
+				OutTrace.ObservationParentBindComponentRotation,
+				OutTrace.ObservationBindParentRelativeRotation,
+				Case.MannyPreRangeTargetParentRelative);
+		Case.AngularErrorDegrees = FMath::RadiansToDegrees(
+			Case.InputCanonicalRotationUe.AngularDistance(
+				Case.RecoveredCanonicalRotationUe));
+	};
+
+	const double ProbeRadians = FMath::DegreesToRadians(
+		PhysAnimBridge::MannyLocalFrameRoundtripAxisProbeDegrees);
+	AddRoundtripCase(TEXT("identity"), FQuat::Identity);
+	AddRoundtripCase(TEXT("actual_decoded"), OutTrace.ActualDecodedRotationUe);
+	AddRoundtripCase(TEXT("positive_x_10_deg"), FQuat(FVector::ForwardVector, ProbeRadians));
+	AddRoundtripCase(TEXT("negative_x_10_deg"), FQuat(FVector::ForwardVector, -ProbeRadians));
+	AddRoundtripCase(TEXT("positive_y_10_deg"), FQuat(FVector::RightVector, ProbeRadians));
+	AddRoundtripCase(TEXT("negative_y_10_deg"), FQuat(FVector::RightVector, -ProbeRadians));
+	AddRoundtripCase(TEXT("positive_z_10_deg"), FQuat(FVector::UpVector, ProbeRadians));
+	AddRoundtripCase(TEXT("negative_z_10_deg"), FQuat(FVector::UpVector, -ProbeRadians));
+
+	OutError.Reset();
+	return true;
+}
+#endif
+
+
 FQuat UPhysAnimComponent::BlendPolicyTargetRotation(
 	const FQuat& BaselineRotation,
 	const FQuat& PolicyTargetRotation,
@@ -898,6 +1708,33 @@ bool UPhysAnimComponent::ShouldPreserveGameplayShellDuringBridgeActive(
 }
 
 
+void UPhysAnimComponent::ApplyCharacterMovementBridgeOwnership(
+	UCharacterMovementComponent* CharacterMovement,
+	bool bPreserveGameplayShell)
+{
+	if (!CharacterMovement)
+	{
+		return;
+	}
+
+	if (bPreserveGameplayShell)
+	{
+		CharacterMovement->Activate(true);
+		CharacterMovement->SetComponentTickEnabled(true);
+		if (CharacterMovement->MovementMode == MOVE_None)
+		{
+			CharacterMovement->SetMovementMode(MOVE_Walking);
+		}
+		return;
+	}
+
+	CharacterMovement->StopMovementImmediately();
+	CharacterMovement->DisableMovement();
+	CharacterMovement->SetComponentTickEnabled(false);
+	CharacterMovement->Deactivate();
+}
+
+
 FString UPhysAnimComponent::BuildBridgeStatusIndicatorText(EPhysAnimRuntimeState State, bool bBridgeOwnsPhysics)
 {
 	const TCHAR* const StateName = GetRuntimeStateName(State);
@@ -974,9 +1811,8 @@ bool UPhysAnimComponent::ShouldSuspendPolicyInfluenceDuringPresentationPerturbat
 
 EPhysAnimRuntimeState UPhysAnimComponent::ResolveInitialPoseSearchSuccessState(bool bForceZeroActions)
 {
-	return bForceZeroActions
-		? EPhysAnimRuntimeState::ReadyForActivation
-		: EPhysAnimRuntimeState::BridgeActive;
+	(void)bForceZeroActions;
+	return EPhysAnimRuntimeState::BridgeActive;
 }
 
 
@@ -1004,7 +1840,8 @@ bool UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState Sta
 			State == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
 			State == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 			State == EPhysAnimRuntimeState::BalanceEntry_Settle ||
-			IsBalanceActiveState(State);
+			IsBalanceActiveState(State) ||
+			State == EPhysAnimRuntimeState::LocomotionActiveShell;
 }
 
 bool UPhysAnimComponent::ShouldRunRootOnReadinessUltraFineMarginSweep(float RootOnReadinessTotalDeficitDeg)
@@ -1449,6 +2286,12 @@ const TCHAR* UPhysAnimComponent::GetRuntimeStateName(EPhysAnimRuntimeState State
 		return TEXT("ReadyForActivation");
 	case EPhysAnimRuntimeState::BridgeActive:
 		return TEXT("BridgeActive");
+	case EPhysAnimRuntimeState::Standing_Preparation:
+		return TEXT("Standing_Preparation");
+	case EPhysAnimRuntimeState::Standing_FullSimulationActivation:
+		return TEXT("Standing_FullSimulationActivation");
+	case EPhysAnimRuntimeState::Standing_PolicyBlend:
+		return TEXT("Standing_PolicyBlend");
 	case EPhysAnimRuntimeState::BalanceEntry_Prepare:
 		return TEXT("BalanceEntry_Prepare");
 	case EPhysAnimRuntimeState::BalanceEntry_LateValidate:

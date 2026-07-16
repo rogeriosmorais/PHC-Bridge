@@ -1,0 +1,52 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "production-spine-chest-restoration-e40",
+  "preregistered_utc": "2026-07-15T21:24:17Z",
+  "production_baseline_behavior_commit": "1555e8863d00cd4fbe6fc293cac93966fca9682c",
+  "validated_candidate_behavior_commit": "25b68038df230a4cb408a04239deeca496dfdc8b",
+  "latest_evidence_commit": "427f99cdf0f3731ee90fb29f429f7c47dbdb4895",
+  "hypothesis": "Promoting the E39 Spine+Chest action mask into default production behavior reproduces the complete locked causal-standing bundle without any experimental behavior arguments.",
+  "causal_variable": {
+    "name": "production_default_standing_action_mask",
+    "control": "joints 0-7 retained",
+    "candidate": "joints 0-7 and 9-10 retained; joint 8 and joints 11-22 zero"
+  },
+  "held_constant": [
+    "E39 model, protocol, evaluator thresholds, timestep, perturbation and seed",
+    "component-space action-axis composition",
+    "captured standing neutral",
+    "constraint mapping and safety projection",
+    "8 Hz acceleration-mode plant",
+    "Normal delayed strength transition 1.0 to 1.5",
+    "ZeroActions strength 1.0",
+    "all experimental behavior arguments absent"
+  ],
+  "implementation_plan": [
+    "Change the production compatibility-mask contract test first so default standing retains exactly joints 0-7 and 9-10.",
+    "Run the focused Unreal test red against the current lower-only default.",
+    "Promote Spine+Chest in the production default and inference path without altering development selectors for other regions.",
+    "Run focused green tests and commit production behavior.",
+    "Run Normal x3, ZeroActions x3, DropControlDispatch x1 and ForcedSupportLoss x1 with no PhysAnimExperimental arguments.",
+    "Audit masks, first-active evidence, strengths, hashes, deterministic streams, model/protocol identity and destructive controls."
+  ],
+  "acceptance": {
+    "bundle_status": "PASS",
+    "maximum_normal_to_zero_recovery_auc_ratio": 0.8,
+    "normal_absolute_pass_count": 3,
+    "zero_actions_absolute_pass_count": 3,
+    "normal_repetitions_deterministic": true,
+    "zero_repetitions_deterministic": true,
+    "normal_mask": "joints 0-7 and 9-10 only",
+    "zero_actions_all_conditioned_scalars": "exactly zero",
+    "normal_strength_multipliers": [1.0,1.5],
+    "zero_actions_strength_multipliers": [1.0],
+    "runner_experimental_behavior_arguments": [],
+    "evidence_experimental_behavior_arguments": [],
+    "destructive_controls": "fail only intended criteria"
+  },
+  "decision_rule": {
+    "supported": "Record production success and use the promoted Spine+Chest behavior as the new immutable upper-body restoration baseline.",
+    "falsified": "Revert production default to E33 lower-only behavior and retain E39 as development-only evidence.",
+    "invalid": "Repeat only for a violated validity condition."
+  }
+}

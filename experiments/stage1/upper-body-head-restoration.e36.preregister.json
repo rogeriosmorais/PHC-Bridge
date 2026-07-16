@@ -1,0 +1,51 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "upper-body-head-restoration-e36",
+  "preregistered_utc": "2026-07-15T20:24:55Z",
+  "production_baseline_behavior_commit": "1555e8863d00cd4fbe6fc293cac93966fca9682c",
+  "latest_evidence_commit": "975e521891dada36720943089d4dcb7979eba2f8",
+  "hypothesis": "Restoring only ProtoMotions joint 12 (Head), while keeping joint 11 (Neck) and every other upper-body action zero, preserves the complete locked causal-standing product contract.",
+  "causal_variable": {
+    "name": "retained_policy_action_joints",
+    "control": [0,1,2,3,4,5,6,7],
+    "candidate": [0,1,2,3,4,5,6,7,12],
+    "candidate_region": "Head",
+    "command_line_opt_in": "-PhysAnimExperimentalCausalStandingUpperBody=Head"
+  },
+  "held_constant": [
+    "locked E33 production behavior outside the action mask",
+    "model, protocol, evaluator thresholds, fixed timestep and perturbation",
+    "component-space action axis, neutral, range mapping and safety projection",
+    "8 Hz acceleration controls and Normal 1.0 to 1.5 authority transition",
+    "all action triplets outside indices 0-7 and 12 exactly zero"
+  ],
+  "historical_basis": [
+    "E34 NeckHead failed causal recovery and determinism.",
+    "E35 Neck-only was deterministic but failed causal recovery at ratio 0.8439508775286823.",
+    "Head-only is the remaining single-joint localization of the E34 pair."
+  ],
+  "implementation_plan": [
+    "Add focused parsing and exact-mask regression tests for Head using the already implemented independent selector.",
+    "Run the focused Unreal contract and commit the tested candidate state.",
+    "Run Normal x3, ZeroActions x3, DropControlDispatch x1 and ForcedSupportLoss x1 with only the Head option.",
+    "Audit masks, strengths, hashes, determinism and destructive controls."
+  ],
+  "acceptance": {
+    "bundle_status": "PASS",
+    "normal_absolute_pass_count": 3,
+    "zero_actions_absolute_pass_count": 3,
+    "maximum_normal_to_zero_recovery_auc_ratio": 0.8,
+    "normal_target_readback_match_ratio": 1.0,
+    "zero_target_readback_match_ratio": 1.0,
+    "drop_control_dispatch_required_failed_criteria": ["target_readback"],
+    "forced_support_loss_required_failed_criteria": ["support_gap"],
+    "normal_mask": "joints 0-7 and 12 only",
+    "normal_repetitions_deterministic": true,
+    "zero_repetitions_deterministic": true
+  },
+  "decision_rule": {
+    "supported": "Record E36 and preregister a separate no-flag production promotion before changing the default mask.",
+    "falsified": "Keep E33 lower-only production unchanged and move to the next separately preregistered safe region, spine/chest without torso joint 8.",
+    "invalid": "Repeat only for a violated preregistered validity condition."
+  }
+}

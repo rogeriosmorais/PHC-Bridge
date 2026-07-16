@@ -17,9 +17,80 @@ FString FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(boo
 	return TEXT("phase1_late_validate_unknown");
 }
 
-bool FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(bool bRawSimViolation, bool bMotionViolation, bool bPendingResetViolation)
+bool FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(
+	bool bModifierMovementTypeMismatch,
+	bool bRawSimViolation,
+	bool bPendingResetViolation,
+	bool bRelativePoseViolation,
+	bool bControlReadbackViolation)
 {
-	return bRawSimViolation || bMotionViolation || bPendingResetViolation;
+	return bModifierMovementTypeMismatch ||
+		bRawSimViolation ||
+		bPendingResetViolation ||
+		bRelativePoseViolation ||
+		bControlReadbackViolation;
+}
+
+bool FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(
+	bool bViolationThisFrame,
+	float DeltaTimeSeconds,
+	float GraceDurationSeconds,
+	float& InOutViolationDurationSeconds)
+{
+	if (!bViolationThisFrame)
+	{
+		InOutViolationDurationSeconds = 0.0f;
+		return false;
+	}
+
+	InOutViolationDurationSeconds += FMath::Max(0.0f, DeltaTimeSeconds);
+	return InOutViolationDurationSeconds + KINDA_SMALL_NUMBER >= FMath::Max(0.0f, GraceDurationSeconds);
+}
+
+
+bool FPhysAnimBalanceReadyTransition::IsPhase1TopologyObservationMismatch(
+	bool bExpectedSimulating,
+	bool bModifierRecordPresent,
+	bool bModifierReportedSimulating,
+	bool bModifierReportedKinematic,
+	bool bBodyInstanceValid,
+	bool bBodySimulating)
+{
+	const bool bModifierMatchesExpected = bExpectedSimulating
+		? bModifierReportedSimulating
+		: bModifierReportedKinematic;
+	const bool bModifierMatchesBody =
+		(bModifierReportedSimulating && bBodySimulating) ||
+		(bModifierReportedKinematic && !bBodySimulating);
+	return !bModifierRecordPresent ||
+		!bBodyInstanceValid ||
+		!bModifierMatchesExpected ||
+		!bModifierMatchesBody;
+}
+
+
+bool FPhysAnimBalanceReadyTransition::CanReleaseLateValidationUpperBody(
+	bool bReleaseTimersSatisfied,
+	bool bCurrentObservationClean,
+	float OutstandingViolationDurationSeconds)
+{
+	return bReleaseTimersSatisfied &&
+		bCurrentObservationClean &&
+		OutstandingViolationDurationSeconds <= KINDA_SMALL_NUMBER;
+}
+
+
+bool FPhysAnimBalanceReadyTransition::WasPolicySuppressedInObservedFrame(int32 NumNormalPolicyTargetsWritten)
+{
+	return NumNormalPolicyTargetsWritten == 0;
+}
+
+
+bool FPhysAnimBalanceReadyTransition::WereResetsSuppressedInObservedFrame(
+	int32 PendingResetCount,
+	int32 ResetRequestsWritten)
+{
+	return PendingResetCount == 0 && ResetRequestsWritten == 0;
 }
 
 FString FPhysAnimBalanceReadyTransition::ResolveRootOnReadinessGateReason(
@@ -111,6 +182,18 @@ bool FPhysAnimBalanceReadyTransition::ValidateLateValidationHandoffSnapshot(cons
 	if (!Snapshot.bControlAuthoritySettled)
 	{
 		OutReason = TEXT("phase2_control_authority_not_settled");
+		return false;
+	}
+
+	if (!Snapshot.bPolicySuppressed)
+	{
+		OutReason = TEXT("phase2_policy_write_observed_during_suppression");
+		return false;
+	}
+
+	if (!Snapshot.bResetsSuppressed)
+	{
+		OutReason = TEXT("phase2_reset_observed_during_suppression");
 		return false;
 	}
 

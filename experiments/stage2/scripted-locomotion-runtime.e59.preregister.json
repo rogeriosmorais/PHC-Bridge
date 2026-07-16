@@ -1,0 +1,32 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E59",
+  "title": "Scripted locomotion runtime and stop transition",
+  "baseline_commit": "25b4ee68c25b4e3a7bd6b3ca1991ed0621d880cd",
+  "date": "2026-07-15",
+  "hypothesis": "A deterministic scripted trajectory can drive the existing Stage2A kinematic-shell locomotion path with scalable forward speed and yaw while policy output remains live, and an explicit stop command can clear locomotion state and return to BalanceActive_Standing without resetting the bridge or actor.",
+  "single_behavior_change": "Add a scripted locomotion composition method and a stop-to-standing method; do not change standing gains, action scales, model inputs, fixed timestep, root authority, or Physics Control tuning.",
+  "runtime_contract": {
+    "entry_state": "BalanceActive_Standing",
+    "active_state": "LocomotionActiveShell",
+    "exit_state": "BalanceActive_Standing",
+    "root_authority": "Stage1_KinematicRoot",
+    "movement_source": "Stage2A_KinematicShell",
+    "human_input": false,
+    "simroot_allowed": false
+  },
+  "tdd_contract": [
+    "Scripted locomotion is denied unless the existing Stage2A gate and policy-liveness conditions pass.",
+    "Intent magnitude is clamped to [0,1] and scales the existing 60 cm/s forward speed.",
+    "A supplied yaw delta is composed in the same scripted step as forward shell movement.",
+    "Trajectory conditioning can be explicitly suppressed for a later destructive-control product test while shell motion remains applied.",
+    "Stop clears intent and trajectory state, zeros accepted velocity, resets locomotion authority/request state, and returns to BalanceActive_Standing.",
+    "No CharacterMovement input API, SimRoot path, standing gain, or all-joint action scale is changed."
+  ],
+  "acceptance": {
+    "focused_unreal_test_exit_code": 0,
+    "source_diagnostics_clean": true,
+    "legacy_walk_and_turn_tests_preserved": true
+  },
+  "next_if_supported": "Preregister E60 scripted causal locomotion product scenario with Normal, ZeroActions, DropTrajectoryConditioning, and SuppressStopTransition arms."
+}

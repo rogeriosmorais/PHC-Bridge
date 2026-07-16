@@ -1,0 +1,26 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "policy-action-zero-until-baseline-e28",
+  "recorded_utc": "2026-07-15T19:20:00Z",
+  "source_commit": "3856b3dd5b239d77125ea86960ebb9ee7e8edcc6",
+  "status": "VALID",
+  "hypothesis_verdict": "FALSIFIED",
+  "product_success": false,
+  "arms": {
+    "control_lower_absolute": {"status":"PASS", "recovery_auc":65.69851225230799, "target_readback_ratio":1.0},
+    "experimental_lower_zero_then_residual": {"status":"FAIL", "recovery_auc":70.29006390659012, "failed_criteria":["pelvis_height","root_tilt"], "target_readback_ratio":1.0},
+    "zero_mode_guard": {"status":"PASS", "recovery_auc":41.14179622283463, "conditioned_action_l2_max":0.0, "target_readback_ratio":1.0}
+  },
+  "validity": {
+    "fixture_authority":"PRODUCT_RUN",
+    "protocol_sha256":"75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+    "zero_actions_preserved":true,
+    "target_readback_all_one":true
+  },
+  "causal_findings": [
+    "Absolute preparation actions are not the remaining source of E27's causal deficit.",
+    "Suppressing them removes a stabilizing transition trajectory, worsens AUC, and violates pelvis/tilt limits.",
+    "The next causal boundary is the policy's interpretation of perturbation-induced observations, not baseline capture timing."
+  ],
+  "next": "Audit the ProtoMotions self-observation velocity and heading-frame contract against UE, then test one basis/sign correction at a time with raw feature evidence."
+}

@@ -37,14 +37,9 @@ float UPhysAnimComponent::CalculateCurrentControlAuthorityAlpha(const FPhysAnimS
 
 float UPhysAnimComponent::CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
+	if (IsCausalPolicyControlRuntimeState(RuntimeState))
 	{
-		return 0.0f;
-	}
-
-	if (ShouldSuspendPolicyInfluenceDuringPresentationPerturbation(IsPresentationPerturbationOverrideActive()))
-	{
-		return 0.0f;
+		return StandingActivation.GetStatus().LinearBlendAlpha;
 	}
 
 	if (PolicyInfluenceRampStartTimeSeconds < 0.0)
@@ -56,7 +51,7 @@ float UPhysAnimComponent::CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimSt
 	const float ElapsedSincePolicyRampStartSeconds = static_cast<float>(
 		FMath::Max(CurrentTimeSeconds - PolicyInfluenceRampStartTimeSeconds, 0.0));
 	return CalculatePolicyInfluenceAlpha(
-		EffectiveSettings.bForceZeroActions,
+		false,
 		true,
 		ElapsedSincePolicyRampStartSeconds,
 		EffectiveSettings.StartupRampSeconds);

@@ -1,0 +1,19 @@
+{
+  "schema_version":"physanim-experiment-preregistration/v1",
+  "experiment_id":"scaled-delayed-restoration-framework-e48",
+  "preregistered_utc":"2026-07-15T23:27:00Z",
+  "production_baseline_commit":"a88f786c18a77b2e5f48cfad3b3f25247240d108",
+  "purpose":"Add reusable plumbing to evaluate every remaining masked region independently with a scale in [0,1], activated only after the first active-standing policy cycle.",
+  "remaining_regions":{"Torso":[8],"Neck":[11],"LeftProximal":[13,14,15],"RightProximal":[18,19,20]},
+  "single_framework_change":[
+    "Introduce a region enum: None, Torso, Neck, LeftProximal, RightProximal.",
+    "Introduce a production-compatible action-scaling function covering all eight joint regions.",
+    "Make existing compatibility overloads delegate to the scale function without changing their semantics.",
+    "Add dev-only command-line selector PhysAnimExperimentalCausalStandingScaledRegion and scale PhysAnimExperimentalCausalStandingScaledScale.",
+    "Apply the selected scale only after a previous active-standing policy inference; production scales remain unchanged."
+  ],
+  "command_line_contract":{"region":"-PhysAnimExperimentalCausalStandingScaledRegion=<Torso|Neck|LeftProximal|RightProximal>","scale":"-PhysAnimExperimentalCausalStandingScaledScale=<0..1>"},
+  "acceptance":{"focused_parser_contract_passes":true,"exact_region_scaling_contract_passes":true,"legacy_overload_contracts_pass":true,"production_no-option_behavior_is_byte-identical_to_E47":true,"diagnostics_clean":true},
+  "falsification":["Any production scale changes without the new selector.","Any legacy compatibility overload changes its retained joint set.","Any selected region affects another region.","Any scale outside [0,1] is not clamped."],
+  "next":"Screen Neck, LeftProximal, RightProximal and Torso one at a time under -onethread, using full bundles for accepted candidate scales."
+}

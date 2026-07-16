@@ -1,0 +1,52 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "checkpoint-torque-ceiling-e21",
+  "recorded_utc": "2026-07-15T17:00:00Z",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "The live ONNX policy fails because every UE Physics Control is capped at approximately 50 N*m while the exact ProtoMotions SMPL checkpoint used 500 N*m implicit-PD effort limits. Raising only the UE torque ceiling tenfold from the first policy target write will improve or restore standing without changing targets, drive frequency, damping, mapping, or timing.",
+  "authoritative_source": {
+    "repository_commit": "4a905b998101333a2fb91f2de8e2cab4bd0db68e",
+    "checkpoint_config": "data/pretrained_models/motion_tracker/smpl/config.yaml",
+    "robot_actuator_source": "protomotions/simulator/isaaclab/utils/robots.py::SMPL_CFG",
+    "simulator": "IsaacLab",
+    "simulation_fps": 120,
+    "decimation": 4,
+    "control_rate_hz": 30,
+    "effort_limit_nm_all_smpl_actuators": 500,
+    "ue_current_max_torque_engine_units": 500000,
+    "ue_checkpoint_equivalent_max_torque_engine_units": 5000000,
+    "unit_derivation": "Unreal uses centimeters: 1 N*m = 10,000 kg*cm^2/s^2, so 500,000 engine torque units is approximately 50 N*m and 5,000,000 is approximately 500 N*m."
+  },
+  "arms": [
+    {"name": "control_current_ceiling", "max_torque_multiplier": 1.0},
+    {"name": "experimental_checkpoint_ceiling", "max_torque_multiplier": 10.0}
+  ],
+  "single_changed_variable": "Physics Control MaxTorqueMultiplier from first standing-policy state onward.",
+  "locked_configuration": {
+    "base_commit": "296f573496a3952709f42d683a8a75f00ec61540",
+    "model_sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+    "protocol_sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB",
+    "variant": "RealOnnxPolicy",
+    "action_family": "All",
+    "action_axis": "observation-parent-bind mesh-component axis from first policy",
+    "neutral_source": "captured stable standing neutral",
+    "constraint_range_mapper": "enabled",
+    "safety_projection": "enabled",
+    "angular_strength_hz": 8.0,
+    "damping_and_extra_damping": "unchanged",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "perturbation": "none"
+  },
+  "validity_gates": [
+    "Same clean behavior commit and reused binary.",
+    "First-policy snapshot including raw model output is byte-identical.",
+    "All conditioned actions and target traces before torque application are identical.",
+    "Control arm publishes multiplier 1.0; experimental arm publishes 10.0 for all 21 controls.",
+    "Target readback is 1.0 in both arms."
+  ],
+  "support": "Validity gates pass and the checkpoint ceiling strictly improves the failed-criterion set, time to collapse, and all major velocity/tilt maxima, or passes the locked hold.",
+  "falsification": "Validity gates pass but the checkpoint ceiling is neutral or worsens standing, ruling out the low ceiling as the remaining sufficient cause.",
+  "next_if_falsified": "Implement the exact checkpoint per-family force-PD Kp/Kd profile or an inertia-derived acceleration-mode equivalent, keeping the validated torque ceiling and all semantic mappings fixed."
+}

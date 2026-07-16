@@ -1,0 +1,40 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E80",
+  "title": "Promote query-trajectory future-root placement",
+  "status": "PREREGISTERED",
+  "baseline_commit": "6b7c3a26d605484af73da58af79378e218d5ba77",
+  "premise": "E79's typed 2x2x2 replay matrix produced one surviving algebraic contract: E77_MeshFacing_WorldVelocity plus QueryTrajectoryRootMotion. The current runtime already uses the E77 query contract but still builds PHC future targets from raw animation root motion, approximately 300 cm/s with no requested turn, while the authoritative shell/query contract is 160 cm/s with the scripted yaw progression.",
+  "single_change": "Only while RuntimeState is LocomotionActiveShell, place each canonical sampled future animation pose on the corresponding authoritative query-trajectory root before BuildMimicTargetPoses. Preserve each body's transform relative to the sampled animation root. Standing continues to use the existing raw animation future targets.",
+  "locked_invariants": [
+    "scripted-locomotion.v1.json and scripted-locomotion.v2.json remain byte-for-byte unchanged",
+    "Pose Search facing remains mesh-facing and query velocity remains authoritative world velocity",
+    "selected animation, shell movement, policy model, observation semantics, actions, gains, Physics Control targets, and terminal criteria do not change",
+    "future sample schedule remains PhysAnimBridge::BuildFutureSampleTimeSchedule",
+    "the selected world-to-data frame remains ResolveMimicTargetReferenceDataFrame",
+    "no asset-name override or selection-policy override is introduced",
+    "no full product run occurs before focused deterministic tests and replay capture validation pass"
+  ],
+  "tdd_red": [
+    "A pure future-pose placement test references an unimplemented helper and asserts exact target roots, preserved body-local transforms, preserved times, and malformed-input rejection",
+    "A target-root schedule test asserts selected t=0 root identity, 160 cm/s progression, requested yaw sign/magnitude, exact zero preservation, and world-data round trip",
+    "A runtime-state gate test asserts placement only in LocomotionActiveShell",
+    "A replay-record validation test requires trajectory samples and both final policy tensors plus the policy action signature"
+  ],
+  "acceptance": [
+    "Every placed future root equals its query-derived target root within 1e-5 position and angular tolerance",
+    "Every non-root body's root-relative position and rotation are preserved",
+    "Standing future targets are unchanged",
+    "The deterministic replay artifact contains actor and mesh transforms, query trajectory samples, selected animation identity/time, selected world/data roots, physical and canonical body samples, raw and placed future samples, self observation, mimic target, and policy action signature",
+    "PhysAnim.Frames, PhysAnim.Adapter.ProtoManny, scripted locomotion runtime, and protocol-authority tests pass",
+    "Exactly one protocol-authoritative v2 Normal probe is executed after the focused gate passes"
+  ],
+  "rejection": [
+    "Any standing regression",
+    "Any change to shell path, protocol hash, query velocity, Pose Search selected asset distribution, policy/action/gain semantics, or test cadence",
+    "Placed future speed differs from the query/shell contract by more than five percent",
+    "Requested turn sign or magnitude is lost",
+    "The authoritative probe fails terminal standing, support, readback, or protocol linkage"
+  ],
+  "next_if_supported": "Evaluate the single Normal probe. Do not run ZeroActions or tune controls until the replay proves E80 changed only future-root placement and the probe result is understood."
+}

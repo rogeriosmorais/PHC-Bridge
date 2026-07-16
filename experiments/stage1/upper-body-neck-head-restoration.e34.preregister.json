@@ -1,0 +1,68 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "upper-body-neck-head-restoration-e34",
+  "preregistered_utc": "2026-07-15T20:01:44Z",
+  "baseline_behavior_commit": "1555e8863d00cd4fbe6fc293cac93966fca9682c",
+  "baseline_evidence_commit": "1d12ff2a572efa822b2b4faa42b506204e73acc5",
+  "hypothesis": "Restoring the ProtoMotions neck and head action triplets (joint indices 11-12) in addition to the production lower-body set (indices 0-7) preserves the complete locked causal-standing product contract.",
+  "causal_variable": {
+    "name": "retained_policy_action_joints",
+    "control": [0, 1, 2, 3, 4, 5, 6, 7],
+    "candidate": [0, 1, 2, 3, 4, 5, 6, 7, 11, 12],
+    "candidate_region": "NeckHead",
+    "command_line_opt_in": "-PhysAnimExperimentalCausalStandingUpperBody=NeckHead"
+  },
+  "held_constant": [
+    "source model and ONNX hash",
+    "locked causal-standing protocol and evaluator thresholds",
+    "component-space action-axis composition",
+    "captured standing neutral",
+    "constraint range mapping and safety projection",
+    "8 Hz acceleration-mode control plant",
+    "Normal delayed policy strength transition 1.0 to 1.5",
+    "ZeroActions strength multiplier 1.0",
+    "fixed timestep, perturbation, render capture, seed, and product variants",
+    "all action triplets outside indices 0-7 and 11-12 remain exactly zero"
+  ],
+  "historical_basis": [
+    "E23 neck/head indices 11-12 passed the ten-second no-perturbation screen with target readback 1.0 and maximum root tilt below 7.27 degrees.",
+    "E23/E24 identified torso joint 8 as catastrophic and the right proximal chain as interaction-sensitive, so neither region is included in this increment.",
+    "E33 is the immutable production causal-standing baseline and passed the strict no-experimental-flag 3+3+2 bundle."
+  ],
+  "implementation_plan": [
+    "Add an automation-only opt-in that changes only the production standing action compatibility mask.",
+    "Write contract tests before implementation: default preserves E33 lower-only behavior; NeckHead opt-in retains exactly joints 0-7 and 11-12; all others are zero.",
+    "Run focused Unreal contract tests red then green.",
+    "Commit candidate behavior before product runs.",
+    "Run the complete locked bundle: Normal x3, ZeroActions x3, DropControlDispatch x1, ForcedSupportLoss x1, with the same opt-in on every arm.",
+    "Evaluate with scripts/evaluate_causal_standing.py and audit masks, strength paths, hashes, determinism, and command lines."
+  ],
+  "acceptance": {
+    "bundle_status": "PASS",
+    "normal_absolute_pass_count": 3,
+    "zero_actions_absolute_pass_count": 3,
+    "maximum_normal_to_zero_recovery_auc_ratio": 0.8,
+    "normal_target_readback_match_ratio": 1.0,
+    "zero_target_readback_match_ratio": 1.0,
+    "drop_control_dispatch_required_status": "FAIL",
+    "drop_control_dispatch_required_failed_criteria": ["target_readback"],
+    "forced_support_loss_required_status": "FAIL",
+    "forced_support_loss_required_failed_criteria": ["support_gap"],
+    "normal_conditioned_joint_requirements": {
+      "indices_0_to_7": "nonzero policy behavior present",
+      "indices_8_to_10": "exactly zero",
+      "indices_11_to_12": "nonzero policy behavior present",
+      "indices_13_to_22": "exactly zero"
+    },
+    "zero_actions_all_conditioned_scalars": "exactly zero",
+    "normal_strength_multipliers": [1.0, 1.5],
+    "zero_actions_strength_multipliers": [1.0],
+    "normal_repetitions_deterministic": true,
+    "zero_repetitions_deterministic": true
+  },
+  "decision_rule": {
+    "supported": "Record E34 as a valid experimental upper-body increment, then preregister a separate no-flag production promotion experiment before changing the default mask.",
+    "falsified": "Keep E33 lower-only production behavior unchanged and do not test a larger upper-body set until the failure is localized.",
+    "invalid": "Repeat only if a preregistered validity condition, command-line configuration, evidence file, or protocol invariant is violated."
+  }
+}

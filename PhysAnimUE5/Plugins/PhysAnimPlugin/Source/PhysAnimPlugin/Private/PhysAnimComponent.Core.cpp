@@ -5,6 +5,9 @@
 #include "PhysAnimPhase1PelvisCouplingSearch.h"
 #include "PhysAnimLogger.h"
 
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+
 namespace
 {
 }
@@ -12,6 +15,10 @@ namespace
 void UPhysAnimComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+#if WITH_DEV_AUTOMATION_TESTS
+	ApplyProductVariantFromCommandLineForTesting(FCommandLine::Get());
+#endif
 
 	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnim] GStrictPhase1Certification = %d"), GStrictPhase1Certification);
 
@@ -23,6 +30,206 @@ void UPhysAnimComponent::BeginPlay()
 		UpdateBridgeStatusIndicator(5.0f);
 	}
 }
+
+#if WITH_DEV_AUTOMATION_TESTS
+void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine)
+{
+	bActionSemanticTraceEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimActionSemanticTrace"));
+	bMannyLocalFrameRoundtripTraceEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimMannyLocalFrameRoundtripTrace"));
+	bExperimentalComponentActionAxisEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalComponentActionAxis"));
+	bExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalComponentActionAxisFromFirstPolicy"));
+	bExperimentalBindNeutralFromFirstPolicyEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalBindNeutralFromFirstPolicy"));
+	bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalConstraintRangeRemapBypassFromFirstPolicy"));
+	bExperimentalCausalStandingSpineChestEnabledForTesting = false;
+	bExperimentalCausalStandingDistalHandsEnabledForTesting = false;
+	ExperimentalCausalStandingScaledRegionForTesting =
+		EPhysAnimExperimentalCausalStandingScaledRegion::None;
+	ExperimentalCausalStandingScaledScaleForTesting = 1.0f;
+	bExperimentalCausalStandingNeckHeadEnabledForTesting = false;
+	bExperimentalCausalStandingNeckEnabledForTesting = false;
+	bExperimentalCausalStandingHeadEnabledForTesting = false;
+	bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting = false;
+	bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting = false;
+	FString ExperimentalCausalStandingUpperBodyName;
+	if (CommandLine &&
+		FParse::Value(
+			CommandLine,
+			TEXT("PhysAnimExperimentalCausalStandingUpperBody="),
+			ExperimentalCausalStandingUpperBodyName))
+	{
+		bExperimentalCausalStandingSpineChestEnabledForTesting =
+			ExperimentalCausalStandingUpperBodyName == TEXT("SpineChest");
+		bExperimentalCausalStandingDistalHandsEnabledForTesting =
+			ExperimentalCausalStandingUpperBodyName == TEXT("DistalHands");
+		bExperimentalCausalStandingNeckHeadEnabledForTesting =
+			ExperimentalCausalStandingUpperBodyName == TEXT("NeckHead");
+		bExperimentalCausalStandingNeckEnabledForTesting =
+			ExperimentalCausalStandingUpperBodyName == TEXT("Neck") ||
+			bExperimentalCausalStandingNeckHeadEnabledForTesting;
+		bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting =
+			ExperimentalCausalStandingUpperBodyName == TEXT("HeadActiveOnly");
+		bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting =
+			ExperimentalCausalStandingUpperBodyName == TEXT("HeadAfterFirstPolicy");
+		bExperimentalCausalStandingHeadEnabledForTesting =
+			ExperimentalCausalStandingUpperBodyName == TEXT("Head") ||
+			bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting ||
+			bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting ||
+			bExperimentalCausalStandingNeckHeadEnabledForTesting;
+	}
+	FString ExperimentalCausalStandingScaledRegionName;
+	if (CommandLine &&
+		FParse::Value(
+			CommandLine,
+			TEXT("PhysAnimExperimentalCausalStandingScaledRegion="),
+			ExperimentalCausalStandingScaledRegionName))
+	{
+		if (ExperimentalCausalStandingScaledRegionName == TEXT("Torso"))
+		{
+			ExperimentalCausalStandingScaledRegionForTesting =
+				EPhysAnimExperimentalCausalStandingScaledRegion::Torso;
+		}
+		else if (ExperimentalCausalStandingScaledRegionName == TEXT("Neck"))
+		{
+			ExperimentalCausalStandingScaledRegionForTesting =
+				EPhysAnimExperimentalCausalStandingScaledRegion::Neck;
+		}
+		else if (ExperimentalCausalStandingScaledRegionName == TEXT("LeftProximal"))
+		{
+			ExperimentalCausalStandingScaledRegionForTesting =
+				EPhysAnimExperimentalCausalStandingScaledRegion::LeftProximal;
+		}
+		else if (ExperimentalCausalStandingScaledRegionName == TEXT("RightProximal"))
+		{
+			ExperimentalCausalStandingScaledRegionForTesting =
+				EPhysAnimExperimentalCausalStandingScaledRegion::RightProximal;
+		}
+	}
+	if (CommandLine)
+	{
+		FParse::Value(
+			CommandLine,
+			TEXT("PhysAnimExperimentalCausalStandingScaledScale="),
+			ExperimentalCausalStandingScaledScaleForTesting);
+	}
+	ExperimentalCausalStandingScaledScaleForTesting = FMath::Clamp(
+		ExperimentalCausalStandingScaledScaleForTesting,
+		0.0f,
+		1.0f);
+	bExperimentalPolicyActionBaselineResidualEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalPolicyActionBaselineResidual"));
+	bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalPolicyActionZeroUntilBaseline"));
+	bExperimentalPhysicsBodyObservationPositionsEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalPhysicsBodyObservationPositions"));
+	ExperimentalActiveStrengthFactorForTesting = 1.0f;
+	if (CommandLine)
+	{
+		FParse::Value(
+			CommandLine,
+			TEXT("PhysAnimExperimentalActiveStrengthFactor="),
+			ExperimentalActiveStrengthFactorForTesting);
+	}
+	bExperimentalPolicyActionBaselineResidualStartedForTesting = false;
+	bExperimentalCheckpointTorqueCeilingEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalCheckpointTorqueCeiling"));
+	bExperimentalCheckpointForcePdEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalCheckpointForcePd"));
+	ExperimentalActionFamilyMaskForTesting = EPhysAnimExperimentalActionFamilyMask::All;
+	FString ExperimentalActionFamilyName;
+	if (CommandLine &&
+		FParse::Value(
+			CommandLine,
+			TEXT("PhysAnimExperimentalActionFamily="),
+			ExperimentalActionFamilyName))
+	{
+		if (ExperimentalActionFamilyName == TEXT("Zero"))
+		{
+			ExperimentalActionFamilyMaskForTesting = EPhysAnimExperimentalActionFamilyMask::Zero;
+		}
+		else if (ExperimentalActionFamilyName == TEXT("LowerOnly"))
+		{
+			ExperimentalActionFamilyMaskForTesting = EPhysAnimExperimentalActionFamilyMask::LowerOnly;
+		}
+		else if (ExperimentalActionFamilyName == TEXT("AxialOnly"))
+		{
+			ExperimentalActionFamilyMaskForTesting = EPhysAnimExperimentalActionFamilyMask::AxialOnly;
+		}
+		else if (ExperimentalActionFamilyName == TEXT("ArmsOnly"))
+		{
+			ExperimentalActionFamilyMaskForTesting = EPhysAnimExperimentalActionFamilyMask::ArmsOnly;
+		}
+	}
+	ExperimentalActionJointRangeStartForTesting = INDEX_NONE;
+	ExperimentalActionJointRangeCountForTesting = 0;
+	if (CommandLine)
+	{
+		int32 ParsedJointStart = INDEX_NONE;
+		int32 ParsedJointCount = 0;
+		if (FParse::Value(
+				CommandLine,
+				TEXT("PhysAnimExperimentalActionJointStart="),
+				ParsedJointStart))
+		{
+			ExperimentalActionJointRangeStartForTesting = ParsedJointStart;
+			FParse::Value(
+				CommandLine,
+				TEXT("PhysAnimExperimentalActionJointCount="),
+				ParsedJointCount);
+			ExperimentalActionJointRangeCountForTesting = FMath::Max(0, ParsedJointCount);
+		}
+	}
+	bPolicyInputProvenanceTraceEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimPolicyInputProvenanceTrace"));
+	bStartupChronologyTraceEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimStartupChronologyTrace"));
+
+	FString VariantName;
+	if (!CommandLine || !FParse::Value(CommandLine, TEXT("PhysAnimProductVariant="), VariantName))
+	{
+		return;
+	}
+
+	EPhysAnimStandingVariant ResolvedVariant = EPhysAnimStandingVariant::Normal;
+	if (VariantName == TEXT("ZeroActions"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::ZeroActions;
+	}
+	else if (VariantName == TEXT("DropControlDispatch"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::DropControlDispatch;
+	}
+	else if (VariantName == TEXT("ControlsOff"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::ControlsOff;
+	}
+	else if (VariantName == TEXT("DampingOnly"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::DampingOnly;
+	}
+	else if (VariantName == TEXT("FixedNeutralTarget"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::FixedNeutralTarget;
+	}
+	else if (VariantName == TEXT("RealOnnxPolicy"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::RealOnnxPolicy;
+	}
+	else if (VariantName != TEXT("Normal") && VariantName != TEXT("ForcedSupportLoss"))
+	{
+		return;
+	}
+
+	StandingVariantForTesting = ResolvedVariant;
+	bProductControlDispatchDroppedForTesting =
+		ResolvedVariant == EPhysAnimStandingVariant::DropControlDispatch;
+}
+#endif
 
 
 void UPhysAnimComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -73,47 +280,34 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
 	{
+#if WITH_DEV_AUTOMATION_TESTS
+		CaptureStartupChronologySampleForTesting(TEXT("pre_state_machine"));
+#endif
 		HandleInitialPoseSearchWait(DeltaTime, EffectiveSettings, TickError, SearchResult);
+#if WITH_DEV_AUTOMATION_TESTS
+		CaptureStartupChronologySampleForTesting(TEXT("post_state_machine"));
+		CaptureStartupChronologySampleForTesting(TEXT("post_policy"));
+#endif
 		return;
 	}
 
-	if (!CheckRuntimeInstability(DeltaTime, EffectiveSettings, TickError))
+	if (bStandingFullSimulationCommitted && !CheckRuntimeInstability(DeltaTime, EffectiveSettings, TickError))
 	{
 		FailStop(TickError);
 		return;
 	}
 
-	AdvanceBringUpState(DeltaTime, EffectiveSettings);
-
-	// Populate and push Phase 1 convergence snapshot for authoritative gating in next frame's transition controller tick
-	if (BalanceReadyTransition.IsActive())
-	{
-		SafePhase1ConvergenceSnapshot.FrameIndex = GFrameCounter;
-		SafePhase1ConvergenceSnapshot.WorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-		SafePhase1ConvergenceSnapshot.MaxBodyLinearSpeed = LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond;
-		SafePhase1ConvergenceSnapshot.MaxBodyAngularSpeed = LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond;
-		SafePhase1ConvergenceSnapshot.MaxBodyLinearSpeedBone = LastRuntimeInstabilityDiagnostics.MaxLinearSpeedBoneName;
-		SafePhase1ConvergenceSnapshot.MaxBodyAngularSpeedBone = LastRuntimeInstabilityDiagnostics.MaxAngularSpeedBoneName;
-		SafePhase1ConvergenceSnapshot.RootLinearSpeed = LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond;
-		SafePhase1ConvergenceSnapshot.RootAngularSpeed = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
-
-		FString TiltSource;
-		const float ResolvedTilt = UPhysAnimComponent::ResolvePhase1Uprightness(GetMeshComponent(), GetOwner(), PhysAnimBridge::GetRootBoneName(), TiltSource);
-		SafePhase1ConvergenceSnapshot.RootTilt = ResolvedTilt;
-
-		SafePhase1ConvergenceSnapshot.ShellPlanarOffset = GetCurrentShellPlanarOffsetDeltaCm();
-		SafePhase1ConvergenceSnapshot.ShellPlanarVelocity = GetCurrentShellPlanarVelocityDeltaCmPerSecond();
-		SafePhase1ConvergenceSnapshot.bIsInstabilityPrecursorActive = IsInstabilityPrecursorActive();
-		SafePhase1ConvergenceSnapshot.bIsPelvisSimulating = IsPelvisSimulatingNow();
-		SafePhase1ConvergenceSnapshot.bHasPendingResets = PendingBodyModifierCachedResetNames.Num() > 0;
-		SafePhase1ConvergenceSnapshot.MaxTargetDeltaDegrees = LastControlTargetDiagnostics.MaxTargetDeltaDegrees;
-		SafePhase1ConvergenceSnapshot.MeanTargetDeltaDegrees = LastControlTargetDiagnostics.MeanTargetDeltaDegrees;
-
-		BalanceReadyTransition.PushConvergenceSnapshot(SafePhase1ConvergenceSnapshot);
-	}
-
+#if WITH_DEV_AUTOMATION_TESTS
+	CaptureStartupChronologySampleForTesting(TEXT("pre_state_machine"));
+#endif
 	TickRuntimeStateMachine(DeltaTime, EffectiveSettings);
+#if WITH_DEV_AUTOMATION_TESTS
+	CaptureStartupChronologySampleForTesting(TEXT("post_state_machine"));
+#endif
 	TickPolicyAndUpdateMetrics(DeltaTime, EffectiveSettings, TickError);
+#if WITH_DEV_AUTOMATION_TESTS
+	CaptureStartupChronologySampleForTesting(TEXT("post_policy"));
+#endif
 	ProcessPendingDistalOwnershipChecks();
 
 	if (bEnableLiveRuntimeEvidenceProof)

@@ -1,0 +1,70 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "upper-body-neck-restoration-e35",
+  "preregistered_utc": "2026-07-15T20:15:01Z",
+  "production_baseline_behavior_commit": "1555e8863d00cd4fbe6fc293cac93966fca9682c",
+  "latest_evidence_commit": "ef6275217c642e47501a851cf5ce2b134e63d7d3",
+  "hypothesis": "Restoring only ProtoMotions joint 11 (Neck), while keeping joint 12 (Head) and every other upper-body action zero, preserves the complete locked causal-standing product contract.",
+  "causal_variable": {
+    "name": "retained_policy_action_joints",
+    "control": [0, 1, 2, 3, 4, 5, 6, 7],
+    "candidate": [0, 1, 2, 3, 4, 5, 6, 7, 11],
+    "candidate_region": "Neck",
+    "command_line_opt_in": "-PhysAnimExperimentalCausalStandingUpperBody=Neck"
+  },
+  "held_constant": [
+    "locked E33 production standing behavior outside the action compatibility mask",
+    "source model and ONNX hash",
+    "locked causal-standing protocol and evaluator thresholds",
+    "component-space action-axis composition",
+    "captured standing neutral",
+    "constraint range mapping and safety projection",
+    "8 Hz acceleration-mode control plant",
+    "Normal delayed policy strength transition 1.0 to 1.5",
+    "ZeroActions strength multiplier 1.0",
+    "fixed timestep, perturbation, render capture, seed, and product variants",
+    "all action triplets outside indices 0-7 and 11 remain exactly zero"
+  ],
+  "historical_basis": [
+    "E34 proved the combined neck/head pair preserves absolute standing but fails causal recovery at ratio 0.865491 and introduces two Normal trajectories.",
+    "E23 established that the neck/head group is not independently catastrophic over ten seconds, so single-joint localization is warranted.",
+    "No torso or arm action is included in this experiment."
+  ],
+  "implementation_plan": [
+    "Generalize only the automation-only upper-body restoration selector to distinguish Neck, Head, and NeckHead while preserving the current default and E34 behavior.",
+    "Write contract tests first for command-line parsing and exact retained scalar ranges.",
+    "Run the focused Unreal contract red then green.",
+    "Commit the candidate before product runs.",
+    "Run the complete locked bundle: Normal x3, ZeroActions x3, DropControlDispatch x1, ForcedSupportLoss x1, with the Neck option on every arm.",
+    "Audit masks, strength paths, hashes, determinism, model/protocol identity, and destructive-control discrimination."
+  ],
+  "acceptance": {
+    "bundle_status": "PASS",
+    "normal_absolute_pass_count": 3,
+    "zero_actions_absolute_pass_count": 3,
+    "maximum_normal_to_zero_recovery_auc_ratio": 0.8,
+    "normal_target_readback_match_ratio": 1.0,
+    "zero_target_readback_match_ratio": 1.0,
+    "drop_control_dispatch_required_status": "FAIL",
+    "drop_control_dispatch_required_failed_criteria": ["target_readback"],
+    "forced_support_loss_required_status": "FAIL",
+    "forced_support_loss_required_failed_criteria": ["support_gap"],
+    "normal_conditioned_joint_requirements": {
+      "indices_0_to_7": "nonzero policy behavior present",
+      "indices_8_to_10": "exactly zero",
+      "index_11": "nonzero policy behavior present",
+      "index_12": "exactly zero",
+      "indices_13_to_22": "exactly zero"
+    },
+    "zero_actions_all_conditioned_scalars": "exactly zero",
+    "normal_strength_multipliers": [1.0, 1.5],
+    "zero_actions_strength_multipliers": [1.0],
+    "normal_repetitions_deterministic": true,
+    "zero_repetitions_deterministic": true
+  },
+  "decision_rule": {
+    "supported": "Record E35 as a valid experimental increment and preregister a separate no-flag production promotion before changing the default mask.",
+    "falsified": "Keep E33 lower-only production unchanged and preregister E36 Head-only localization.",
+    "invalid": "Repeat only if a preregistered validity condition, command-line configuration, evidence file, or protocol invariant is violated."
+  }
+}

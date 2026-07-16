@@ -1,0 +1,270 @@
+{
+  "schema_version": "physanim-evidence-driven-investigation/v1",
+  "experiment_id": "real-onnx-startup-chronology-e8",
+  "recorded_utc": "2026-07-14T19:40:22.9238387Z",
+  "experiment_type": "observation-only-runtime-trace-ab",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "NONE",
+  "hypothesis": "Historical Mode B is the live Manny/SMPL body state from one fixed tick earlier than Mode A, and startup velocity publication timing distinguishes the states.",
+  "supporting_evidence_before_experiment": {
+    "source_experiments": [
+      "experiments/stage1/real-onnx-preintervention-determinism.e5.json",
+      "experiments/stage1/real-onnx-policy-input-provenance.e6.json",
+      "experiments/stage1/real-onnx-first-policy-delay.e7.json"
+    ],
+    "known_mode_a_first_policy_input_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+    "known_mode_b_first_policy_input_sha256": "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3",
+    "known_delay_plus_one_first_policy_input_sha256": "CA62E6D543A73A887FC1153FE2C528E4E4845696211C2AA9AB13EF305556C723",
+    "delay_plus_one_mimic_delta_correlation_vs_mode_b": -0.9999967423659714,
+    "delay_plus_one_terrain_delta_correlation_vs_mode_b": -1.0,
+    "e7_source_localization": "Only the live root/body sample changed; PoseSearch identity/time, mimic reference frames, future poses, raw terrain heights, and previous actions remained exact."
+  },
+  "competing_explanations": [
+    "Velocity publication ownership, rather than earlier pose, selects the startup mode.",
+    "Tensor-buffer ownership changes packed input after identical pre-flattening sources.",
+    "A hidden runtime-state or PoseSearch boundary outside the instrumented interval selects the mode."
+  ],
+  "single_changed_variable": {
+    "name": "startup_chronology_trace_enabled",
+    "baseline_value": false,
+    "experimental_value": true,
+    "build_script_switch": "-StartupChronologyTrace",
+    "runtime_switch": "-PhysAnimStartupChronologyTrace",
+    "compile_scope": "WITH_DEV_AUTOMATION_TESTS",
+    "production_default_changed": false,
+    "activation_contract_changed": false,
+    "production_serialization_contract_changed": false,
+    "acceptance_thresholds_changed": false
+  },
+  "expected_if_hypothesis_correct": "The trace is behavior-neutral and an existing sample one fixed tick before Mode A has live-pose deltas in the Mode-B direction and magnitude; velocity publication explains any residual mismatch.",
+  "falsification_observation": "The trace is behavior-neutral, captures the hypothesized earlier fixed tick, and that earlier sample does not match the Mode-B direction or magnitude.",
+  "locked_judges": {
+    "protocol": "product-gates/standing-plant-ladder.v2.json",
+    "protocol_version": 2,
+    "protocol_status": "LOCKED",
+    "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+    "evaluator": "scripts/evaluate_standing_plant.py",
+    "automation_test": "PhysAnim.Development.StandingPlant.RealOnnxPolicy",
+    "variant": "RealOnnxPolicy",
+    "fixed_delta_seconds": 0.016666666666666666,
+    "policy_control_interval_seconds": 0.03333333333333333,
+    "capture_window_seconds": 10.0,
+    "perturbation": "none_for_standing_plant_layer",
+    "deterministic_seed": "unchanged_harness_default_no_override",
+    "initial_pose": "unchanged_standing_plant_fixture",
+    "model_path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+    "model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+    "acceptance_threshold_changes": "none",
+    "primary_metrics": [
+      "exact first-policy and active-standing input hashes",
+      "exact semantic, provenance, physics, policy, and render hashes",
+      "chronology ordering, finiteness, body counts, runtime state, world time, accumulator, and policy tick",
+      "chronology-to-first-input source deltas",
+      "published body position, rotation, linear velocity, and angular velocity",
+      "locked evaluator status and failed-criteria set",
+      "target readback match ratio"
+    ]
+  },
+  "implementation": {
+    "orientation": {
+      "graphify_result": "The graph located TickComponent, TickRuntimeStateMachine, TickPolicyAndUpdateMetrics, and their surrounding runtime path.",
+      "serena_result": "TickComponent calls the runtime-state machine before policy update; GatherCurrentBodySamples is a read-only live transform/velocity observer and does not query PoseSearch, raycast terrain, run inference, or dispatch controls.",
+      "serena_references_checked": true
+    },
+    "instrumentation_commit": "75dff7dea3014317930cbb1f65fdd53e2c793f22",
+    "instrumentation_subject": "Instrument first policy startup chronology",
+    "runner_commit": "3a654c8ef1c5cc2bec817a9db4703f50e9a7f3e7",
+    "runner_subject": "Forward startup chronology test flag",
+    "runtime_source_commit": "3a654c8ef1c5cc2bec817a9db4703f50e9a7f3e7",
+    "source_tree_dirty_at_runtime": false,
+    "trace_behavior": "When the explicit development flag and RealOnnxPolicy variant are active, read existing owner, mesh, root-bone, live body, state, accumulator, and policy-tick values before the runtime-state update, after it, and after policy update. Stop after the first policy tick or twelve samples.",
+    "publication": "A separate startup-chronology.json development artifact is written only when the explicit flag is enabled; it is absent from the production manifest and activation contract.",
+    "tdd": {
+      "red_cpp_contract": "Compilation failed because the chronology types, validator, publication, and component flag seam did not exist.",
+      "red_runner_contract": "The script contract failed because build.ps1 did not yet forward the explicit chronology flag.",
+      "green_tests": [
+        "PhysAnim.Bridge.StartupChronologyTraceContract",
+        "PhysAnim.ProductHarness.StartupChronologyPublicationContract",
+        "PhysAnim.ProductHarness.DropDispatchSwitch",
+        "PhysAnim.ProductHarness.PolicyInputProvenancePublicationContract",
+        "scripts/tests/test_causal_standing_runner.py: 3 passed",
+        "scripts/tests: 88 passed"
+      ],
+      "npm_fast_launcher": "BLOCKED_BY_LOCAL_VOLTA_NPM_INSTALL_MISSING_NPM_PREFIX_JS",
+      "npm_fast_equivalent_underlying_pytest": "PASS_88"
+    },
+    "full_editor_build": "PASS",
+    "serena_diagnostics_affected_cpp_and_headers": "PASS_NO_DIAGNOSTICS",
+    "graphify_update_before_runtime": "PASS_6359_NODES_8556_EDGES"
+  },
+  "baseline": {
+    "run_id": "RealOnnxPolicy-startup-chronology-e8-baseline",
+    "artifact_root": "test-results/adapter-startup-chronology-e8/RealOnnxPolicy-startup-chronology-e8-baseline",
+    "source_commit": "3a654c8ef1c5cc2bec817a9db4703f50e9a7f3e7",
+    "configuration": "Locked RealOnnxPolicy standing-plant v2 configuration; 1/60 s fixed step; 10 s; unchanged seed and initial pose; no perturbation; action and provenance traces on; startup chronology trace off.",
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "target_readback_match_ratio": 1.0,
+    "startup_chronology_artifact_present": false,
+    "sha256": {
+      "first_policy_input_snapshot": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_policy_input_snapshot": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+      "policy_input_provenance": "055E74345E4738065EB6C5B8AE6D4758D91A8A6C4A5E7235EC2C9732F2FFE6B9",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "render": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C",
+      "manifest": "92F35B0533C3BCE2737706A75394634972DEA6CAFFEF5A4B9652B497388FB29B",
+      "evaluation": "50650DE56882F1D337E316ADD067D8EBF1C570B334497CB7C574D18E63EC4376"
+    },
+    "key_metrics": {
+      "sample_count": 601,
+      "policy_sample_count": 300,
+      "minimum_pelvis_height_cm": 13.986960983769706,
+      "minimum_pelvis_height_ratio": 0.15336580026063273,
+      "maximum_root_tilt_deg": 105.40127563476562,
+      "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+      "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+      "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+      "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "first_inference_action_l2": 1.00053841945765,
+      "first_active_standing_action_l2": 0.955109563327167
+    }
+  },
+  "experimental": {
+    "run_id": "RealOnnxPolicy-startup-chronology-e8-trace-on",
+    "artifact_root": "test-results/adapter-startup-chronology-e8/RealOnnxPolicy-startup-chronology-e8-trace-on",
+    "source_commit": "3a654c8ef1c5cc2bec817a9db4703f50e9a7f3e7",
+    "configuration": "Identical binary, model, protocol, seed, pose, fixed step, capture window, evaluator, action trace, and provenance trace; only startup chronology tracing changed from off to on.",
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "target_readback_match_ratio": 1.0,
+    "sha256": {
+      "first_policy_input_snapshot": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_policy_input_snapshot": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+      "policy_input_provenance": "055E74345E4738065EB6C5B8AE6D4758D91A8A6C4A5E7235EC2C9732F2FFE6B9",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "render": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C",
+      "startup_chronology": "65EE920459F994EFBCFDE38B6477DE3E179A7934825888BCA6AFBA2FC9B84C57",
+      "manifest": "730FC18EEC36CC8EAA90A0EAD81796C1C5BAA76D1D65FFB6363C0DD32A8C3B93",
+      "evaluation": "4CCE3096753237D7BA6E275F69F223D87CA117191A6762E645E599ACB9AAF2EA"
+    },
+    "chronology": {
+      "schema_version": "physanim-startup-chronology/v1",
+      "complete": true,
+      "valid": true,
+      "sample_count": 3,
+      "world_time_seconds_shared": 0.03333333507180214,
+      "stages": [
+        {
+          "sequence": 0,
+          "stage": "pre_state_machine",
+          "runtime_state": "BridgeActive",
+          "policy_update_accumulator_seconds": -1.0,
+          "last_policy_elapsed_steps": 0,
+          "policy_control_ticks_executed": 0,
+          "first_policy_input_captured": false
+        },
+        {
+          "sequence": 1,
+          "stage": "post_state_machine",
+          "runtime_state": "Standing_Preparation",
+          "policy_update_accumulator_seconds": -1.0,
+          "last_policy_elapsed_steps": 0,
+          "policy_control_ticks_executed": 0,
+          "first_policy_input_captured": false
+        },
+        {
+          "sequence": 2,
+          "stage": "post_policy",
+          "runtime_state": "Standing_Preparation",
+          "policy_update_accumulator_seconds": 0.01666666939854622,
+          "last_policy_elapsed_steps": 1,
+          "policy_control_ticks_executed": 1,
+          "first_policy_input_captured": true
+        }
+      ],
+      "pre_vs_post_state_body_max_abs": {
+        "position": 0.0,
+        "rotation_component": 0.0,
+        "linear_velocity": 0.0,
+        "angular_velocity": 0.0
+      },
+      "post_state_vs_post_policy_body_max_abs": {
+        "position": 0.0,
+        "rotation_component": 0.0,
+        "linear_velocity": 0.0,
+        "angular_velocity": 0.0
+      },
+      "pre_state_vs_first_input_manny_source_max_abs": {
+        "owner_transform": 0.0,
+        "mesh_transform": 0.0,
+        "root_transform": 0.0,
+        "position": 0.0,
+        "rotation_component": 0.0,
+        "linear_velocity": 0.0,
+        "angular_velocity": 0.0
+      },
+      "maximum_absolute_published_body_velocity": 0.0,
+      "first_input_identity": {
+        "runtime_state": "Standing_Preparation",
+        "world_time_seconds": 0.03333333507180214,
+        "policy_control_tick": 1,
+        "pose_search_animation": "MM_Idle",
+        "pose_search_selected_time_seconds": 5.433333396911621,
+        "self_observation_ground_height_m": 2.1000001430511475
+      }
+    },
+    "key_metrics": "Byte-identical physics and policy streams make all baseline key metrics identical."
+  },
+  "comparison": {
+    "instrumentation_behavior_neutrality_supported": true,
+    "byte_identical_outputs": [
+      "first_policy_input_snapshot",
+      "active_standing_policy_input_snapshot",
+      "action_semantic_trace",
+      "policy_input_provenance",
+      "physics_stream",
+      "policy_stream",
+      "render"
+    ],
+    "manifest_and_evaluation_hash_difference_explained_by_run_identity": true,
+    "failed_criteria_identical": true,
+    "target_readback_match_ratio_identical": true,
+    "known_mode_b_reproduced": false,
+    "chronology_observation": "The BridgeActive-to-Standing_Preparation state transition and first policy update did not change the live owner, mesh, root, body pose, or zero velocities within the 0.033333335-second tick. Every chronology sample exactly equals the Mode-A first-input Manny source.",
+    "coverage_gap": "The hypothesized previous fixed tick was not observed. TickComponent returns from the WaitingForPoseSearch branch before the current chronology hooks, so the trace begins only on the first-inference tick."
+  },
+  "conclusion": {
+    "hypothesis_status": "INCONCLUSIVE_NEITHER_SUPPORTED_NOR_FALSIFIED",
+    "experiment_status": "VALID_NEUTRALITY_AB_INSUFFICIENT_HYPOTHESIS_COVERAGE",
+    "summary": "The observation trace is behavior-neutral and proves that the same-tick BridgeActive-to-Standing_Preparation transition does not create Mode B. It does not observe the prior fixed tick required to test the registered earlier-sample hypothesis, so that hypothesis cannot honestly be supported or falsified from E8.",
+    "what_was_learned": "Mode A's first input uses a zero-velocity live body sample that is unchanged before the runtime-state update, after it, and after inference on the same tick. The next information boundary is the WaitingForPoseSearch early-return tick, not more physics tuning or a policy delay.",
+    "promotion_decision": "RETAIN_GENERAL_DIAGNOSTIC_FIX_COVERAGE_BEFORE_NEXT_RUN",
+    "causal_standing_status": "NOT_PROVEN"
+  },
+  "next_highest_information_experiment": {
+    "status": "SELECTED_NOT_RUN",
+    "name": "Pre-return WaitingForPoseSearch chronology coverage",
+    "hypothesis": "The fixed tick immediately before Mode A, currently hidden behind the WaitingForPoseSearch early return, contains the live body state in the Mode-B direction; its velocity publication differs from Mode A's all-zero source.",
+    "single_variable": "Observation coverage only: extend the existing explicit development trace across the WaitingForPoseSearch branch without changing PoseSearch calls, inference timing, physics, or dispatch.",
+    "expected_if_correct": "A 0.0166667-second sample appears before the existing 0.0333333-second Mode-A source, and its body pose delta is opposite the known delay-plus-one delta with comparable magnitude; velocity publication identifies any residual.",
+    "falsifier": "The prior fixed tick is captured validly and is identical to Mode A or points away from the Mode-B direction.",
+    "locked_metrics": "The same exact A/B hashes, evaluator failures, readback ratio, stage ordering/finiteness/body counts, plus per-body signed position/rotation/velocity deltas against Mode A and E7 delay-plus-one."
+  }
+}

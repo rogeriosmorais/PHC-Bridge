@@ -1,0 +1,21 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E62",
+  "title": "Seed production locomotion shell state at request boundary",
+  "baseline_commit": "612f74a6592e1f44f18331f459d8f5a842291e59",
+  "date": "2026-07-15",
+  "observed_failure": {
+    "run": "E60 Normal-1 on E61 candidate",
+    "first_denial": "Denied_ShellRootUnlocked",
+    "root_cause": "BridgeShellState is initialized only during movement application, while TryOpen requires it before movement can begin"
+  },
+  "hypothesis": "TryOpen can seed an uninitialized BridgeShellState from the current production actor transform while still in BalanceActive_Standing, after which the unchanged gate can validate shell authority and open locomotion without enabling CharacterMovement, capsule collision, or explicit transition lock mode.",
+  "single_behavior_change": "Initialize BridgeShellState at the locomotion request boundary when the owner actor exists and runtime state is BalanceActive_Standing.",
+  "tdd_contract": [
+    "EvaluateStage2ALocomotionRequestGate remains Denied_ShellRootUnlocked for an uninitialized shell state.",
+    "TryOpen from a real owned component in BalanceActive_Standing seeds LastAcceptedActorLocation, sets bInitialized=true, and succeeds.",
+    "TryOpen cannot seed without an owner or outside BalanceActive_Standing.",
+    "Seeding does not move or rotate the actor and does not change CMC/capsule state."
+  ],
+  "next_if_supported": "Rerun E60 Normal-1 and classify the first physical locomotion trajectory."
+}

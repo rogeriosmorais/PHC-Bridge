@@ -1,0 +1,222 @@
+{
+  "acceptance_checks": {
+    "bundle_pass": false,
+    "causal_ratio_at_most_0_8": false,
+    "normal_deterministic": true,
+    "zero_deterministic": true
+  },
+  "bundle_failed_criteria": [
+    "causal_recovery_advantage"
+  ],
+  "bundle_status": "FAIL",
+  "hypothesis_verdict": "FALSIFIED",
+  "manifest_checks": {
+    "DropControlDispatch-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ForcedSupportLoss-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-2": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-3": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-2": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-3": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    }
+  },
+  "normal_determinism": {
+    "input": true,
+    "physics": true,
+    "policy": true
+  },
+  "normal_hash_sets": {
+    "input": [
+      "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    ],
+    "physics": [
+      "63D573AD959964FCE7A3EDC0F2F1D8F8119292CA4116C1A15B3EC1FF40FC11B5"
+    ],
+    "policy": [
+      "26732707E740BD42228FF0A6C9E0C7C7397EE29E879049CD82A5C478854D4347"
+    ]
+  },
+  "normal_to_zero_recovery_auc_ratio": 0.8439508775286823,
+  "physics_checks": {
+    "DropControlDispatch-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "ForcedSupportLoss-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "Normal-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "Normal-2": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "Normal-3": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "ZeroActions-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1,
+      "strength_multipliers": [
+        1
+      ]
+    },
+    "ZeroActions-2": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1,
+      "strength_multipliers": [
+        1
+      ]
+    },
+    "ZeroActions-3": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1,
+      "strength_multipliers": [
+        1
+      ]
+    }
+  },
+  "policy_checks": {
+    "Normal-1": {
+      "arms_zero": true,
+      "head_zero": true,
+      "joints_8_10_zero": true,
+      "lower_nonzero": true,
+      "neck_nonzero": true,
+      "sample_count": 300
+    },
+    "Normal-2": {
+      "arms_zero": true,
+      "head_zero": true,
+      "joints_8_10_zero": true,
+      "lower_nonzero": true,
+      "neck_nonzero": true,
+      "sample_count": 300
+    },
+    "Normal-3": {
+      "arms_zero": true,
+      "head_zero": true,
+      "joints_8_10_zero": true,
+      "lower_nonzero": true,
+      "neck_nonzero": true,
+      "sample_count": 300
+    },
+    "ZeroActions-1": {
+      "all_zero": true,
+      "sample_count": 300
+    },
+    "ZeroActions-2": {
+      "all_zero": true,
+      "sample_count": 300
+    },
+    "ZeroActions-3": {
+      "all_zero": true,
+      "sample_count": 300
+    }
+  },
+  "protocol_sha256_actual": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+  "protocol_sha256_matches_locked": true,
+  "runner_experimental_tokens": [
+    "PhysAnimExperimentalCausalStandingUpperBody=Neck"
+  ],
+  "runner_has_only_intended_experimental_argument": true,
+  "schema_version": "physanim-e35-audit/v1",
+  "status": "VALID",
+  "validity_checks_pass": true,
+  "zero_determinism": {
+    "input": true,
+    "physics": true,
+    "policy": true
+  },
+  "zero_hash_sets": {
+    "input": [
+      "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    ],
+    "physics": [
+      "CD4BA773254E8BA604B6B9BDC92535DECDE1FF0291584B4352DF5BED96AFD7F4"
+    ],
+    "policy": [
+      "2F714337B24256890CECE5FE16974CB6994F15FE432D5C6EAD02372CF4D65BE5"
+    ]
+  }
+}

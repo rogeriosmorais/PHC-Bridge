@@ -1,0 +1,25 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E61",
+  "title": "Align Stage2A locomotion gate with production standing shell authority",
+  "baseline_commit": "23c77d7dd570a503fd7cb771452dbae58a17572f",
+  "date": "2026-07-15",
+  "observed_failure": {
+    "run": "E60 candidate Normal-1",
+    "first_denial": "Denied_ShellRootUnlocked",
+    "production_standing_mode": "GameplayShellObservedOnly",
+    "subsequent_denial": "Denied_NotBalanceActiveStanding",
+    "path_length_cm": 0.0,
+    "script_step_failure_count": 300
+  },
+  "hypothesis": "The existing locomotion request gate can safely open from production BalanceActive_Standing when IsTransitionOwnedShellLocked() is true by runtime-state authority and BridgeShellState is initialized; after the request opens, scripted locomotion steps can continue in LocomotionActiveShell using the established request/authority state without re-evaluating the standing-only request gate.",
+  "single_behavior_change": "Align gate semantics and continuation semantics only. Do not activate the explicit transition-owned lock, re-enable CMC/capsule, change movement speed, standing gains, policy scales, model conditioning, or the E60 script.",
+  "tdd_contract": [
+    "BalanceActive_Standing plus GameplayShellObservedOnly and initialized BridgeShellState is accepted by the request gate because the standing runtime owns shell authority.",
+    "An uninitialized BridgeShellState remains Denied_ShellRootUnlocked.",
+    "After a successful scripted locomotion step enters LocomotionActiveShell, the next scripted step succeeds without reopening the request gate.",
+    "Continuation is denied if policy output becomes inactive, SimRoot was attempted, the request state is not LocomotionRequested, or shell state is uninitialized.",
+    "CMC and capsule ownership are unchanged by gate opening."
+  ],
+  "next_if_supported": "Rerun E60 Normal-1 from the clean E61 candidate and evaluate physical locomotion behavior."
+}

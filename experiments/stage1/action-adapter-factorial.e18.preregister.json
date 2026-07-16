@@ -1,0 +1,47 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "action-adapter-factorial-e18",
+  "recorded_utc": "2026-07-15T15:30:00Z",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "The live action adapter fails because it composes canonical rotations around both the wrong parent-axis frame and a captured standing neutral that is not the observation bind. Starting at the first policy target write, component-space axis plus bind neutral will make the action and observation adapters exact inverses and may improve the locked standing verdict.",
+  "design": "2x2 factorial beginning only after the first policy input and output are captured",
+  "factors": {
+    "action_axis_frame": ["cached_parent_world", "observation_parent_bind_mesh_component"],
+    "neutral_source": ["captured_stable_standing", "bind_parent_relative"]
+  },
+  "arms": [
+    {"name":"A_world_captured","component_axis_from_first_policy":false,"bind_neutral_from_first_policy":false},
+    {"name":"B_component_captured","component_axis_from_first_policy":true,"bind_neutral_from_first_policy":false},
+    {"name":"C_world_bind","component_axis_from_first_policy":false,"bind_neutral_from_first_policy":true},
+    {"name":"D_component_bind","component_axis_from_first_policy":true,"bind_neutral_from_first_policy":true}
+  ],
+  "locked_configuration": {
+    "base_commit": "62f10f97b04e4c31187ad06fabbee06c925f46ad",
+    "binary_reused_across_arms": true,
+    "model_sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+    "protocol_sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB",
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "initial_pose_seed_and_perturbation": "unchanged harness default; no perturbation",
+    "roundtrip_tolerance_degrees": 0.001
+  },
+  "validity_gates": [
+    "All arms use the same clean behavior commit and reused binary.",
+    "First-policy input snapshot is byte-identical across all four arms.",
+    "First policy.jsonl raw and conditioned output vectors are byte-identical across all four arms.",
+    "All traces contain 21 complete controls and 19 decisive one-to-one controls.",
+    "Target readback match ratio remains 1.0 in every arm."
+  ],
+  "semantic_predictions": {
+    "A_world_captured": "Identity residual equals captured-neutral-versus-bind offset; actual and probe errors contain additional world-axis excess.",
+    "B_component_captured": "Identity residual is unchanged from A; actual and probe errors equal that residual within 0.001 degrees.",
+    "C_world_bind": "Identity residual is at most 0.001 degrees; non-identity actual/probe errors retain world-axis excess.",
+    "D_component_bind": "Identity, actual, and all decisive axis-probe errors are at most 0.001 degrees."
+  },
+  "physical_judge": "Unchanged scripts/evaluate_standing_plant.py and standing-plant-ladder.v2 thresholds. Report all metrics and failed criteria without promotion or threshold changes.",
+  "support": "Validity gates pass, all four semantic patterns match, and D strictly improves the physical verdict or all preregistered stability metrics relative to A.",
+  "falsification": "Validity gates pass but D does not satisfy the exact inverse semantic prediction, or D satisfies it while physical standing does not improve; the latter falsifies adapter mismatch as sufficient cause of standing failure.",
+  "next_if_semantically_exact_but_physically_worse": "Separate transition shock from steady adapter semantics using deterministic active-state checkpoint/reset or a gradual neutral/axis handoff with unchanged terminal mapping, then test the same endpoint without an impulse confound."
+}

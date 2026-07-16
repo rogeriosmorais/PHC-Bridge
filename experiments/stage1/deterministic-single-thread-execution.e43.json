@@ -1,0 +1,33 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "deterministic-single-thread-execution-e43",
+  "recorded_utc": "2026-07-15T22:34:00Z",
+  "preregistration_commit": "b4f4f9255da3bf07a74ac7b3e5809c3741a02c08",
+  "production_controller_commit": "3bbcfc54225293a185b23c8d211f25b853cb91f6",
+  "fixed_step_harness_commit": "64e5a8cb93eaf1bca199a7812c892a2a2419e5cb",
+  "status": "VALID",
+  "hypothesis_verdict": "SUPPORTED",
+  "bundle_status": "PASS",
+  "normal_to_zero_recovery_auc_ratio": 0.7566847346962233,
+  "normal_recovery_auc": [29.77513458524425,29.77513458524425,29.77513458524425],
+  "zero_actions_recovery_auc": [39.34945852607651,39.34945852607651,39.34945852607651],
+  "normal_snapshot_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+  "zero_snapshot_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+  "normal_repetitions_byte_deterministic": true,
+  "zero_repetitions_byte_deterministic": true,
+  "runner_arguments": ["-onethread"],
+  "controller_behavior_changes": [],
+  "destructive_controls": {
+    "DropControlDispatch": {"status":"FAIL","failed_criteria":["target_readback"]},
+    "ForcedSupportLoss": {"status":"FAIL","failed_criteria":["support_gap"]}
+  },
+  "findings": [
+    "Unreal single-thread execution collapses the recurring two-state startup bifurcation.",
+    "All Normal and ZeroActions policy-input, policy-output, first-active and physics streams are byte-identical within their variants.",
+    "The locked causal bundle remains valid and improves to ratio 0.7566847346962233.",
+    "All subsequent upper-body promotion bundles must use the preregistered deterministic -onethread acceptance configuration."
+  ],
+  "authoritative_bundle_artifact": "test-results/causal-standing/e43-single-thread/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/deterministic-single-thread-execution.e43.audit.json",
+  "next": "Rerun DistalHands under -onethread, promote if deterministic, then continue each remaining joint region."
+}

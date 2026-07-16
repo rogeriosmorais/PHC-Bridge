@@ -1,0 +1,139 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "active-standing-action-axis-frame-e16",
+  "preregistered_utc": "2026-07-15T01:18:02.2512907Z",
+  "base_commit": "d0285314c12b22d81b828c76b2033371dbdb36d7",
+  "authority": "DEVELOPMENT_EXPERIMENT_PREREGISTRATION_ONLY",
+  "product_success_authority": false,
+  "hypothesis": "Directly conjugating canonical ProtoMotions joint rotations by the cached Manny parent action axis in world space causes the non-identity excess in the live action-to-observation round-trip errors; expressing that same cached axis in mesh component space will make every actual-action and known-axis round-trip error equal the joint's unchanged identity residual while the captured policy neutral remains fixed.",
+  "supporting_runtime_evidence": [
+    "E15's behavior-neutral trace established a constant 90-degree mesh-component-to-world rotation for all 21 controls in the locked harness.",
+    "E15 established that action and observation bind parent-relative rotations match exactly and that the cached action axis matches the observation parent bind after explicit world-to-component conversion.",
+    "E15 identity inputs, which are invariant to conjugation axis, failed on all 19 decisive joints by 0.104936 to 35.962549 degrees, exactly localizing a separate policy-neutral-versus-bind residual.",
+    "E15 nonzero inputs exceeded those identity residuals: all 19 actual targets failed with a maximum 106.601652-degree error and all 114 axis probes failed with a maximum 47.155156-degree error.",
+    "E15 trace-off and trace-on physics, policy, inputs, action semantics, render, locked failures, and behavioral metrics were exact, so these frame measurements are behavior-neutral runtime evidence."
+  ],
+  "competing_explanations": [
+    "Canonical decoded joint rotations are intentionally world-frame quantities, so world-space action-axis conjugation is correct and component conversion will not collapse the nonzero-input excess.",
+    "The excess comes from quaternion multiplication direction/order rather than the world/component axis choice.",
+    "The E15 component-to-world relationship is measured correctly but another unobserved target frame between composition and observation recovery causes the excess."
+  ],
+  "single_changed_variable": {
+    "name": "action_conjugation_axis_frame",
+    "baseline_value": "cached_parent_world",
+    "experimental_value": "cached_parent_mesh_component",
+    "activation": "new WITH_DEV_AUTOMATION_TESTS command-line override -PhysAnimExperimentalComponentActionAxis",
+    "behavior_scope": "only the quaternion used to conjugate canonical decoded joint rotations before multiplication by the unchanged captured policy neutral",
+    "production_default_change": "none",
+    "activation_contract_or_serialization_change": "none",
+    "locked_protocol_or_threshold_change": "none",
+    "held_constant": [
+      "captured Manny policy-neutral parent-relative rotation",
+      "decoded ProtoMotions actions, ordering, scaling, and handedness",
+      "lower-limb and distal target scaling",
+      "Manny constraint-range mapping and final projection",
+      "handover blend, step limiting, target publication, and readback",
+      "Physics Control gains, Chaos topology, collision, damping, friction, and CCD",
+      "source commit, binary, ONNX model, seed, timestep, initial pose, perturbation, capture window, protocol, evaluator, metrics, and thresholds"
+    ]
+  },
+  "expected_if_hypothesis_correct": "The baseline reproduces E15. The experimental trace confirms component-space axis selection; every decisive identity input and identity round-trip error is unchanged from baseline within 0.001 degrees; and for each of 19 decisive joints the experimental actual-action error and each of six XYZ-probe errors equal that same joint's experimental identity residual within 0.001 degrees. Physical metrics are reported without being part of semantic support.",
+  "falsification_observation": "The experimental trace confirms component-space axis selection, but any decisive identity result changes beyond 0.001 degrees or any decisive actual-action/axis-probe error differs from its joint's unchanged identity residual by more than 0.001 degrees.",
+  "instrumentation_before_behavior": {
+    "required": true,
+    "plan": "Extend the development-only local-frame trace/evaluator first so it publishes configured/effective axis mode, cached world axis, component-corrected axis, effective axis, actual runtime pre-range target, and per-case results using the effective axis. Commit this instrumentation before the override behavior commit.",
+    "historical_compatibility": "The evaluator must continue to evaluate E15 v1 artifacts or retain the E15 evaluator behavior unchanged while adding an E16 schema/evaluator path."
+  },
+  "arms": [
+    {
+      "name": "world_axis_baseline",
+      "role": "fresh unchanged production-default baseline",
+      "override": "none",
+      "expected_axis_mode": "cached_parent_world"
+    },
+    {
+      "name": "component_axis_experiment",
+      "role": "single-variable development behavior arm",
+      "override": "-PhysAnimExperimentalComponentActionAxis",
+      "expected_axis_mode": "cached_parent_mesh_component"
+    }
+  ],
+  "invalid_run_conditions": [
+    "The instrumentation and behavior are not separated into ordered commits before runtime execution.",
+    "The two arms do not use one clean behavior commit and one reused binary.",
+    "Seed, timestep, initial pose, perturbation, capture window, model, protocol, evaluator, or thresholds differ.",
+    "The baseline does not reproduce E15's first-policy input, active-standing input, action semantic trace, physics, policy, render, failed criteria, and key behavioral metrics.",
+    "First-policy input, first-active-standing input, decoded first-active action, or any other pre-composition value differs between arms.",
+    "The baseline trace does not identify world-axis mode or the experimental trace does not identify component-axis mode.",
+    "Either trace lacks 21 complete controls, 19 decisive one-to-one controls, 152 decisive cases, finite normalized frames, actual runtime pre-range targets, or successful publication/readback.",
+    "The evaluator, trace, manifest, or any required raw artifact is malformed or missing."
+  ],
+  "locked_judges": {
+    "protocol": {
+      "path": "product-gates/standing-plant-ladder.v2.json",
+      "sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB"
+    },
+    "model": {
+      "path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+      "sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19"
+    },
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "initial_pose": "unchanged standing-plant harness default",
+    "perturbation": "none",
+    "seed": "unchanged standing-plant harness default",
+    "runtime_evaluator": "scripts/evaluate_standing_plant.py",
+    "semantic_evaluator": "scripts/evaluate_action_axis_frame_experiment.py",
+    "roundtrip_angular_tolerance_degrees": 0.001,
+    "axis_probe_degrees": 10.0,
+    "e15_baseline_hashes": {
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "first_policy_input": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_input": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace_disabled": "55B2937501E18360B83252FBC6AA0D688B75AFCEDE3BB77F15605CBE26966028",
+      "render": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C"
+    },
+    "pre_intervention_equivalence_metrics": [
+      "first-policy input snapshot SHA-256",
+      "first-active-standing input snapshot SHA-256",
+      "first-active raw and conditioned 69-value action arrays",
+      "decoded 23-joint action quaternions",
+      "captured policy-neutral and bind frame quaternions",
+      "identity input and identity Manny target per control"
+    ],
+    "semantic_metrics": [
+      "configured and effective action-axis mode per arm",
+      "complete-control, decisive-control, and decisive-case counts",
+      "maximum identity input/target/error cross-arm delta",
+      "per-joint actual-error minus identity-error absolute residual",
+      "per-joint/probe axis-error minus identity-error absolute residual",
+      "maximum effective-axis versus observation-parent-bind component angular delta",
+      "maximum actual runtime target versus independently recomputed target error",
+      "finite normalized quaternion and correct ownership counts"
+    ],
+    "physical_metrics": [
+      "locked failed-criteria set",
+      "pelvis-height ratio and root tilt",
+      "root/body linear and angular speeds",
+      "support gap and penetration",
+      "target write/readback counts, ratio, and maximum error",
+      "inference, PoseSearch, simulated-body, matching-control, movement-reclaim, shell-helper, and topology counts"
+    ],
+    "support_rule": "All validity and pre-intervention equivalence gates pass; identity inputs/targets/errors remain unchanged within 0.001 degrees; and all 19 actual-action plus all 114 axis-probe experimental errors equal their joint's unchanged identity residual within 0.001 degrees.",
+    "falsification_rule": "Validity and component-axis selection are confirmed, but identity changes or at least one actual/probe error fails equality with its unchanged joint identity residual at 0.001 degrees."
+  },
+  "implementation_constraints": [
+    "Add no production default, activation-contract, persistent settings, serialization, locked protocol, threshold, neutral, constraint, physics, or target-publication change.",
+    "The experimental override must be impossible outside WITH_DEV_AUTOMATION_TESTS and omitted by default.",
+    "Instrumentation must observe the actual effective runtime axis and target rather than infer the selected path from the command line alone.",
+    "The evaluator must independently recompute quaternion composition/recovery and reject missing, non-finite, non-normalized, duplicate, ownership-inconsistent, wrong-mode, or pre-intervention-mismatched artifacts.",
+    "Tests must validate invariants, frame ownership, mode selection, historical compatibility, malformed-input rejection, and metric publication rather than endorsing a candidate production constant.",
+    "Run a fresh unchanged baseline beside the experiment using one clean behavior commit and reused binary, record the result, then stop before neutral substitution or production promotion."
+  ],
+  "next_step_rules": {
+    "if_supported": "Remove or retain the axis override according to evidence, then preregister a separate one-variable neutral-versus-bind experiment; do not promote either change in the E16 evidence commit.",
+    "if_falsified": "Remove the rejected axis behavior and select the highest-information multiplication-order or hidden-frame diagnostic; do not layer neutral substitution on top."
+  }
+}

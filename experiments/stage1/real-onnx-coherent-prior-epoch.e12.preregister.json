@@ -1,0 +1,87 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "real-onnx-coherent-prior-epoch-e12",
+  "preregistered_utc": "2026-07-14T22:44:34.8529271Z",
+  "base_commit": "106c374867dba3f29d9fee2da307a7bce2e99513",
+  "authority": "DEVELOPMENT_EXPERIMENT_PREREGISTRATION_ONLY",
+  "product_success_authority": false,
+  "hypothesis": "With the prior Manny body pose held fixed, changing only its root-height reference from the live first-policy reference to the contemporaneous prior reference reconstructs historical Mode B exactly.",
+  "supporting_runtime_evidence": [
+    "E10 prior-body/live-ground replay matched 357 of 358 self-observation values and matched every mimic-target and terrain value; only self root-height index 0 remained different.",
+    "E11 observed the same successful static-ground branch and resolved ground Z of 210 cm at both boundaries.",
+    "E11's actual prior decomposition produced final root height 0.9379022717475891 m, float32 bits 0x3F701A5D, exactly equal to historical Mode-B self-observation index 0."
+  ],
+  "competing_explanations": [
+    "Another unobserved root-frame or float-materialization boundary still distinguishes the historical snapshot.",
+    "A downstream tensor or provenance dependency changes when the prior body and prior ground reference are paired, preventing exact Mode-B actions or sections."
+  ],
+  "primary_causal_variable": {
+    "name": "ground_reference_epoch",
+    "held_constant": "prior Manny body source at first inference",
+    "baseline_value": "live first-policy root-height reference",
+    "experimental_value": "contemporaneous prior root-height reference"
+  },
+  "arms": [
+    {
+      "name": "live_body_live_ground",
+      "role": "unchanged production control",
+      "override": "none",
+      "expected_raw_snapshot_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    },
+    {
+      "name": "prior_body_live_ground",
+      "role": "primary causal baseline and E10 replication control",
+      "override": "prior body only",
+      "expected_raw_snapshot_sha256": "586CC117F617143056ED6676E712E13EFC94496E53D990F15BC13A7C812728AC"
+    },
+    {
+      "name": "prior_body_prior_ground",
+      "role": "primary experimental arm",
+      "override": "prior body and its contemporaneous root-height reference",
+      "expected_raw_snapshot_sha256": "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3"
+    }
+  ],
+  "expected_if_hypothesis_correct": "The unchanged arm is exact Mode A; the prior-body/live-ground arm reproduces E10; the coherent prior-body/prior-ground arm is exact Mode B in the raw snapshot and self-observation, mimic-target, terrain, and model-action section hashes.",
+  "falsification_observation": "The E10 replication control is valid, the coherent override is confirmed consumed with valid prior body and ground evidence, but any Mode-B raw/section/action hash differs or any unrelated provenance field changes.",
+  "invalid_run_conditions": [
+    "The unchanged arm is not exact Mode A.",
+    "The prior-body/live-ground arm does not reproduce the locked E10 snapshot.",
+    "The configured override is not confirmed consumed or prior evidence is incomplete.",
+    "The source tree is dirty, commits/binaries/models differ, or any locked run configuration differs.",
+    "Any raw run or evaluator artifact is malformed or missing."
+  ],
+  "locked_judges": {
+    "protocol": {
+      "path": "product-gates/standing-plant-ladder.v2.json",
+      "sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB"
+    },
+    "model": {
+      "path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+      "sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19"
+    },
+    "oracle": "experiments/stage1/oracles/real-onnx-first-policy-modes.v1.json",
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "initial_pose": "unchanged standing-plant harness default",
+    "perturbation": "none",
+    "seed": "unchanged standing-plant harness default",
+    "evaluator": "scripts/evaluate_standing_plant.py",
+    "metrics": [
+      "exact raw policy-input snapshot SHA-256",
+      "exact self-observation, mimic-target, terrain, and action float32 section SHA-256",
+      "configured/applied/consumed source-epoch evidence",
+      "prior/live/effective body fingerprints and applied root-height reference",
+      "unrelated provenance identity",
+      "locked evaluator failure set and target readback ratio",
+      "active-standing snapshot, semantic trace, physics, policy, and render SHA-256"
+    ]
+  },
+  "implementation_constraints": [
+    "Use a default-off development-only runtime override with no production default or activation-contract change.",
+    "Do not change PoseSearch, policy timing, future poses, previous actions, physics, dispatch, thresholds, protocol, manifest, or readback requirements.",
+    "Do not add experimental values to permanent serialization or production requirements.",
+    "Retain the E10/E11 general diagnostics and distinguish experimental evidence from product success.",
+    "Run all arms on the same clean behavior commit and reused binary."
+  ]
+}

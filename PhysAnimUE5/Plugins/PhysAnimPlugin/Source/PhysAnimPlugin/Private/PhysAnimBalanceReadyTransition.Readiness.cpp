@@ -95,8 +95,8 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 
 	if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		LinearThreshold *= 2.0f;
-		AngularThreshold *= 2.0f;
+		LinearThreshold *= 2.5f;
+		AngularThreshold *= 3.0f;
 		InstabilityReason = BalanceReadinessReasons::Phase3InstabilitySpike;
 	}
 	else if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
@@ -599,7 +599,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
 	FPhysAnimLateValidationResult CurrentResult;
 	// Phase 2 entry must consume the accepted live RootOn-ready handoff, not persist the LateValidate hold mode.
-	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult, false))
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult))
 	{
 		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;

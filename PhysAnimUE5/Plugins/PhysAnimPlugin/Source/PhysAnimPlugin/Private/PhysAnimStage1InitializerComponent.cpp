@@ -48,22 +48,24 @@ namespace PhysAnimStage1InitializerComponentInternal
 	FPhysicsControlData MakeDefaultStage1ControlData()
 	{
 		FPhysicsControlData Data;
-		Data.bEnabled = true;
+		Data.bEnabled = false;
 		Data.LinearStrength = 0.0f;
 		Data.LinearDampingRatio = 1.0f;
 		Data.LinearExtraDamping = 0.0f;
 		Data.MaxForce = 0.0f;
-		Data.AngularStrength = 800.0f;
-		Data.AngularDampingRatio = 1.25f;
-		Data.AngularExtraDamping = 30.0f;
-		Data.MaxTorque = 0.0f;
+		// Physics Control strength is an oscillation frequency, not a raw spring
+		// coefficient. Keep the authored plant within the solver's temporal range.
+		Data.AngularStrength = 8.0f;
+		Data.AngularDampingRatio = 1.0f;
+		Data.AngularExtraDamping = 25.0f;
+		Data.MaxTorque = 500000.0f;
 		Data.LinearTargetVelocityMultiplier = 0.0f;
 		Data.AngularTargetVelocityMultiplier = 0.0f;
 		Data.CustomControlPoint = FVector::ZeroVector;
 		Data.bUseCustomControlPoint = false;
 		Data.bUseSkeletalAnimation = false;
 		Data.bDisableCollision = true;
-		Data.bOnlyControlChildObject = true;
+		Data.bOnlyControlChildObject = false;
 		return Data;
 	}
 
@@ -161,10 +163,15 @@ void UPhysAnimStage1InitializerComponent::PrepareRuntimeDefaults()
 	AActor* const ControlParentActor = DefaultControlParentActor.IsValid() ? DefaultControlParentActor.Get() : OwnerActor;
 	AActor* const ControlChildActor = DefaultControlChildActor.IsValid() ? DefaultControlChildActor.Get() : OwnerActor;
 	AActor* const BodyModifierActor = DefaultBodyModifierActor.IsValid() ? DefaultBodyModifierActor.Get() : OwnerActor;
+	const FPhysicsControlData DefaultControlData =
+		PhysAnimStage1InitializerComponentInternal::MakeDefaultStage1ControlData();
 
 	for (TPair<FName, FInitialPhysicsControl>& Pair : InitialControls)
 	{
 		FInitialPhysicsControl& InitialControl = Pair.Value;
+		// Blueprint instances can retain obsolete serialized spring values. The
+		// Stage 1 runtime initializer owns one deterministic Manny actuator contract.
+		InitialControl.ControlData = DefaultControlData;
 		if (!InitialControl.ParentActor.IsValid() && ControlParentActor)
 		{
 			InitialControl.ParentActor = ControlParentActor;

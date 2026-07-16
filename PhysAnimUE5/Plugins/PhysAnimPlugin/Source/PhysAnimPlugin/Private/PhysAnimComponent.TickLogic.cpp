@@ -1,7 +1,9 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimFrameContract.h"
 #include "PhysAnimLogger.h"
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
+#include "PhysAnimProtoMannyAdapter.h"
 
 #include "Components/SkeletalMeshComponent.h"
 #include "PhysicsControlComponent.h"
@@ -47,89 +49,103 @@ void UPhysAnimComponent::ProcessPendingDistalOwnershipChecks()
 
 void UPhysAnimComponent::TickRuntimeStateMachine(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
-	BalanceReadyTransition.Tick(DeltaTime, this, EffectiveSettings);
-
-	// Authoritative state sync
+	switch (RuntimeState)
 	{
-		EBalanceReadyTransitionPhase TransitionPhase = BalanceReadyTransition.GetPhase();
-		if (TransitionPhase == EBalanceReadyTransitionPhase::BRT_Succeeded)
+	case EPhysAnimRuntimeState::BridgeActive:
+		if (LastValidPoseSearchResult.SelectedAnim != nullptr)
 		{
-			if (!IsBalanceActiveState(RuntimeState))
-			{
-				CompleteBalanceModeEntry();
-			}
-			TransitionPhase = BalanceReadyTransition.GetPhase();
+			StandingActivation.Start();
+			StandingActivationElapsedSeconds = 0.0f;
+			bPendingBalanceModeStartRequest = false;
+			bPendingBalanceModeStartAttemptIssued = false;
+			PendingBalanceModeStartReason.Reset();
+			PendingBalanceModeRequestTimeSeconds = -1.0;
+			TransitionRuntimeState(EPhysAnimRuntimeState::Standing_Preparation);
 		}
+		break;
 
-		const EPhysAnimRuntimeState MappedRuntimeState =
-			UPhysAnimComponent::MapBalanceTransitionPhaseToRuntimeState(TransitionPhase);
-
-		if (TransitionPhase == EBalanceReadyTransitionPhase::BRT_Inactive)
+	case EPhysAnimRuntimeState::Standing_Preparation:
+	{
+		FString FailureReason;
+		const bool bPrepared = PrepareStandingActivation(FailureReason);
+		StandingActivation.CompletePreparation(bPrepared, FailureReason);
+		if (StandingActivation.GetStatus().RuntimeState == EPhysAnimRuntimeState::FailStopped)
 		{
-			if (!IsBalanceActiveState(RuntimeState) &&
-				RuntimeState != EPhysAnimRuntimeState::BalanceSafeDeny &&
-				RuntimeState != EPhysAnimRuntimeState::LocomotionActiveShell &&
-				RuntimeState != EPhysAnimRuntimeState::LocomotionActiveShellDenied)
-			{
-				TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
-			}
+			FailStop(StandingActivation.GetStatus().FailureReason);
+			return;
 		}
-		else
-		{
-			TransitionRuntimeState(MappedRuntimeState);
-		}
+		TransitionRuntimeState(EPhysAnimRuntimeState::Standing_FullSimulationActivation);
+		break;
 	}
 
-	// Auto-trigger: when in BridgeActive with no pending request and no ongoing transition,
-	// queue an "auto_trigger" balance start request so the state machine progresses toward
-	// BalanceActive_Standing. This call site was previously missing, leaving the component
-	// permanently stuck in BridgeActive. (S2-FIX-BALANCE-STARTUP-TICK-RACE-01)
+	case EPhysAnimRuntimeState::Standing_FullSimulationActivation:
 	{
-		UPhysAnimPhase1AutoCalibSubsystem* const AutoCalibSubsystem =
-			GetWorld() ? GetWorld()->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>() : nullptr;
-		const bool bAutoCalibSubsystemActive = AutoCalibSubsystem && AutoCalibSubsystem->IsPhase1AutoCalibActive();
-
-		if (ShouldAttemptAutoTriggeredBalanceStart(
-				RuntimeState,
-				bPendingBalanceModeStartRequest,
-				BalanceReadyTransition.HasAnyInternalPhase(),
-				bPhase1AutoCalibOwnsStartRequests,
-				bAutoCalibSubsystemActive))
+		FString FailureReason;
+		const FPhysAnimStandingActivationReadback Readback =
+			PublishStandingPhysicsControlState(EffectiveSettings, 0.0f, true, FailureReason);
+		StandingActivation.CompleteFullSimulationActivation(Readback, FailureReason);
+		if (StandingActivation.GetStatus().RuntimeState == EPhysAnimRuntimeState::FailStopped)
 		{
-			if (!ShouldDeferAutoTriggeredBalanceStartForRecoveryTelemetry(RecoveryPreEntryTelemetrySkipFrames))
-			{
-				QueueBalanceModeStartRequest(TEXT("auto_trigger"));
-			}
-			else
-			{
-				--RecoveryPreEntryTelemetrySkipFrames;
-			}
+			FailStop(StandingActivation.GetStatus().FailureReason);
+			return;
 		}
-
-		TryStartPendingBalanceModeRequest(EffectiveSettings);
+		StandingActivationElapsedSeconds = 0.0f;
+		TransitionRuntimeState(EPhysAnimRuntimeState::Standing_PolicyBlend);
+		break;
 	}
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	case EPhysAnimRuntimeState::Standing_PolicyBlend:
 	{
-		const EPhysAnimRuntimeState EvaluatedState = EvaluateBalanceActiveStanding();
-		if (EvaluatedState != RuntimeState)
+		StandingActivationElapsedSeconds += FMath::Max(DeltaTime, 0.0f);
+		const float Alpha = EffectiveSettings.StartupRampSeconds > SMALL_NUMBER
+			? FMath::Clamp(StandingActivationElapsedSeconds / EffectiveSettings.StartupRampSeconds, 0.0f, 1.0f)
+			: 1.0f;
+		FString FailureReason;
+		const FPhysAnimStandingActivationReadback Readback =
+			PublishStandingPhysicsControlState(EffectiveSettings, Alpha, false, FailureReason);
+		StandingActivation.TickPolicyBlend(
+			StandingActivationElapsedSeconds,
+			EffectiveSettings.StartupRampSeconds,
+			Readback,
+			FailureReason);
+		if (StandingActivation.GetStatus().RuntimeState == EPhysAnimRuntimeState::FailStopped)
 		{
-			TransitionRuntimeState(EvaluatedState);
+			FailStop(StandingActivation.GetStatus().FailureReason);
+			return;
 		}
+		if (StandingActivation.GetStatus().RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		{
+			CompleteBalanceModeEntry();
+		}
+		break;
 	}
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+	case EPhysAnimRuntimeState::BalanceActive_Standing:
 	{
-		if (ShouldExitStandingToSafeDeny(LiveRuntimeEvidenceTerminationState))
+		FString FailureReason;
+		const FPhysAnimStandingActivationReadback Readback =
+			PublishStandingPhysicsControlState(EffectiveSettings, 1.0f, false, FailureReason);
+		StandingActivation.ObserveStanding(Readback, FailureReason);
+		if (StandingActivation.GetStatus().RuntimeState == EPhysAnimRuntimeState::FailStopped)
 		{
-			const FPhysAnimRunArtifactSnapshot& Latest = LiveRuntimeEvidenceTerminationState.LatestArtifact;
-			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] SETTLE_DENIED reason=PHASE3_ACTIVE_SUPPORT_FAILURE hull_area=%.1f gap=%.1f proxy_inside=%d proxy_drift=%.1f"),
-				Latest.SupportHullAreaCm2,
-				Latest.SupportGapTimerMs,
-				Latest.ProxyInsideHull.IsSet() ? (Latest.ProxyInsideHull.GetValue() ? 1 : 0) : -1,
-				Latest.ProxyOutsideHullDurationMs.IsSet() ? Latest.ProxyOutsideHullDurationMs.GetValue() : 0.0);
-			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceSafeDeny);
+			FailStop(StandingActivation.GetStatus().FailureReason);
 		}
+		break;
+	}
+
+	case EPhysAnimRuntimeState::LocomotionActiveShell:
+	{
+		FString FailureReason;
+		PublishStandingPhysicsControlState(EffectiveSettings, 1.0f, false, FailureReason);
+		if (!FailureReason.IsEmpty())
+		{
+			FailStop(FString::Printf(TEXT("Could not preserve production policy-control state during locomotion: %s"), *FailureReason));
+		}
+		break;
+	}
+
+	default:
+		break;
 	}
 }
 
@@ -143,6 +159,13 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		PolicyUpdateAccumulatorSeconds,
 		ElapsedPolicySteps);
 	LastPolicyElapsedSteps = ElapsedPolicySteps;
+	bool bStandingVariantUsesPolicyInference = true;
+	bool bStandingVariantForcesZeroActions = false;
+#if WITH_DEV_AUTOMATION_TESTS
+	bStandingVariantUsesPolicyInference =
+		FPhysAnimStandingActivationPlan::UsesPolicyInference(StandingVariantForTesting);
+	bStandingVariantForcesZeroActions = StandingVariantForTesting == EPhysAnimStandingVariant::ZeroActions;
+#endif
 
 	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Verbose, 1.0f, TEXT("[PhysAnim] TICK_POLICY state=%s runPolicy=%d steps=%d acc=%.4f interval=%.4f dt=%.4f"),
 		GetRuntimeStateName(RuntimeState), bRunPolicyUpdateThisTick ? 1 : 0, ElapsedPolicySteps, PolicyUpdateAccumulatorSeconds, PolicyControlIntervalSeconds, DeltaTime);
@@ -174,46 +197,222 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			SearchResult = LastValidPoseSearchResult;
 		}
 
+		TArray<FPhysAnimBodySample> MannyCurrentBodySamples;
+		if (!GatherCurrentBodySamples(MannyCurrentBodySamples, OutError))
+		{
+			return;
+		}
+#if WITH_DEV_AUTOMATION_TESTS
+		const bool bRecordFirstPolicyBodySource =
+			bStartupChronologyTraceEnabledForTesting &&
+			StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+			bEnablePolicyInference &&
+			bStandingVariantUsesPolicyInference &&
+			PolicyControlTicksExecuted == 1;
+		FString BodySourceTraceError;
+		if (!FirstPolicyBodySourceTrace.RecordFirstPolicySourceIf(
+				bRecordFirstPolicyBodySource,
+				TEXT("first_policy_pre_adapter"),
+				GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
+				GetRuntimeStateName(RuntimeState),
+				PolicyControlTicksExecuted,
+				MannyCurrentBodySamples,
+				BodySourceTraceError))
+		{
+			OutError = FString::Printf(
+				TEXT("Could not record the first-policy body-source trace: %s"),
+				*BodySourceTraceError);
+			return;
+		}
+#endif
 		TArray<FPhysAnimBodySample> CurrentBodySamples;
-		if (!GatherCurrentBodySamples(CurrentBodySamples, OutError))
+		if (!PhysAnimProtoMannyAdapter::AdaptBodySamplesToCanonicalSmpl(
+			MannyCurrentBodySamples,
+			CurrentBodySamples,
+			OutError))
 		{
 			return;
 		}
 
+		TArray<FPhysAnimFuturePoseSample> MannyFuturePoseSamples;
+		if (!SampleFuturePoses(SearchResult, MannyFuturePoseSamples, OutError))
+		{
+			return;
+		}
 		TArray<FPhysAnimFuturePoseSample> FuturePoseSamples;
-		if (!SampleFuturePoses(SearchResult, FuturePoseSamples, OutError))
+		if (!PhysAnimProtoMannyAdapter::AdaptFuturePoseSamplesToCanonicalSmpl(
+			MannyFuturePoseSamples,
+			FuturePoseSamples,
+			OutError))
+		{
+			return;
+		}
+#if WITH_DEV_AUTOMATION_TESTS
+		const TArray<FPhysAnimFuturePoseSample> RawCanonicalFuturePoseSamplesForReplay = FuturePoseSamples;
+		TArray<float> QueryTrajectorySampleTimesSecondsForReplay;
+		TArray<FTransform> QueryTrajectoryWorldTransformsCmForReplay;
+#endif
+
+		FTransform MimicTargetReferenceWorldRoot = FTransform::Identity;
+		FTransform MimicTargetReferenceDataRoot = FTransform::Identity;
+		if (!ResolveMimicTargetReferenceDataFrame(
+			SearchResult,
+			MimicTargetReferenceWorldRoot,
+			MimicTargetReferenceDataRoot,
+			OutError))
 		{
 			return;
 		}
 
-		FVector2D MimicTargetReferenceDataOffsetXY = FVector2D::ZeroVector;
-		if (!ResolveMimicTargetReferenceDataOffset(SearchResult, MimicTargetReferenceDataOffsetXY, OutError))
+		if (ShouldUseBridgeTrajectoryPoseSearchState(RuntimeState))
 		{
-			return;
+			if (!bBridgePoseSearchTrajectoryInitialized)
+			{
+				OutError = TEXT("E80 locomotion mimic placement requires an initialized Pose Search trajectory.");
+				return;
+			}
+			const FTransformTrajectorySample CurrentTrajectorySample =
+				BridgePoseSearchTrajectory.GetSampleAtTime(0.0f, true);
+			const PhysAnimFrameContract::FWorldTransformCm CurrentQueryWorldRoot(
+				CurrentTrajectorySample.GetTransform());
+#if WITH_DEV_AUTOMATION_TESTS
+			QueryTrajectorySampleTimesSecondsForReplay.Reserve(FuturePoseSamples.Num() + 1);
+			QueryTrajectorySampleTimesSecondsForReplay.Add(0.0f);
+			QueryTrajectoryWorldTransformsCmForReplay.Reserve(FuturePoseSamples.Num() + 1);
+			QueryTrajectoryWorldTransformsCmForReplay.Add(CurrentTrajectorySample.GetTransform());
+#endif
+			TArray<PhysAnimFrameContract::FWorldTransformCm> FutureQueryWorldRoots;
+			FutureQueryWorldRoots.Reserve(FuturePoseSamples.Num());
+			for (const FPhysAnimFuturePoseSample& FuturePose : FuturePoseSamples)
+			{
+				const FTransformTrajectorySample FutureTrajectorySample =
+					BridgePoseSearchTrajectory.GetSampleAtTime(
+						FuturePose.FutureTimeSeconds,
+						true);
+				FutureQueryWorldRoots.Add(
+					PhysAnimFrameContract::FWorldTransformCm(
+						FutureTrajectorySample.GetTransform()));
+#if WITH_DEV_AUTOMATION_TESTS
+				QueryTrajectorySampleTimesSecondsForReplay.Add(FuturePose.FutureTimeSeconds);
+				QueryTrajectoryWorldTransformsCmForReplay.Add(FutureTrajectorySample.GetTransform());
+#endif
+			}
+
+			TArray<FPhysAnimFuturePoseSample> TrajectoryPlacedFuturePoses;
+			if (!PhysAnimFrameContract::PlaceProtoFuturePosesOnWorldTrajectory(
+				FuturePoseSamples,
+				CurrentQueryWorldRoot,
+				FutureQueryWorldRoots,
+				PhysAnimFrameContract::FProtoWorldCanonicalTransformMeters(
+					MimicTargetReferenceWorldRoot),
+				PhysAnimFrameContract::FProtoAnimationDataCanonicalTransformMeters(
+					MimicTargetReferenceDataRoot),
+				TrajectoryPlacedFuturePoses,
+				OutError))
+			{
+				return;
+			}
+			FuturePoseSamples = MoveTemp(TrajectoryPlacedFuturePoses);
 		}
 
+#if WITH_DEV_AUTOMATION_TESTS
+		const bool bRecordFirstPolicyGroundReference =
+			bStartupChronologyTraceEnabledForTesting &&
+			StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+			bEnablePolicyInference &&
+			bStandingVariantUsesPolicyInference &&
+			PolicyControlTicksExecuted == 1 &&
+			!FirstPolicyGroundReferenceTrace.bFirstPolicyRecorded;
+		PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues GroundReferenceValues;
+		const float MimicTargetReferenceGroundHeight = ResolveSelfObservationGroundHeight(
+			CurrentBodySamples,
+			bRecordFirstPolicyGroundReference ? &GroundReferenceValues : nullptr);
+		FString GroundReferenceTraceError;
+		// This diagnostic must remain observational: validation failures are published
+		// by the trace artifact and must not abort or otherwise alter policy execution.
+		FirstPolicyGroundReferenceTrace.RecordFirstPolicyIf(
+			bRecordFirstPolicyGroundReference,
+			TEXT("first_policy_self_observation"),
+			GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
+			GetRuntimeStateName(RuntimeState),
+			PolicyControlTicksExecuted,
+			GroundReferenceValues,
+			GroundReferenceTraceError);
+#else
 		const float MimicTargetReferenceGroundHeight = ResolveSelfObservationGroundHeight(CurrentBodySamples);
+#endif
 		if (!PhysAnimBridge::BuildSelfObservation(CurrentBodySamples, MimicTargetReferenceGroundHeight, SelfObservationBuffer, OutError))
 		{
 			return;
 		}
 
 		TArray<FPhysAnimBodySample> MimicCurrentReferenceBodySamples;
-		MakeMimicTargetCurrentReferenceBodySamples(CurrentBodySamples, MimicTargetReferenceDataOffsetXY, MimicTargetReferenceGroundHeight, MimicCurrentReferenceBodySamples);
+		MakeMimicTargetDataFrameBodySamples(
+			CurrentBodySamples,
+			MimicTargetReferenceWorldRoot,
+			MimicTargetReferenceDataRoot,
+			MimicCurrentReferenceBodySamples);
 
 		if (!PhysAnimBridge::BuildMimicTargetPoses(MimicCurrentReferenceBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, OutError))
 		{
 			return;
 		}
 
-		if (!BuildTerrainObservation(CurrentBodySamples, TerrainBuffer, OutError))
+#if WITH_DEV_AUTOMATION_TESTS
+		const bool bCapturePolicyInputProvenanceThisStep =
+			bPolicyInputProvenanceTraceEnabledForTesting &&
+			bEnablePolicyInference &&
+			bStandingVariantUsesPolicyInference &&
+			!FirstPolicyInputProvenanceSnapshot.bCaptured;
+		TArray<float> TerrainGroundHeightsForDiagnostics;
+		FTransform TerrainRootWorldTransformForDiagnostics = FTransform::Identity;
+#endif
+		if (!BuildTerrainObservation(
+			CurrentBodySamples,
+			TerrainBuffer,
+			OutError
+#if WITH_DEV_AUTOMATION_TESTS
+			,
+			bCapturePolicyInputProvenanceThisStep ? &TerrainGroundHeightsForDiagnostics : nullptr,
+			bCapturePolicyInputProvenanceThisStep ? &TerrainRootWorldTransformForDiagnostics : nullptr
+#endif
+			))
 		{
 			return;
 		}
 
 		const int32 V0PlantReviewMode = PhysAnimComponentInternal::CVarPhysAnimV0PlantReviewMode.GetValueOnGameThread();
 		const bool bV0PlantReviewStaticTargets = V0PlantReviewMode == 1 && RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
-		if (!bEnablePolicyInference)
+#if WITH_DEV_AUTOMATION_TESTS
+		if (bCapturePolicyInputProvenanceThisStep && !bV0PlantReviewStaticTargets)
+		{
+			const AActor* const OwnerActor = GetOwner();
+			const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+			const UWorld* const World = GetWorld();
+			FirstPolicyInputProvenanceSnapshot.CaptureFirstIf(
+				true,
+				GetRuntimeStateName(RuntimeState),
+				World ? World->GetTimeSeconds() : 0.0,
+				PolicyControlTicksExecuted,
+				GetNameSafe(SearchResult.SelectedAnim),
+				SearchResult.SelectedTime,
+				SearchResult.bIsMirrored,
+				OwnerActor ? OwnerActor->GetActorTransform() : FTransform::Identity,
+				SkeletalMesh ? SkeletalMesh->GetComponentTransform() : FTransform::Identity,
+				TerrainRootWorldTransformForDiagnostics,
+				MimicTargetReferenceWorldRoot,
+				MimicTargetReferenceDataRoot,
+				MimicTargetReferenceGroundHeight,
+				MannyCurrentBodySamples,
+				CurrentBodySamples,
+				MimicCurrentReferenceBodySamples,
+				MannyFuturePoseSamples,
+				FuturePoseSamples,
+				TerrainGroundHeightsForDiagnostics,
+				ActionOutputBuffer);
+		}
+#endif
+		if (!bEnablePolicyInference || !bStandingVariantUsesPolicyInference)
 		{
 			// SafetyGrip fallback: neural inference is disabled. Zero the raw action buffer
 			// so ConditionModelActions produces zero conditioned actions, keeping joints at
@@ -228,7 +427,8 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			return;
 		}
 
-		if (V0PlantReviewMode == 2 && RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		if ((V0PlantReviewMode == 2 || bStandingVariantForcesZeroActions) &&
+			IsCausalPolicyControlRuntimeState(RuntimeState))
 		{
 			ActionOutputBuffer.Init(0.0f, PhysAnimBridge::NumActionFloats);
 		}
@@ -237,8 +437,79 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		{
 			return;
 		}
+#if WITH_DEV_AUTOMATION_TESTS
+		const bool bCaptureLocomotionFrameReplayThisStep =
+			PhysAnimBridge::ShouldCaptureLocomotionFrameReplay(
+				bPolicyInputProvenanceTraceEnabledForTesting,
+				bEnablePolicyInference,
+				bStandingVariantUsesPolicyInference,
+				ShouldUseBridgeTrajectoryPoseSearchState(RuntimeState),
+				FirstLocomotionFrameReplaySnapshot.bCaptured);
+		if (bCaptureLocomotionFrameReplayThisStep)
+		{
+			TArray<FPhysAnimBodySample> PhysicalBodySamplesForReplay;
+			if (!GatherCurrentPhysicalBodySamplesForReplay(
+				PhysicalBodySamplesForReplay,
+				OutError))
+			{
+				return;
+			}
+
+			const AActor* const OwnerActor = GetOwner();
+			const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+			const UWorld* const World = GetWorld();
+			if (!FirstLocomotionFrameReplaySnapshot.CaptureFirstIf(
+				true,
+				GetRuntimeStateName(RuntimeState),
+				World ? World->GetTimeSeconds() : 0.0,
+				PolicyControlTicksExecuted,
+				GetNameSafe(SearchResult.SelectedAnim),
+				SearchResult.SelectedTime,
+				SearchResult.bIsMirrored,
+				OwnerActor ? OwnerActor->GetActorTransform() : FTransform::Identity,
+				SkeletalMesh ? SkeletalMesh->GetComponentTransform() : FTransform::Identity,
+				MimicTargetReferenceWorldRoot,
+				MimicTargetReferenceDataRoot,
+				QueryTrajectorySampleTimesSecondsForReplay,
+				QueryTrajectoryWorldTransformsCmForReplay,
+				MannyCurrentBodySamples,
+				PhysicalBodySamplesForReplay,
+				CurrentBodySamples,
+				RawCanonicalFuturePoseSamplesForReplay,
+				FuturePoseSamples,
+				SelfObservationBuffer,
+				MimicTargetPosesBuffer,
+				TerrainBuffer,
+				ConditionedActionBuffer))
+			{
+				OutError = TEXT("Could not capture the first locomotion frame replay step.");
+				return;
+			}
+			FString ReplayValidationError;
+			if (!PhysAnimBridge::ValidateLocomotionFrameReplaySnapshot(
+				FirstLocomotionFrameReplaySnapshot,
+				ReplayValidationError))
+			{
+				OutError = FString::Printf(
+					TEXT("Locomotion frame replay validation failed: %s"),
+					*ReplayValidationError);
+				return;
+			}
+		}
+#endif
 	}
 
+	// Standing topology and gains are published and read back by TickRuntimeStateMachine
+	// before target dispatch. Keep the legacy tuning path only for disconnected future states.
+	if (!IsCausalPolicyControlRuntimeState(RuntimeState))
+	{
+		ApplyRuntimeControlTuning(EffectiveSettings);
+	}
+	if (RuntimeState == EPhysAnimRuntimeState::Standing_Preparation ||
+		RuntimeState == EPhysAnimRuntimeState::Standing_FullSimulationActivation)
+	{
+		return;
+	}
 	ApplyControlTargets(
 		bRunPolicyUpdateThisTick ? (PolicyControlIntervalSeconds * FMath::Max(ElapsedPolicySteps, 1)) : 0.0f,
 		EffectiveSettings,
@@ -286,10 +557,18 @@ void UPhysAnimComponent::UpdateStartupMovementLockState(const FPhysAnimStabiliza
 	}
 }
 
-void UPhysAnimComponent::HandleInitialPoseSearchWait(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError, FPoseSearchBlueprintResult& OutSearchResult)
+void UPhysAnimComponent::HandleInitialPoseSearchWait(
+	float DeltaTime,
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	FString& OutError,
+	FPoseSearchBlueprintResult& OutSearchResult)
 {
+	(void)DeltaTime;
+	(void)EffectiveSettings;
 	const bool bPoseSearchValid = QueryPoseSearch(OutSearchResult, OutError);
-	RecordLiveRuntimeEvidencePoseSearchQueryResult(bPoseSearchValid, OutSearchResult.SelectedAnim ? OutSearchResult.SelectedAnim->GetName() : TEXT(""));
+	RecordLiveRuntimeEvidencePoseSearchQueryResult(
+		bPoseSearchValid,
+		OutSearchResult.SelectedAnim ? OutSearchResult.SelectedAnim->GetName() : TEXT(""));
 
 	if (!bPoseSearchValid)
 	{
@@ -303,33 +582,10 @@ void UPhysAnimComponent::HandleInitialPoseSearchWait(float DeltaTime, const FPhy
 
 	LastValidPoseSearchResult = OutSearchResult;
 	ConsecutiveInvalidPoseSearchFrames = 0;
-
-	if (EffectiveSettings.bLockCharacterMovementUntilStartupReady)
+	if (!ActivateRuntimePhysicsControl(OutError))
 	{
-		float LinSpeed, AngSpeed;
-		if (!UpdateStartupQuietWindow(DeltaTime, EffectiveSettings, LinSpeed, AngSpeed))
-		{
-			return;
-		}
-		ReleaseStartupMovementLock(true);
+		FailStop(FString::Printf(TEXT("Failed to create standing Physics Control records: %s"), *OutError));
+		return;
 	}
-
-	// Activate physics ownership and the bringup ramp sequence.
-	// bRequireLiveProofSatisfied=false because proof hasn't completed yet —
-	// it runs during BridgeActive. Without this call, physics bodies stay
-	// kinematic, bringup groups never unlock, PolicyInfluenceRampStartTimeSeconds
-	// stays -1, and the BalanceReadyTransition preflight gate permanently blocks.
-	// (S2-FIX-BALANCE-STARTUP-TICK-RACE-01)
-	if (EffectiveSettings.bForceZeroActions)
-	{
-		TransitionRuntimeState(EPhysAnimRuntimeState::ReadyForActivation);
-	}
-	else
-	{
-		FString ActivationError;
-		if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("InitialPoseSearchSuccess"), ActivationError, false))
-		{
-			FailStop(FString::Printf(TEXT("Failed to activate bridge from ready state: %s"), *ActivationError));
-		}
-	}
+	TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
 }

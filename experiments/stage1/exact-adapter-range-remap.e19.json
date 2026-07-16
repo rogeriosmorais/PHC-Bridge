@@ -1,0 +1,126 @@
+{
+  "schema_version": "physanim-investigation-experiment/v1",
+  "experiment_id": "exact-adapter-range-remap-e19",
+  "recorded_utc": "2026-07-15T15:52:58.390868+00:00",
+  "status": "VALID",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "FAIL",
+  "preregistration": {
+    "path": "experiments/stage1/exact-adapter-range-remap.e19.preregister.json",
+    "commit": "e2bc15ef7750004d3edcc69c420618c4f5a4fc60"
+  },
+  "behavior_commit": "20c967ccaa411ad02b180c2e9a1311820354090b",
+  "validation": {
+    "focused_unreal_contract": "PASS",
+    "focused_python_tests": "28 PASS",
+    "first_policy_snapshot_exact": true,
+    "same_binary": true,
+    "source_tree_dirty": false
+  },
+  "arms": {
+    "control_remap_on": {
+      "artifact_root": "test-results/action-axis-frame/e19-remap/control_remap_on",
+      "evaluation": {
+        "failed_criteria": [
+          "body_linear_speed",
+          "body_angular_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\action-axis-frame\\e19-remap\\control_remap_on\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-exact-adapter-remap-e19-control_remap_on",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "minimum_pelvis_height_ratio": 0.15755675785486445,
+        "pelvis_below_80_cm_sec": 0.41666668839752674,
+        "pelvis_below_20_cm_sec": 0.6000000312924385,
+        "maximum_root_tilt_deg": 111.7818603515625,
+        "maximum_root_linear_speed_cm_per_sec": 994.9657366660241,
+        "maximum_root_angular_speed_deg_per_sec": 647.244369565149,
+        "maximum_body_linear_speed_cm_per_sec": 1555.0421822027376,
+        "maximum_body_angular_speed_deg_per_sec": 5752.9134001422,
+        "maximum_support_gap_ms": 0,
+        "constraint_range_mapping_delta_deg_mean": 19.941009067353747,
+        "constraint_range_mapping_delta_deg_max": 58.18128204345703,
+        "constraint_projection_delta_deg_mean": 0.04549748695778059,
+        "constraint_projection_delta_deg_max": 0.955254077911377,
+        "roundtrip_max_deg": 0.0,
+        "target_readback_match_ratio": 1.0
+      },
+      "sha256": {
+        "manifest.json": "E79B0717EA367C16144EFBE67AB0047D610A4A2745A98BBA9FC52900D1A48C15",
+        "evaluation.json": "3640DA658FD4553765CF69BB3AE5D34E31C790E44BE232255FB96316B625715E",
+        "physics.jsonl": "5C379B60ADBD4BE702EC18BF639ECE676F92FFB5736E376CC6789F3BF81BDE57",
+        "policy.jsonl": "47235A0C0BEBD3B268E07250CC674B90325B2A0D28490113C25BC2549E55BC4A",
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "action-semantic-trace.json": "192A8249AF649D79F1E17490B2BC8B70BE2A08A4AFC408579665584D7DE255D7",
+        "manny-local-frame-roundtrip.json": "D44324D123315794EAFA33E2E4BE713F641092EC85DB53AFCADB4934E0D1A243",
+        "render.png": "F003990277DB931134A30D7A88A3E911CC1209B08F6CE047719996F5DAFA2CAB"
+      }
+    },
+    "experimental_remap_off": {
+      "artifact_root": "test-results/action-axis-frame/e19-remap/experimental_remap_off",
+      "evaluation": {
+        "failed_criteria": [
+          "root_angular_speed",
+          "body_linear_speed",
+          "body_angular_speed",
+          "pelvis_height",
+          "root_tilt",
+          "support_gap"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\action-axis-frame\\e19-remap\\experimental_remap_off\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-exact-adapter-remap-e19-experimental_remap_off",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "minimum_pelvis_height_ratio": 0.17738477537353178,
+        "pelvis_below_80_cm_sec": 0.7833333741873503,
+        "pelvis_below_20_cm_sec": 2.4500001277774572,
+        "maximum_root_tilt_deg": 141.86611938476562,
+        "maximum_root_linear_speed_cm_per_sec": 857.2168373545469,
+        "maximum_root_angular_speed_deg_per_sec": 794.2833610639051,
+        "maximum_body_linear_speed_cm_per_sec": 2785.584273260105,
+        "maximum_body_angular_speed_deg_per_sec": 4335.403063651888,
+        "maximum_support_gap_ms": 300,
+        "constraint_range_mapping_delta_deg_mean": 8.131177136896267e-08,
+        "constraint_range_mapping_delta_deg_max": 1.707547198748216e-06,
+        "constraint_projection_delta_deg_mean": 19.12253680891185,
+        "constraint_projection_delta_deg_max": 114.88854217529297,
+        "roundtrip_max_deg": 1.7075472925031877e-06,
+        "target_readback_match_ratio": 1.0
+      },
+      "sha256": {
+        "manifest.json": "E505CDE956A6D461AE4A8506B6B37540BD6C04AF5235EA41CA65D827B510EBB7",
+        "evaluation.json": "EC355E241FA4BC258C3BB2489938E5C5203A98D4077E04A1F722A34ECCC5EF4B",
+        "physics.jsonl": "736EF9BA6CCB8D5A8904BCD8C1A8FEE02E24B0CC682AB4053080F78A2E6272DC",
+        "policy.jsonl": "85C4D6F0790D855C0D73D9FFEA22B27AB009896975E267C077BAAC84CE91D140",
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "action-semantic-trace.json": "6131F1B73031EB0098E9FC3348CECC40F2B6AB2D7267071829F6352123A78030",
+        "manny-local-frame-roundtrip.json": "9935102B510115BF408FFA072A3DE35F5F22BADB6681D29A22E42D7F539CD63D",
+        "render.png": "B57EC6B7028CE138074BD284306E87E0B66ED5F78C6A0C94A321155D0C695064"
+      }
+    }
+  },
+  "conclusion": {
+    "hypothesis_supported_or_falsified": "FALSIFIED_AS_REMAINING_CAUSE",
+    "learned": "With the exact component+bind adapter held fixed, bypassing the range mapper delayed pelvis collapse below 80 cm from 0.417 s to 0.783 s and below 20 cm from 0.600 s to 2.450 s, but broadened the failure set and created 300 ms support loss. Safety projection rose from 0.045 degrees mean / 0.955 degrees max to 19.123 degrees mean / 114.889 degrees max. The mapper is strongly protective, though it suppresses part of the transient.",
+    "production_promotion": false,
+    "thresholds_or_protocol_changed": false
+  },
+  "next_experiment": "Establish the authoritative PHC/ProtoMotions actuation contract: trained control frequency, PD stiffness/damping, effort/torque limits, and whether actions feed absolute PD targets. Compare those values against UE Physics Control strength, damping, max torque, and update rate with behavior-neutral diagnostics before changing gains."
+}

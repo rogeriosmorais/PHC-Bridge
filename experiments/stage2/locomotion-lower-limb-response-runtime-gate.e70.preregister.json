@@ -1,0 +1,33 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E70",
+  "title": "Route the default locomotion lower-limb response through the actual runtime state",
+  "baseline_commit": "0f19e223d599d7571907f53fc3560eab0b600b32",
+  "date": "2026-07-16",
+  "observed_failure": {
+    "normal_stability_cost_auc": 83.57994904837547,
+    "zero_actions_stability_cost_auc": 62.317112063324664,
+    "normal_to_zero_ratio": 1.341203716397994,
+    "normal_mean_root_tilt_deg": {
+      "Cruise": 14.6297225634257,
+      "MovingTurn": 28.042778650919598,
+      "Deceleration": 31.034517659081352
+    },
+    "zero_actions_mean_root_tilt_deg": {
+      "Cruise": 1.687855605284373,
+      "MovingTurn": 2.4621851311789618,
+      "Deceleration": 3.5574130879508123
+    },
+    "dead_path": "bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy defaults true, but its runtime application is gated by bDistalLocomotionCompositionModeActive. That mode remains false when the independent distal composition policy is disabled by default, so the intended locomotion thigh/calf damping profile never activates."
+  },
+  "hypothesis": "Activating the already-default-enabled thigh/calf locomotion damping profile whenever RuntimeState is LocomotionActiveShell will reduce moving root tilt without changing action targets, standing behavior, Pose Search, shell speed, or the scripted scenario.",
+  "single_behavior_change": "Define the locomotion response mode as LocomotionActiveShell OR the legacy distal-composition mode, and pass that mode to ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy. No numerical damping scale changes.",
+  "tdd_contract": [
+    "LocomotionActiveShell activates the response mode even when distal composition mode is false.",
+    "BalanceActive_Standing does not activate the response mode when distal composition mode is false.",
+    "The legacy distal-composition mode still activates the response profile in other states.",
+    "All standing and Stage2 focused suites remain green.",
+    "The scripted Normal run preserves path, turn, non-idle Pose Search, and stop/settle behavior."
+  ],
+  "next_if_supported": "Recompute Normal versus ZeroActions. If the ratio remains above 0.9, use the phase decomposition to preregister the next single-variable controller correction."
+}

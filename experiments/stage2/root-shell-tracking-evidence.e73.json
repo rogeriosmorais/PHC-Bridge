@@ -1,0 +1,45 @@
+{
+  "schema_version": "physanim-experiment-result/v1",
+  "experiment_id": "E73",
+  "status": "SUPPORTED_METRIC_GAP_AND_DIRECTIONAL_PRODUCT_DEFECT_REVEALED",
+  "baseline_commit": "21a975e293eab30e46edfbe6a6c6ba78bc7dbee7",
+  "evidence_commit": "9661f262e1a968440d6df65ae958bd0a9b4f141c",
+  "date": "2026-07-16",
+  "change": "Evidence instrumentation only: recorded physical pelvis/root world position, cumulative root path, net root displacement, and actor-local shell tracking error. Policy, Pose Search, gains, shell motion, timing, and transitions were unchanged.",
+  "tests": {
+    "PhysAnim.ProductHarness.DropDispatchSwitch": "PASS",
+    "tracking_zero_at_preserved_offset": "PASS",
+    "tracking_translation_yaw_invariance": "PASS",
+    "tracking_planar_3_4_5_error": "PASS"
+  },
+  "normal": {
+    "run_root": "test-results/scripted-locomotion/e73-root-shell/Normal-1",
+    "shell_path_length_cm": 211.80000288784504,
+    "shell_net_planar_displacement_cm": 206.70083492860172,
+    "physical_root_path_length_cm": 217.01844557139896,
+    "physical_root_net_planar_displacement_cm": 58.75525837376245,
+    "physical_root_overall_delta_xy_cm": [-58.66, -3.26],
+    "final_root_shell_tracking_error_cm": 269.93515185370114,
+    "max_root_shell_tracking_error_cm": 273.19118761488136,
+    "selected_moving_animation": "MF_Unarmed_Walk_Left",
+    "final_runtime_state": "BalanceActive_Standing"
+  },
+  "zero_actions": {
+    "run_root": "test-results/scripted-locomotion/e73-root-shell/ZeroActions-1",
+    "shell_path_length_cm": 211.80000288784504,
+    "shell_net_planar_displacement_cm": 206.70083492860172,
+    "physical_root_path_length_cm": 24.569590785089467,
+    "physical_root_net_planar_displacement_cm": 8.270606868603219,
+    "physical_root_overall_delta_xy_cm": [8.08, 1.77],
+    "final_root_shell_tracking_error_cm": 203.05672836216857,
+    "max_root_shell_tracking_error_cm": 203.9929654019378,
+    "final_runtime_state": "BalanceActive_Standing"
+  },
+  "phase_direction_evidence": {
+    "normal_cruise_shell_delta_xy_cm": [77.33, 0.0],
+    "normal_cruise_root_delta_xy_cm": [-9.88, -1.95],
+    "normal_deceleration_shell_delta_xy_cm": [36.04, 20.81],
+    "normal_deceleration_root_delta_xy_cm": [-47.32, -29.04]
+  },
+  "conclusion": "The v1 cost is invalid for causal locomotion because it omits physical-root tracking and rewards a stationary ZeroActions body. The positive policy is genuinely causal, moving the root far more than ZeroActions, but its direction is wrong: the shell advances while the selected Walk_Left reference drives the physical pelvis backward. Full causal locomotion acceptance therefore requires fixing the Pose Search locomotion frame before protocol v2 is locked."
+}

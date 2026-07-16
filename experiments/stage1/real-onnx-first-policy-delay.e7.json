@@ -1,0 +1,302 @@
+{
+  "schema_version": "physanim-evidence-driven-investigation/v1",
+  "experiment_id": "real-onnx-first-policy-delay-e7",
+  "recorded_utc": "2026-07-14T19:14:22.019Z",
+  "experiment_type": "test-only-runtime-override-ab",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "NONE",
+  "hypothesis": "The E5 startup-mode split is caused by whether first policy inference samples Manny before or after one fixed skeletal and physics pose-propagation tick.",
+  "supporting_evidence_before_experiment": {
+    "source_experiments": [
+      "experiments/stage1/real-onnx-preintervention-determinism.e5.json",
+      "experiments/stage1/real-onnx-policy-input-provenance.e6.json"
+    ],
+    "known_mode_a_first_policy_input_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+    "known_mode_b_first_policy_input_sha256": "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3",
+    "mode_a_first_inference_world_time_seconds": 0.03333333507180214,
+    "mode_a_first_inference_policy_tick": 1,
+    "mode_a_pose_search_animation": "MM_Idle",
+    "mode_a_pose_search_selected_time_seconds": 5.433333396911621,
+    "observed_preintervention_differences": {
+      "self_observation_max_abs": 0.002320558,
+      "mimic_target_max_abs": 0.002570421,
+      "terrain_max_abs": 0.000044107,
+      "first_action_max_abs": 0.008536816
+    }
+  },
+  "competing_explanations": [
+    "PoseSearch chooses a different startup phase independently of policy timing.",
+    "Asynchronous Chaos or skeletal initialization is not controlled by delaying policy evaluation.",
+    "Tensor-buffer ownership changes packed input after otherwise identical pre-flattening sources."
+  ],
+  "single_changed_variable": {
+    "name": "experimental_first_policy_delay_ticks",
+    "baseline_value": 0,
+    "experimental_value": 1,
+    "build_script_switch": "-ExperimentalFirstPolicyDelayTicks",
+    "runtime_switch": "-PhysAnimExperimentalFirstPolicyDelayTicks",
+    "compile_scope": "WITH_DEV_AUTOMATION_TESTS",
+    "production_default_changed": false,
+    "activation_contract_changed": false,
+    "production_serialization_contract_changed": false,
+    "acceptance_thresholds_changed": false
+  },
+  "expected_if_hypothesis_correct": "Delay 1 reproduces known Mode B first-input hash 723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3 and the provenance trace identifies the earliest changed source.",
+  "falsification_observation": "Delay 1 does not reproduce Mode B and instead retains Mode A or creates a different first-input state.",
+  "locked_judges": {
+    "protocol": "product-gates/standing-plant-ladder.v2.json",
+    "protocol_version": 2,
+    "protocol_status": "LOCKED",
+    "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+    "evaluator": "scripts/evaluate_standing_plant.py",
+    "automation_test": "PhysAnim.Development.StandingPlant.RealOnnxPolicy",
+    "variant": "RealOnnxPolicy",
+    "fixed_delta_seconds": 0.016666666666666666,
+    "policy_control_interval_seconds": 0.03333333333333333,
+    "capture_window_seconds": 10.0,
+    "perturbation": "none_for_standing_plant_layer",
+    "deterministic_seed": "unchanged_harness_default_no_override",
+    "initial_pose": "unchanged_standing_plant_fixture",
+    "model_path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+    "model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+    "acceptance_threshold_changes": "none",
+    "primary_metrics": [
+      "exact first-policy input snapshot hash and known-mode identity",
+      "exact active-standing input snapshot hash",
+      "exact action-semantic trace hash",
+      "exact physics and policy stream hashes",
+      "provenance configuration, consumption, source values, and source deltas",
+      "locked evaluator status and failed-criteria set",
+      "target readback match ratio"
+    ]
+  },
+  "implementation": {
+    "orientation": {
+      "graphify_result": "The graph query returned unrelated generic Component nodes and was unusable for the scheduling path.",
+      "serena_result": "TickComponent calls TickRuntimeStateMachine before TickPolicyAndUpdateMetrics; the latter owns the fixed-rate accumulator, PoseSearch query, observation construction, NNE inference, action conditioning, and target dispatch.",
+      "serena_references_checked": true
+    },
+    "instrumentation_commit": "2dc1dfae1126d0567b8dd7761133efbb0bdd9b22",
+    "instrumentation_subject": "Instrument first policy delay experiment",
+    "behavior_commit": "817a96a4714e2af9018b14924c3847acfa11a729",
+    "behavior_subject": "Add test-only first policy delay gate",
+    "runtime_source_commit": "817a96a4714e2af9018b14924c3847acfa11a729",
+    "source_tree_dirty_at_authoritative_runtime": false,
+    "behavior": "When an immediate policy update is due, RealOnnxPolicy inference is enabled, and the configured delay is not exhausted, consume that due update without querying PoseSearch, building observations, running NNE, conditioning actions, or dispatching a new target.",
+    "configuration_publication": "Configured and consumed delay ticks were added only to the development provenance artifact for this experiment.",
+    "tdd": {
+      "red_parser_contract": "Compilation failed because bounded delay getters and diagnostics did not exist.",
+      "red_behavior_contract": "Compilation failed because the delay-consumption gate did not exist.",
+      "green_tests": [
+        "PhysAnim.ProductHarness.DropDispatchSwitch",
+        "PhysAnim.ProductHarness.PolicyInputProvenancePublicationContract"
+      ],
+      "contract_scope": "default zero, bounded nonnegative parsing, reset-on-parse, no consumption when update is not due, inference is disabled, or variant is not RealOnnxPolicy, exact bounded consumption, resumption after exhaustion, and diagnostic publication"
+    },
+    "full_editor_build": "PASS",
+    "serena_diagnostics_affected_cpp_and_headers": "PASS_NO_DIAGNOSTICS",
+    "graphify_update_before_runtime": "PASS_6353_NODES_8542_EDGES"
+  },
+  "excluded_non_authoritative_attempts": {
+    "artifact_root": "test-results/adapter-first-policy-delay-e7",
+    "status": "INVALID_METADATA_NOT_USED_FOR_FORMAL_AB",
+    "reason": "The source_commit manifest value shared the correct short prefix but was not an actual full Git object. Both arms were rerun from the same binary with the verified full SHA.",
+    "diagnostic_only_observation": "The invalid-metadata delay-1 run had the same first delayed positions and rotations as the authoritative delay-1 run but zero body velocities, whereas the authoritative run published nonzero startup velocities. This is not a behavioral verdict."
+  },
+  "baseline": {
+    "run_id": "RealOnnxPolicy-first-policy-delay-e7-baseline",
+    "artifact_root": "test-results/adapter-first-policy-delay-e7-authoritative/RealOnnxPolicy-first-policy-delay-e7-baseline",
+    "source_commit": "817a96a4714e2af9018b14924c3847acfa11a729",
+    "configuration": "Locked RealOnnxPolicy standing-plant v2 configuration; 1/60 s fixed step; 10 s; unchanged default seed, initial pose, no perturbation, action-semantic trace on, provenance trace on, experimental delay 0.",
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "target_readback_match_ratio": 1.0,
+    "provenance": {
+      "valid": true,
+      "configured_delay_ticks": 0,
+      "consumed_delay_ticks": 0,
+      "runtime_state": "Standing_Preparation",
+      "world_time_seconds": 0.03333333507180214,
+      "policy_control_tick": 1,
+      "pose_search_animation": "MM_Idle",
+      "pose_search_selected_time_seconds": 5.433333396911621,
+      "pose_search_mirrored": false,
+      "self_observation_ground_height_m": 2.1000001430511475
+    },
+    "sha256": {
+      "first_policy_input_snapshot": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_policy_input_snapshot": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+      "policy_input_provenance": "C7476892790C8D590BBA8EAD6DFA27ACED26E135416126418104CDDFC39BE7D5",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "manifest": "AA0D925093EECDDBB653708CEA4E65C4F53DE3D7BA187758BEDD9249F659D9AE",
+      "evaluation": "50EBC37430444EF1C04DA6EDCE192C057E070F73BDD0222ACC79551D7166E667",
+      "render": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C"
+    },
+    "key_metrics": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.986961,
+      "minimum_pelvis_height_ratio": 0.153366,
+      "maximum_root_tilt_deg": 105.401276,
+      "maximum_root_linear_speed_cm_per_sec": 818.946884,
+      "maximum_root_angular_speed_deg_per_sec": 558.735126,
+      "maximum_body_linear_speed_cm_per_sec": 1119.794147,
+      "maximum_body_angular_speed_deg_per_sec": 1742.669912,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "first_action_l2": 1.000538419457652
+    }
+  },
+  "experimental": {
+    "run_id": "RealOnnxPolicy-first-policy-delay-e7-delay1",
+    "artifact_root": "test-results/adapter-first-policy-delay-e7-authoritative/RealOnnxPolicy-first-policy-delay-e7-delay1",
+    "source_commit": "817a96a4714e2af9018b14924c3847acfa11a729",
+    "configuration": "Identical binary, model, protocol, seed, pose, fixed step, capture window, evaluator, action trace, and provenance trace; only experimental delay changed from 0 to 1.",
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "target_readback_match_ratio": 1.0,
+    "provenance": {
+      "valid": true,
+      "configured_delay_ticks": 1,
+      "consumed_delay_ticks": 1,
+      "runtime_state": "Standing_FullSimulationActivation",
+      "world_time_seconds": 0.05000000260770321,
+      "policy_control_tick": 1,
+      "pose_search_animation": "MM_Idle",
+      "pose_search_selected_time_seconds": 5.433333396911621,
+      "pose_search_mirrored": false,
+      "self_observation_ground_height_m": 2.0999999046325684
+    },
+    "sha256": {
+      "first_policy_input_snapshot": "CA62E6D543A73A887FC1153FE2C528E4E4845696211C2AA9AB13EF305556C723",
+      "active_standing_policy_input_snapshot": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+      "policy_input_provenance": "DAA6AD89282307EF1C450E9AF7949B2E56B676C9F6E4553570472B74DF443193",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "manifest": "73B4A3B72D79CF30D324CBF3862E3D02C96DF978931F677112E8E96CE7169A7C",
+      "evaluation": "7B5C836E1F85A5999847ABD8DC2A5DB10E510BE5963E90D332E7DB892D3AA127",
+      "render": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C"
+    },
+    "key_metrics": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.986961,
+      "minimum_pelvis_height_ratio": 0.153366,
+      "maximum_root_tilt_deg": 105.401276,
+      "maximum_root_linear_speed_cm_per_sec": 818.946884,
+      "maximum_root_angular_speed_deg_per_sec": 558.735126,
+      "maximum_body_linear_speed_cm_per_sec": 1119.794147,
+      "maximum_body_angular_speed_deg_per_sec": 1742.669912,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "first_action_l2": 1.041268731315349
+    }
+  },
+  "comparison": {
+    "known_mode_b_reproduced": false,
+    "experimental_first_input_is_new_mode": true,
+    "baseline_vs_experimental_first_input": {
+      "self_observation": {
+        "count": 358,
+        "maximum_absolute_difference": 0.12776529788970947,
+        "rms_difference": 0.024260342178293065
+      },
+      "mimic_target_poses": {
+        "count": 6495,
+        "maximum_absolute_difference": 0.002574145793914795,
+        "rms_difference": 0.00010855130503737201
+      },
+      "terrain": {
+        "count": 256,
+        "maximum_absolute_difference": 0.00004410743713378906,
+        "rms_difference": 0.00004410743713378906
+      },
+      "actions": {
+        "count": 69,
+        "maximum_absolute_difference": 0.06067025661468506,
+        "rms_difference": 0.016929641970880635
+      }
+    },
+    "experimental_vs_known_mode_b": {
+      "self_observation_max_abs": 0.12776529788970947,
+      "mimic_target_max_abs": 0.005144566297531128,
+      "terrain_max_abs": 0.00008821487426757812,
+      "action_max_abs": 0.0692070722579956
+    },
+    "source_localization": {
+      "owner_actor_world_transform_max_abs": 0.0,
+      "mesh_world_transform_max_abs": 0.0,
+      "root_bone_world_transform_max_abs": 0.011248588562011719,
+      "mimic_reference_world_root_max_abs": 0.0,
+      "mimic_reference_data_root_max_abs": 0.0,
+      "canonical_body_position_max_abs_m": 0.000819814315804912,
+      "canonical_body_rotation_component_max_abs": 0.0012123278186803865,
+      "canonical_body_linear_velocity_max_abs_m_per_sec": 0.0502066163427242,
+      "canonical_body_angular_velocity_max_abs_rad_per_sec": 0.14550459384918213,
+      "manny_future_pose_max_abs": 0.0,
+      "canonical_future_pose_max_abs": 0.0,
+      "raw_terrain_ground_height_max_abs_m": 0.0,
+      "previous_action_max_abs": 0.0,
+      "summary": "The changed pre-flattening source is the live root/body sample. PoseSearch phase, mimic reference frames, future poses, raw terrain heights, and previous actions are identical."
+    },
+    "timing_direction_evidence": {
+      "mimic_target_delta_correlation_delay1_vs_historical_mode_b": -0.9999967423659714,
+      "mimic_target_mode_b_over_delay1_scale": -1.000218399420529,
+      "terrain_delta_correlation_delay1_vs_historical_mode_b": -1.0,
+      "terrain_mode_b_over_delay1_scale": -1.0,
+      "interpretation": "For timing-sensitive pose and terrain terms, delay +1 and historical Mode B lie on opposite sides of Mode A. This is evidence for an earlier-sample hypothesis, not support for the rejected delay-later intervention."
+    },
+    "downstream_equivalence": {
+      "active_standing_snapshot_byte_identical": true,
+      "action_semantic_trace_byte_identical": true,
+      "physics_stream_byte_identical": true,
+      "policy_stream_byte_identical": true,
+      "render_byte_identical": true,
+      "failed_criteria_identical": true,
+      "target_readback_match_ratio_identical": true
+    }
+  },
+  "cleanup": {
+    "behavior_revert_commit": "5e121626e463e68603d3443dd099ff1c19a97efa",
+    "configuration_and_instrumentation_revert_commit": "b8632948453776c88fa9b5846d8f2e45686268cb",
+    "rejected_runtime_override_present_at_current_head": false,
+    "retained_diagnostics": "The general behavior-neutral first-policy provenance trace from E6 remains.",
+    "post_cleanup_tests": [
+      "PhysAnim.ProductHarness.DropDispatchSwitch PASS",
+      "PhysAnim.ProductHarness.PolicyInputProvenancePublicationContract PASS"
+    ],
+    "post_cleanup_full_editor_build": "PASS",
+    "post_cleanup_serena_diagnostics": "PASS_NO_DIAGNOSTICS",
+    "post_cleanup_graphify_update": "PASS_6351_NODES_8538_EDGES"
+  },
+  "conclusion": {
+    "hypothesis_status": "FALSIFIED",
+    "experiment_status": "VALID_DEVELOPMENT_AB_FAIL",
+    "summary": "A one-fixed-tick later first inference produced a new input hash, not known Mode B. The first source/action changed, but every active-standing, semantic, physics, policy, render, evaluator-failure, and readback result was identical to baseline. Therefore a later one-tick sample neither reproduces the E5 startup mode nor changes standing behavior.",
+    "what_was_learned": "The earliest timing-sensitive source is the live root/body sample, not PoseSearch phase, mimic reference frames, future poses, raw terrain heights, or previous actions. Historical Mode B's mimic and terrain deltas are almost exact opposites of delay +1, selecting an earlier-sample chronology hypothesis. Startup velocity publication can also vary at the delayed capture boundary, so the next investigation must observe chronology rather than immediately alter behavior.",
+    "promotion_decision": "REJECTED_AND_REMOVED",
+    "causal_standing_status": "NOT_PROVEN"
+  },
+  "next_highest_information_experiment": {
+    "status": "SELECTED_NOT_RUN",
+    "name": "Observation-only startup chronology trace",
+    "hypothesis": "Historical Mode B is the live body state from one fixed tick earlier than Mode A, and startup velocity publication timing distinguishes otherwise similar first-input states.",
+    "single_variable": "No behavior variable initially; add only an explicit development trace that samples the existing startup chronology before and after the runtime-state-machine update on each fixed tick through first inference.",
+    "instrumentation": "Capture world time, runtime state before and after TickRuntimeStateMachine, policy accumulator/due state, live root and canonical body position/rotation/linear/angular velocity, PoseSearch identity/time, self ground, and terrain root without running extra inference or changing dispatch.",
+    "expected_if_correct": "One existing earlier chronology sample reconstructs Mode B's self, mimic, and terrain inputs or matches their signed deltas from Mode A, while the current Mode A and +1 samples establish the adjacent timeline.",
+    "falsifier": "No observed earlier startup sample matches Mode B's packed sections or signed deltas; investigation then moves to body-velocity ownership or tensor assembly rather than policy timing.",
+    "locked_metrics": "Exact known first-input hashes, per-section max/RMS and signed correlation, chronology source hashes and deltas, existing active-standing/physics/policy hashes, locked evaluator failure set, and readback ratio; unchanged binary behavior, protocol, and thresholds."
+  }
+}

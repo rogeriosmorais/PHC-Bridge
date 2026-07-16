@@ -935,6 +935,11 @@ bool UPhysAnimComponent::ActivateRuntimePhysicsControl(FString& OutError)
 		return false;
 	}
 
+	// Controls are created before targets can be addressed. Keep them disabled until
+	// ActivateBridgeFromReadyState seeds every explicit parent-relative target and then
+	// publishes runtime tuning, which is the sole enable point for this activation.
+	PhysicsControl->SetControlsInSetEnabled(TEXT("All"), false);
+
 	if (!ValidateRuntimePhysicsControl(OutError))
 	{
 		return false;
@@ -1046,23 +1051,12 @@ void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilization
 			{
 				OriginalCharacterMovementMode = CharacterMovement->MovementMode;
 				OriginalCharacterCustomMovementMode = CharacterMovement->CustomMovementMode;
+				bOriginalCharacterMovementActive = CharacterMovement->IsActive();
 				bOriginalCharacterMovementTickEnabled = CharacterMovement->IsComponentTickEnabled();
 				bHasSavedCharacterMovementState = true;
 			}
 
-			if (!bPreserveGameplayShell)
-			{
-				CharacterMovement->DisableMovement();
-				CharacterMovement->SetComponentTickEnabled(false);
-			}
-			else
-			{
-				CharacterMovement->SetComponentTickEnabled(true);
-				if (CharacterMovement->MovementMode == MOVE_None)
-				{
-					CharacterMovement->SetMovementMode(MOVE_Walking);
-				}
-			}
+			ApplyCharacterMovementBridgeOwnership(CharacterMovement, bPreserveGameplayShell);
 		}
 	}
 
@@ -1546,6 +1540,7 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 		{
 			if (bHasSavedCharacterMovementState)
 			{
+				CharacterMovement->SetActive(bOriginalCharacterMovementActive, true);
 				CharacterMovement->SetComponentTickEnabled(bOriginalCharacterMovementTickEnabled);
 				CharacterMovement->SetMovementMode(static_cast<EMovementMode>(OriginalCharacterMovementMode), OriginalCharacterCustomMovementMode);
 				bHasSavedCharacterMovementState = false;
@@ -1927,7 +1922,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		ControlMultiplier.AngularExtraDampingMultiplier =
 			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale *
 			BalanceReadyTransition.GetTransitionExtraDampingMultiplier(BoneName, EffectiveSettings);
-
 		if (bHipQuarantineActiveThisFrame &&
 			!bPhase2RootOnGuardWindow &&
 			(BoneName == "thigh_l" || BoneName == "thigh_r"))
@@ -2161,7 +2155,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	}
 
 	const bool bUseAuthoritativePerBoneBodyModifierSync =
-		ShouldUseAuthoritativePerBoneBodyModifierSync(RuntimeState, BalanceReadyTransition.IsDistalKinematicAccepted());
+		ShouldUseAuthoritativePerBoneBodyModifierSync(RuntimeState, 
+			BalanceReadyTransition.IsDistalKinematicAccepted() || 
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare && EffectiveSettings.bPhase1DistalKinematicExperiment));
 	if (bUseAuthoritativePerBoneBodyModifierSync)
 	{
 		static bool bLoggedAuthoritativeWrite = false;
@@ -2183,6 +2179,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			ShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(RuntimeState);
 		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 		{
+			if (!IsStage1() && BalanceTransitionSets::IsUpperBody(BoneName))
+			{
+				continue;
+			}
+
 			// Skip simulated carry-through bones during entry/settle so the later per-bone
 			// sync remains the first live movement-type write they see this tick.
 			if ((bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
@@ -2246,7 +2247,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
 				RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny) &&
-			BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, EffectiveSettings);
+			BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, EffectiveSettings) &&
+			(IsStage1() || !BalanceTransitionSets::IsUpperBody(BoneName));
 		const bool bTransitionOwnsRootOnThisTick =
 			bIsRootBodyModifier &&
 			bPhase2RootOnGuardWindow &&
@@ -2349,9 +2351,19 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			else
 			{
 				// Upper body (Groups 2, 3, 4)
-				BodyModifierMovementType = EPhysicsMovementType::Kinematic;
-				BodyModifierCollisionType = ECollisionEnabled::NoCollision;
-				BodyModifierPhysicsBlendWeight = 0.0f;
+				if (IsStage1())
+				{
+					BodyModifierMovementType = EPhysicsMovementType::Kinematic;
+					BodyModifierCollisionType = ECollisionEnabled::NoCollision;
+					BodyModifierPhysicsBlendWeight = 0.0f;
+				}
+				else
+				{
+					// If Stage 1 is stripped, upper body simulates
+					BodyModifierMovementType = EPhysicsMovementType::Simulated;
+					BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
+					BodyModifierPhysicsBlendWeight = 1.0f;
+				}
 			}
 		}
 		if (bPhase2RootAuthorityQuarantined && !bTransitionOwnsRootOnThisTick && !bLastAppliedPresentationRootSimulationEnabled)

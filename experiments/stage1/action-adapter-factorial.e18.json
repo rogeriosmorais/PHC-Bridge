@@ -1,0 +1,286 @@
+{
+  "schema_version": "physanim-investigation-experiment/v1",
+  "experiment_id": "action-adapter-factorial-e18",
+  "recorded_utc": "2026-07-15T15:43:52.943670+00:00",
+  "status": "VALID",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "FAIL",
+  "preregistration": {
+    "path": "experiments/stage1/action-adapter-factorial.e18.preregister.json",
+    "commit": "bf3229d3880aff3912dc371e5b85f3cd48d37300"
+  },
+  "behavior_commit": "b582421aba2891a7aa9a9627ad28be09e2bf546d",
+  "evaluator_fix_commit": "a4db75e10e91c07215f27cef97e17ac0c9ee9429",
+  "validation": {
+    "focused_unreal_contract": "PASS",
+    "focused_python_tests": "28 PASS before runtime; 4 PASS after CLI fix",
+    "serena_diagnostics": "CLEAN on affected C++ files",
+    "same_binary_all_arms": true,
+    "source_tree_dirty": false
+  },
+  "semantic_evaluation": {
+    "arms": {
+      "A_world_captured": "F:\\NewEngine-AgentB\\test-results\\action-axis-frame\\e18-factorial\\A_world_captured",
+      "B_component_captured": "F:\\NewEngine-AgentB\\test-results\\action-axis-frame\\e18-factorial\\B_component_captured",
+      "C_world_bind": "F:\\NewEngine-AgentB\\test-results\\action-axis-frame\\e18-factorial\\C_world_bind",
+      "D_component_bind": "F:\\NewEngine-AgentB\\test-results\\action-axis-frame\\e18-factorial\\D_component_bind"
+    },
+    "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+    "checks": {
+      "A_has_identity_residual": true,
+      "A_has_world_axis_excess": true,
+      "B_preserves_captured_neutral_identity_residual": true,
+      "B_removes_nonidentity_excess": true,
+      "C_removes_identity_residual": true,
+      "C_retains_world_axis_excess": true,
+      "D_is_exact_inverse": true,
+      "bind_neutral_arms_use_bind": true,
+      "captured_neutral_arms_are_nonbind": true
+    },
+    "first_policy_input_exact": true,
+    "first_policy_output_exact": true,
+    "hypothesis_verdict": "SUPPORTED",
+    "metrics": {
+      "A_world_captured": {
+        "maximum_actual_error_degrees": 106.60165199918953,
+        "maximum_actual_error_minus_identity_residual_degrees": 91.36411579005686,
+        "maximum_identity_error_degrees": 35.96254933170872,
+        "maximum_policy_neutral_vs_bind_degrees": 35.962549331708686,
+        "maximum_probe_error_degrees": 47.155155860096905,
+        "maximum_probe_error_minus_identity_residual_degrees": 14.117300973349685
+      },
+      "B_component_captured": {
+        "maximum_actual_error_degrees": 35.96254933170872,
+        "maximum_actual_error_minus_identity_residual_degrees": 1.3892775818646896e-11,
+        "maximum_identity_error_degrees": 35.96254933170872,
+        "maximum_policy_neutral_vs_bind_degrees": 35.962549331708686,
+        "maximum_probe_error_degrees": 35.96254933170872,
+        "maximum_probe_error_minus_identity_residual_degrees": 2.7785551637293793e-11
+      },
+      "C_world_bind": {
+        "maximum_actual_error_degrees": 104.01568025870979,
+        "maximum_actual_error_minus_identity_residual_degrees": 104.01568025870979,
+        "maximum_identity_error_degrees": 0.0,
+        "maximum_policy_neutral_vs_bind_degrees": 0.0,
+        "maximum_probe_error_degrees": 14.133148778523175,
+        "maximum_probe_error_minus_identity_residual_degrees": 14.133148778523175
+      },
+      "D_component_bind": {
+        "maximum_actual_error_degrees": 0.0,
+        "maximum_actual_error_minus_identity_residual_degrees": 0.0,
+        "maximum_identity_error_degrees": 0.0,
+        "maximum_policy_neutral_vs_bind_degrees": 0.0,
+        "maximum_probe_error_degrees": 0.0,
+        "maximum_probe_error_minus_identity_residual_degrees": 0.0
+      }
+    },
+    "product_success": false,
+    "schema_version": "physanim-action-adapter-factorial-evaluation/v1",
+    "status": "VALID",
+    "target_readback_ratios": {
+      "A_world_captured": 1.0,
+      "B_component_captured": 1.0,
+      "C_world_bind": 1.0,
+      "D_component_bind": 1.0
+    },
+    "tolerance_degrees": 0.001
+  },
+  "semantic_evaluation_sha256": "BFCC9FB3CDA031A2EF04EDD88FEA4D4F9D204C2B19E6FF5928F284E94599FCC0",
+  "arms": {
+    "A_world_captured": {
+      "artifact_root": "test-results/action-axis-frame/e18-factorial/A_world_captured",
+      "evaluation": {
+        "failed_criteria": [
+          "body_linear_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\action-axis-frame\\e18-factorial\\A_world_captured\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-action-adapter-e18-A_world_captured",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "minimum_pelvis_height_ratio": 0.15336580018044577,
+        "maximum_root_tilt_deg": 105.40127563476562,
+        "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+        "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+        "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+        "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+        "maximum_support_gap_ms": 0,
+        "pelvis_below_80_cm_sec": 0.2666666805744171,
+        "target_readback_match_ratio": 1.0,
+        "constraint_range_mapping_delta_deg_mean": 19.00889101482573,
+        "constraint_range_mapping_delta_deg_max": 72.82405090332031,
+        "constraint_projection_delta_deg_mean": 0.6899424795556548,
+        "constraint_projection_delta_deg_max": 8.858796119689941
+      },
+      "sha256": {
+        "manifest.json": "3C49E29166CCB1B1C1329197BB1BC5B56CB3D1FC393719897698A247001AD37E",
+        "evaluation.json": "E1997A10B11EB48FC70C6AFB767B9A6F9BF12C22BAFC96FB8A0C1889A814EE74",
+        "physics.jsonl": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+        "policy.jsonl": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "active-standing-policy-input-snapshot.json": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+        "action-semantic-trace.json": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+        "manny-local-frame-roundtrip.json": "78C43AF605B5952D4E321396EF51B6B5EA0DEA84AB41E861004984A45AA71BD0",
+        "render.png": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C"
+      }
+    },
+    "B_component_captured": {
+      "artifact_root": "test-results/action-axis-frame/e18-factorial/B_component_captured",
+      "evaluation": {
+        "failed_criteria": [
+          "root_angular_speed",
+          "body_linear_speed",
+          "body_angular_speed",
+          "pelvis_height",
+          "root_tilt",
+          "support_gap"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\action-axis-frame\\e18-factorial\\B_component_captured\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-action-adapter-e18-B_component_captured",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "minimum_pelvis_height_ratio": 0.15773154655174942,
+        "maximum_root_tilt_deg": 119.27613067626953,
+        "maximum_root_linear_speed_cm_per_sec": 1125.2602811118936,
+        "maximum_root_angular_speed_deg_per_sec": 1226.4575596554985,
+        "maximum_body_linear_speed_cm_per_sec": 1761.481564281443,
+        "maximum_body_angular_speed_deg_per_sec": 4382.048416648814,
+        "maximum_support_gap_ms": 150,
+        "pelvis_below_80_cm_sec": 0.46666669100522995,
+        "target_readback_match_ratio": 1.0,
+        "constraint_range_mapping_delta_deg_mean": 19.21895039833128,
+        "constraint_range_mapping_delta_deg_max": 57.0523681640625,
+        "constraint_projection_delta_deg_mean": 0.5830487579046132,
+        "constraint_projection_delta_deg_max": 7.805784702301025
+      },
+      "sha256": {
+        "manifest.json": "FEA7EEE3BC6DF4CE4200EDD7D06AD8735D00B5C961B779CDBEFC2707C4A5AE7B",
+        "evaluation.json": "877A9BEEECBA994725688AF05CA4A574570FC0D44EC0BDDDE25B3CAFB3A5D150",
+        "physics.jsonl": "A54962775AE8EAD86A2EC3F03056A4AE6BFACF17CF1E0E82CBFAB0B4B257D591",
+        "policy.jsonl": "72F14A5D172527955DEDB46A3C991EC294BB26118D0D35E72EE6DAD8B2C04003",
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "active-standing-policy-input-snapshot.json": "E556E0F79C07D1FF92D360A042623F134E0A79DFE5CF8D735394AFA4F45C616D",
+        "action-semantic-trace.json": "4A681243D0F0493B1A9176D10EE0D1D118DAFDF22395423859BC4A3C2B67D813",
+        "manny-local-frame-roundtrip.json": "321AFEB940B19BA2D5D988961B75490CAF94050BE2FC51D9C06C79CE90F52E08",
+        "render.png": "6C0DAE250AF263BC6753DEAED76417AE51C4DF3BC68F3D61E276193CB05AF113"
+      }
+    },
+    "C_world_bind": {
+      "artifact_root": "test-results/action-axis-frame/e18-factorial/C_world_bind",
+      "evaluation": {
+        "failed_criteria": [
+          "root_linear_speed",
+          "root_angular_speed",
+          "body_linear_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\action-axis-frame\\e18-factorial\\C_world_bind\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-action-adapter-e18-C_world_bind",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "minimum_pelvis_height_ratio": 0.15286204190235061,
+        "maximum_root_tilt_deg": 113.01345825195312,
+        "maximum_root_linear_speed_cm_per_sec": 1915.9772949019878,
+        "maximum_root_angular_speed_deg_per_sec": 951.186466954568,
+        "maximum_body_linear_speed_cm_per_sec": 2670.353359925376,
+        "maximum_body_angular_speed_deg_per_sec": 3871.5717731729687,
+        "maximum_support_gap_ms": 66.66666666666667,
+        "pelvis_below_80_cm_sec": 0.2166666779667139,
+        "target_readback_match_ratio": 1.0,
+        "constraint_range_mapping_delta_deg_mean": 19.399880649498215,
+        "constraint_range_mapping_delta_deg_max": 76.8137435913086,
+        "constraint_projection_delta_deg_mean": 0.3082443645009681,
+        "constraint_projection_delta_deg_max": 3.560391664505005
+      },
+      "sha256": {
+        "manifest.json": "BCEB705F747A9A75B983F722D639C081813BA248E28C99894A576013C033D019",
+        "evaluation.json": "0FF6A4141828ECC1A6138E3EE47FB81EAFB711860C876311E51F904AB35A83C8",
+        "physics.jsonl": "A780611225B05BE89C0023D43731C7A0F44232A402D0CA971E0A0247AE868F3F",
+        "policy.jsonl": "41A8EA683FFB4E5D625313C6ECCDDAEA0AD86D8BFAC39C98220078A51533020B",
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "active-standing-policy-input-snapshot.json": "4079F1D96C4A6BE200C01725937AEBB2853A63DFF3024919A9569F68DD5C0784",
+        "action-semantic-trace.json": "CEBF99E1EF72543E3F8E307C5D39BF0D0F090271CA1E02BE60C3B9BD8A0FCD6F",
+        "manny-local-frame-roundtrip.json": "4298B5650FBF27B1056C8F67D54726F007F993512D434545CC18715AABEC8471",
+        "render.png": "26BB53A5852444517A7E6BD1C00B9C238FC22C5BCCF5F313316E595F3BA34E96"
+      }
+    },
+    "D_component_bind": {
+      "artifact_root": "test-results/action-axis-frame/e18-factorial/D_component_bind",
+      "evaluation": {
+        "failed_criteria": [
+          "body_linear_speed",
+          "body_angular_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\action-axis-frame\\e18-factorial\\D_component_bind\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-action-adapter-e18-D_component_bind",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "minimum_pelvis_height_ratio": 0.15755675785486445,
+        "maximum_root_tilt_deg": 111.7818603515625,
+        "maximum_root_linear_speed_cm_per_sec": 994.9657366660241,
+        "maximum_root_angular_speed_deg_per_sec": 647.244369565149,
+        "maximum_body_linear_speed_cm_per_sec": 1555.0421822027376,
+        "maximum_body_angular_speed_deg_per_sec": 5752.9134001422,
+        "maximum_support_gap_ms": 0,
+        "pelvis_below_80_cm_sec": 0.41666668839752674,
+        "target_readback_match_ratio": 1.0,
+        "constraint_range_mapping_delta_deg_mean": 19.941009067353747,
+        "constraint_range_mapping_delta_deg_max": 58.18128204345703,
+        "constraint_projection_delta_deg_mean": 0.04549748695778059,
+        "constraint_projection_delta_deg_max": 0.955254077911377
+      },
+      "sha256": {
+        "manifest.json": "12BE9A7EE254C7BD728BD3AE1750AC43B03F9A0F339E548E97408579BFDA4C45",
+        "evaluation.json": "D416CF482CD55666586747C7AD6B5DAE6BF939BDAC7229F5AD2F68AD98D0FEC9",
+        "physics.jsonl": "5C379B60ADBD4BE702EC18BF639ECE676F92FFB5736E376CC6789F3BF81BDE57",
+        "policy.jsonl": "47235A0C0BEBD3B268E07250CC674B90325B2A0D28490113C25BC2549E55BC4A",
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "active-standing-policy-input-snapshot.json": "D5FAB6A0EF3EA470FEFB4530B8C901BE46D76E9120EB78C77C92DC5BEE281D8D",
+        "action-semantic-trace.json": "192A8249AF649D79F1E17490B2BC8B70BE2A08A4AFC408579665584D7DE255D7",
+        "manny-local-frame-roundtrip.json": "D44324D123315794EAFA33E2E4BE713F641092EC85DB53AFCADB4934E0D1A243",
+        "render.png": "F003990277DB931134A30D7A88A3E911CC1209B08F6CE047719996F5DAFA2CAB"
+      }
+    }
+  },
+  "conclusion": {
+    "hypothesis_supported_or_falsified": "SEMANTIC_SUPPORTED_PHYSICAL_SUFFICIENCY_FALSIFIED",
+    "learned": "Component-space parent-bind conjugation plus bind parent-relative neutral makes the action and observation adapters exact inverses: all decisive identity, actual-action, and axis-probe errors are exactly 0 degrees. That exact adapter enters active standing nearly upright and delays pelvis collapse below 80 cm from 0.267 s to 0.417 s, but it still fails the locked standing gate by 0.60 s. Therefore action-adapter mismatch is causal for part of the transient but is not sufficient for standing.",
+    "downstream_candidate": "The unchanged Manny constraint-range mapper still rotates exact pre-range targets by 19.94 degrees on average and up to 58.18 degrees in D, while safety projection is small. This is now the largest measured post-adapter semantic intervention.",
+    "production_promotion": false,
+    "thresholds_or_protocol_changed": false
+  },
+  "next_experiment": "Hold the exact component+bind adapter fixed and bypass only MapProtoPolicyTargetToMannyConstraintRange from the first policy target write, retaining AdaptParentRelativeTarget safety projection, step limiting, gains, timing, and all locked judges. Require exact first-policy snapshot/output and readback 1.0. Judge range-map delta near zero, projection response, time-to-collapse, and full standing metrics."
+}

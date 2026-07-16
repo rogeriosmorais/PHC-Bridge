@@ -1,0 +1,28 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E69",
+  "title": "Retiming the scripted locomotion episode for the restored 160 cm/s shell",
+  "baseline_commit": "3f046f1b17dd49148d09f248ed0d7769b312eb1d",
+  "date": "2026-07-16",
+  "observed_failure": {
+    "pose_search_status": "RESTORED",
+    "non_idle_animation": "MF_Unarmed_Walk_Left",
+    "non_idle_policy_samples": 122,
+    "shell_path_length_cm": 603.80000422894955,
+    "required_path_length_cm": [180.0, 260.0],
+    "cause": "The E60 schedule was authored around the regressed 60 cm/s Stage2 shell. E68 restored 160 cm/s speed coherence, so the unchanged four-second movement integral is now too long."
+  },
+  "hypothesis": "Shortening only the movement phase durations while keeping total episode duration 10 seconds will preserve non-idle Motion Matching, exact 30-degree turning, stop/settle behavior, and produce a 180-260 cm path.",
+  "single_behavior_change": "Change only ResolveScriptedLocomotionStep phase boundaries and the per-step turn rate. New schedule: StandingHold 0.0-1.0s; Acceleration 1.0-1.6s from intent 0.1 to 1.0; Cruise 1.6-2.1s at intent 1.0; MovingTurn 2.1-2.4s at intent 0.8 with total yaw 30 degrees; Deceleration 2.4-3.0s from intent 0.8 to 0.05; Settle 3.0-10.0s. Runtime speed, Pose Search, assets, gains, policy, shell authority, stop transition, and acceptance thresholds remain unchanged.",
+  "predicted_continuous_path_cm": 212.0,
+  "tdd_contract": [
+    "All six scripted phases are observed.",
+    "The phase boundaries match 1.0, 1.6, 2.1, 2.4, and 3.0 seconds.",
+    "The moving-turn phase integrates to exactly 30 degrees at the 30 Hz fixed step.",
+    "The authoritative Normal path is between 180 and 260 cm.",
+    "At least one non-idle animation is selected during Cruise, MovingTurn, or Deceleration without forcing an asset by name.",
+    "Stop returns to BalanceActive_Standing and final shell speed is zero.",
+    "No human input is consumed or synthesized."
+  ],
+  "next_if_supported": "Run Normal and ZeroActions, evaluate the locked causal locomotion cost, then run the complete 3+3+1+1 causal/control bundle with determinism audit."
+}

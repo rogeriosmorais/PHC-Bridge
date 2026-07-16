@@ -1,6 +1,34 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 
+FQuat UPhysAnimComponent::ResolveBridgePoseSearchCurrentFacing(
+	const FQuat& ActorWorldFacing,
+	const FQuat& MeshWorldFacing,
+	bool bHasMesh)
+{
+	return (bHasMesh ? MeshWorldFacing : ActorWorldFacing).GetNormalized();
+}
+
+
+FQuat UPhysAnimComponent::ResolveBridgePoseSearchDesiredFacing(
+	const FQuat& DesiredActorWorldFacing,
+	const FQuat& CurrentActorWorldFacing,
+	const FQuat& CurrentMeshWorldFacing,
+	bool bHasMesh)
+{
+	if (!bHasMesh)
+	{
+		return DesiredActorWorldFacing.GetNormalized();
+	}
+
+	const FQuat ActorToMeshRelativeFacing =
+		(CurrentActorWorldFacing.GetNormalized().Inverse() *
+		 CurrentMeshWorldFacing.GetNormalized()).GetNormalized();
+	return (DesiredActorWorldFacing.GetNormalized() *
+		ActorToMeshRelativeFacing).GetNormalized();
+}
+
+
 void UPhysAnimComponent::GetGravity(FVector& OutGravityAccel)
 {
 	const UWorld* const World = GetWorld();
@@ -13,7 +41,11 @@ void UPhysAnimComponent::GetCurrentState(FVector& OutPosition, FQuat& OutFacing,
 	if (const AActor* const OwnerActor = GetOwner())
 	{
 		OutPosition = OwnerActor->GetActorLocation();
-		OutFacing = OwnerActor->GetActorQuat();
+		const USkeletalMeshComponent* const SkeletalMesh = GetMeshComponent();
+		OutFacing = ResolveBridgePoseSearchCurrentFacing(
+			OwnerActor->GetActorQuat(),
+			SkeletalMesh ? SkeletalMesh->GetComponentQuat() : FQuat::Identity,
+			SkeletalMesh != nullptr);
 	}
 	else
 	{
@@ -21,14 +53,20 @@ void UPhysAnimComponent::GetCurrentState(FVector& OutPosition, FQuat& OutFacing,
 		OutFacing = FQuat::Identity;
 	}
 
-	OutVelocity = BridgeTrajectoryState.AcceptedVelocityCmPerSecond;
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, OutVelocity);
+	BridgePoseSearchQueryVelocityCmPerSecond = OutVelocity;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = OutVelocity;
 	OutVelocity.Z = 0.0f;
 }
 
 
 void UPhysAnimComponent::GetVelocity(FVector& OutVelocity)
 {
-	OutVelocity = BridgeTrajectoryState.AcceptedVelocityCmPerSecond;
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, OutVelocity);
+	BridgePoseSearchQueryVelocityCmPerSecond = OutVelocity;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = OutVelocity;
 	OutVelocity.Z = 0.0f;
 }
 
@@ -44,32 +82,49 @@ void UPhysAnimComponent::Predict(FTransformTrajectory& InOutTrajectory, int32 Nu
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 
 	FVector SimulatedPosition = OwnerActor->GetActorLocation();
-	FQuat SimulatedFacing = OwnerActor->GetActorQuat();
+	const FQuat ActorWorldFacing = OwnerActor->GetActorQuat();
+	const USkeletalMeshComponent* const SkeletalMesh = GetMeshComponent();
+	const FQuat MeshWorldFacing = SkeletalMesh
+		? SkeletalMesh->GetComponentQuat()
+		: FQuat::Identity;
+	FQuat SimulatedFacing = ResolveBridgePoseSearchCurrentFacing(
+		ActorWorldFacing,
+		MeshWorldFacing,
+		SkeletalMesh != nullptr);
 
-	const float IntentMagnitude = BridgeIntentState.IntentMagnitude;
-	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, BridgePoseSearchQueryVelocityCmPerSecond, nullptr);
+	float IntentMagnitude = 0.0f;
+	ResolveBridgePoseSearchQueryVelocity(
+		EffectiveSettings,
+		BridgePoseSearchQueryVelocityCmPerSecond,
+		&IntentMagnitude);
 	BridgeTrajectoryState.QueryVelocityCmPerSecond = BridgePoseSearchQueryVelocityCmPerSecond;
 
-	FVector SimulatedVelocity = BridgeTrajectoryState.AcceptedVelocityCmPerSecond;
+	FVector SimulatedVelocity = BridgePoseSearchQueryVelocityCmPerSecond;
 	SimulatedVelocity.Z = 0.0f;
 
-	const FVector DesiredVelocity = BridgeTrajectoryState.DesiredVelocityCmPerSecond;
+	const FVector DesiredVelocity = BridgePoseSearchQueryVelocityCmPerSecond;
 
-	float DesiredYawDegrees = SimulatedFacing.Rotator().Yaw;
+	float DesiredActorYawDegrees = ActorWorldFacing.Rotator().Yaw;
 	if (BridgeIntentState.bHasDesiredFacing)
 	{
-		DesiredYawDegrees = BridgeIntentState.DesiredFacingYawDegrees;
+		DesiredActorYawDegrees = BridgeIntentState.DesiredFacingYawDegrees;
 	}
 	else if (!DesiredVelocity.IsNearlyZero())
 	{
-		DesiredYawDegrees = DesiredVelocity.Rotation().Yaw;
+		DesiredActorYawDegrees = DesiredVelocity.Rotation().Yaw;
 	}
 	else if (SimulatedVelocity.SizeSquared2D() > KINDA_SMALL_NUMBER)
 	{
-		DesiredYawDegrees = SimulatedVelocity.Rotation().Yaw;
+		DesiredActorYawDegrees = SimulatedVelocity.Rotation().Yaw;
 	}
 
-	const FQuat DesiredFacing = FQuat(FRotator(0.0f, DesiredYawDegrees, 0.0f));
+	const FQuat DesiredActorFacing =
+		FQuat(FRotator(0.0f, DesiredActorYawDegrees, 0.0f));
+	const FQuat DesiredFacing = ResolveBridgePoseSearchDesiredFacing(
+		DesiredActorFacing,
+		ActorWorldFacing,
+		MeshWorldFacing,
+		SkeletalMesh != nullptr);
 
 	const float SafePredictionDt = FMath::Max(SecondsPerPredictionSample, KINDA_SMALL_NUMBER);
 	const float RotationAlphaPerStep = FMath::Clamp(
@@ -139,38 +194,6 @@ void UPhysAnimComponent::UpdateBridgePoseSearchTrajectory(float DeltaTime, const
 		10,
 		0.20f,
 		8);
-
-	const bool bBootstrapLocomotionHistory =
-		BridgeIntentState.IntentMagnitude >= EffectiveSettings.BridgePoseSearchWalkIntentThreshold &&
-		BridgeTrajectoryState.AcceptedVelocityCmPerSecond.Size2D() < EffectiveSettings.BridgePoseSearchSustainAcceptedSpeedThresholdCmPerSecond;
-
-	if (bBootstrapLocomotionHistory)
-	{
-		AActor* const OwnerActor = GetOwner();
-		FVector BootstrapVelocity = BridgeTrajectoryState.QueryVelocityCmPerSecond;
-		if (BootstrapVelocity.IsNearlyZero())
-		{
-			BootstrapVelocity = BridgeTrajectoryState.DesiredVelocityCmPerSecond;
-		}
-		BootstrapVelocity.Z = 0.0f;
-
-		if (OwnerActor && !BootstrapVelocity.IsNearlyZero() && GeneratedTrajectory.Samples.Num() > 0)
-		{
-			const int32 NumHistorySamples = FMath::Min(10, GeneratedTrajectory.Samples.Num() - 1);
-			const int32 CurrentSampleIndex = FMath::Clamp(NumHistorySamples, 0, GeneratedTrajectory.Samples.Num() - 1);
-			const FVector CurrentPosition = OwnerActor->GetActorLocation();
-			const FQuat CurrentFacing = OwnerActor->GetActorQuat();
-			const float HistorySampleIntervalSeconds = 0.04f;
-
-			for (int32 SampleIndex = 0; SampleIndex <= CurrentSampleIndex; ++SampleIndex)
-			{
-				const float HistoryOffsetSeconds = static_cast<float>(CurrentSampleIndex - SampleIndex) * HistorySampleIntervalSeconds;
-				FTransformTrajectorySample& Sample = GeneratedTrajectory.Samples[SampleIndex];
-				Sample.Position = CurrentPosition - (BootstrapVelocity * HistoryOffsetSeconds);
-				Sample.Facing = CurrentFacing;
-			}
-		}
-	}
 
 	BridgeTrajectoryState.QueryTrajectory = GeneratedTrajectory;
 	BridgeTrajectoryState.bInitialized = true;

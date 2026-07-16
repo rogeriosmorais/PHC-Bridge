@@ -1,0 +1,27 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "scaled-delayed-left-proximal-e52",
+  "recorded_utc": "2026-07-16T01:35:00Z",
+  "preregistration_commit": "597d06e3da9227cd1f0b185e6791d961e8d04bdb",
+  "production_baseline_commit": "5b582ad88a6d56881087fc8d22a6777bc888fab8",
+  "status": "VALID",
+  "hypothesis_verdict": "SUPPORTED",
+  "bundle_status": "PASS",
+  "bundle_failed_criteria": [],
+  "region": "LeftProximal",
+  "scale": 0.25,
+  "activation_timing": "after first active-policy cycle",
+  "normal_recovery_auc": [31.10216818946051, 31.10216818946051, 31.10216818946051],
+  "zero_actions_recovery_auc": [39.34945852607651, 39.34945852607651, 39.34945852607651],
+  "normal_to_zero_recovery_auc_ratio": 0.7904090514701594,
+  "normal_repetitions_byte_deterministic": true,
+  "zero_repetitions_byte_deterministic": true,
+  "timing_and_mask_contract_pass": true,
+  "destructive_controls": {
+    "DropControlDispatch": {"failed_criteria": ["target_readback"]},
+    "ForcedSupportLoss": {"failed_criteria": ["support_gap"]}
+  },
+  "authoritative_bundle_artifact": "test-results/causal-standing/e52-scaled-left-proximal/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/scaled-delayed-left-proximal.e52.audit.json",
+  "next": "Promote the delayed left proximal scale 0.25 into production and verify the no-flag bundle."
+}

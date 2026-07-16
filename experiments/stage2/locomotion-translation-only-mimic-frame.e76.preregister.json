@@ -1,0 +1,29 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E76",
+  "title": "Restore the historically working translation-only mimic reference during locomotion",
+  "baseline_commit": "ca7bb24d36ef905afb27208830978aa34a6623f1",
+  "date": "2026-07-16",
+  "regression_commit": "f4b0040",
+  "historical_working_contract": {
+    "source_commit": "147124d",
+    "reference_offset": "selected_world_root_xy - selected_data_root_xy",
+    "current_body_position": "source_xy - reference_offset_xy; source_z - current_ground_height",
+    "current_body_rotation": "unchanged canonical rotation",
+    "current_body_linear_velocity": "unchanged canonical velocity",
+    "current_body_angular_velocity": "unchanged canonical angular velocity"
+  },
+  "current_regressed_contract": "f4b0040 replaced the translation-only reference with a full world-to-animation-data rotation of current positions, rotations, and velocities. E73 shows the policy then drives the physical root opposite the shell while Pose Search selects Walk_Left.",
+  "hypothesis": "During locomotion, rotating live canonical body state into the selected animation-data root frame changes the policy's locomotion semantics. Restoring the historical translation-only reference will preserve working Motion Matching selection while making policy-driven physical root progress follow the shell.",
+  "single_behavior_change": "Only LocomotionActiveShell uses the translation-only mimic current-reference conversion. BalanceActive_Standing and all activation states keep the existing full world-to-data frame conversion. Future pose sampling, Pose Search query, selected assets, shell path, policy model, action decoding, control gains, and scenario schedule are unchanged.",
+  "tdd_contract": [
+    "Selected world/data root positions resolve the exact historical XY offset.",
+    "Translation-only conversion subtracts XY offset and ground height from every body position.",
+    "Translation-only conversion preserves all body rotations, linear velocities, and angular velocities exactly.",
+    "LocomotionActiveShell selects translation-only conversion; BalanceActive_Standing and denied locomotion do not.",
+    "All existing standing, adapter, and locomotion tests remain green.",
+    "The authoritative Normal episode retains non-idle Motion Matching selection, positive route-projected physical-root progress, lower final root-shell tracking error than ZeroActions, full readback, support, and clean stop-to-standing."
+  ],
+  "rejection_rule": "Reject and revert if non-idle selection disappears, route-projected progress is nonpositive, Normal final tracking is not lower than ZeroActions, stop-to-standing fails, or standing behavior changes.",
+  "next_if_supported": "Measure Normal and ZeroActions from the same clean commit, preregister immutable protocol v2 thresholds and score, then run the complete repeated causal bundle."
+}

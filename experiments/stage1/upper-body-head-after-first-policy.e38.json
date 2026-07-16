@@ -1,0 +1,98 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "upper-body-head-after-first-policy-e38",
+  "recorded_utc": "2026-07-15T21:11:00Z",
+  "preregistration_commit": "aec9892b96a226b525fb219d5f39e6f26b2d6a2b",
+  "behavior_commit": "a25b3143baf1f134d0a609eb3162ec44a923f78b",
+  "evidence_source_commit": "fa4b8824656c8dbc6e9f1e2c2ad630fa62900c79",
+  "status": "VALID",
+  "hypothesis_verdict": "PARTIALLY_SUPPORTED",
+  "product_candidate_success": false,
+  "production_success": false,
+  "bundle_status": "PASS",
+  "bundle_failed_criteria": [],
+  "fixture_authority": "PRODUCT_RUN",
+  "protocol_sha256": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+  "model_onnx_sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+  "experimental_command_line_flags": [
+    "-PhysAnimExperimentalCausalStandingUpperBody=HeadAfterFirstPolicy"
+  ],
+  "candidate_action_joint_indices": [0,1,2,3,4,5,6,7,12],
+  "normal_recovery_auc": [
+    29.96550183554574,
+    29.96550183554574,
+    29.798852726731177
+  ],
+  "zero_actions_recovery_auc": [
+    41.14179622283463,
+    41.14179622283463,
+    41.14179622283463
+  ],
+  "normal_median_recovery_auc": 29.96550183554574,
+  "normal_to_zero_recovery_auc_ratio": 0.7283469509509215,
+  "locked_maximum_ratio": 0.8,
+  "normal_absolute_pass_count": 3,
+  "zero_actions_absolute_pass_count": 3,
+  "target_readback_ratio_normal": 1.0,
+  "target_readback_ratio_zero_actions": 1.0,
+  "destructive_controls": {
+    "DropControlDispatch": {
+      "status": "FAIL",
+      "failed_criteria": ["target_readback"],
+      "target_readback_match_ratio": 0.5714285714285714
+    },
+    "ForcedSupportLoss": {
+      "status": "FAIL",
+      "failed_criteria": ["support_gap"],
+      "target_readback_match_ratio": 1.0
+    }
+  },
+  "timing_evidence": {
+    "first_active_conditioned_action_width": 69,
+    "first_active_head_triplet_normal": [[0,0,0],[0,0,0],[0,0,0]],
+    "later_head_nonzero_present_normal": [true,true,true],
+    "first_active_head_triplet_exact_zero_all_bundle_arms": true
+  },
+  "validity": {
+    "source_tree_clean_in_all_manifests": true,
+    "source_commit_matches_all_runs": true,
+    "model_hash_matches_all_runs": true,
+    "locked_protocol_hash_matches": true,
+    "only_intended_experimental_option_present": true,
+    "normal_lower_joints_nonzero_present": true,
+    "normal_joints_8_to_10_exact_zero": true,
+    "normal_neck_exact_zero": true,
+    "normal_later_head_nonzero_present": true,
+    "normal_arms_exact_zero": true,
+    "zero_actions_all_conditioned_scalars_exact_zero": true,
+    "normal_strength_multiplier_transition": [1.0,1.5],
+    "zero_actions_strength_multipliers": [1.0],
+    "normal_repetitions_deterministic": false,
+    "zero_repetitions_deterministic": true
+  },
+  "normal_trajectory_clusters": [
+    {
+      "repetitions": [1,2],
+      "recovery_auc": 29.96550183554574,
+      "policy_input_snapshot_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "policy_sha256": "BB0266301D0D4420D6731381473C90C03F99F1C78C0FA11838C4F7999CF8FAF6",
+      "physics_sha256": "5925A6239DE33BD4EFB40E04328903B17F944DFCC11BF9968E733EBB5F32E832"
+    },
+    {
+      "repetitions": [3],
+      "recovery_auc": 29.798852726731177,
+      "policy_input_snapshot_sha256": "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3",
+      "policy_sha256": "A13A3C5378D0BB2A83DE52C44A312D5AF46716A59687F5FF9D0DBC3D35A38822",
+      "physics_sha256": "E4FA1665630B0125A01545A5D5EF57693C13B41B1CAD041CA22B0C9F915643D3"
+    }
+  ],
+  "causal_findings": [
+    "Head restored only after the first active-policy cycle is recovery-beneficial and passes the complete locked causal bundle at ratio 0.7283469509509215.",
+    "Dedicated evidence proves that the first active conditioned Head triplet is exactly zero and that later active Head behavior is nonzero.",
+    "The alternate trajectory appears in the policy input snapshot before Head is enabled, so delaying Head does not eliminate the upstream startup bifurcation.",
+    "Because exact Normal determinism is a locked promotion requirement, Head cannot yet be promoted into the production default despite its causal benefit."
+  ],
+  "authoritative_bundle_artifact": "test-results/causal-standing/e38-head-after-first-policy/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/upper-body-head-after-first-policy.e38.audit.json",
+  "next": "Keep E33 lower-only production unchanged. Preserve Head-after-first-policy as a proven causal experimental candidate, and continue separately preregistered upper-body restoration with Proto joints 9-10 (Spine and Chest), excluding catastrophic torso joint 8."
+}

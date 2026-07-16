@@ -1,0 +1,12 @@
+{
+  "schema_version":"physanim-experiment-preregistration/v1",
+  "experiment_id":"production-head-after-first-policy-e47",
+  "preregistered_utc":"2026-07-15T23:14:00Z",
+  "production_baseline_commit":"a8ee5efab94f4de43dcba6729137b78cd4d3ab28",
+  "supported_candidate_evidence_commit":"48fa438040199f0682656ce0f6b375a94225434a",
+  "hypothesis":"A production runtime latch that records whether an active-standing policy inference completed before the current inference reproduces E46 with no PhysAnim experimental behavior argument.",
+  "single_variable":"Head joint 12 becomes part of the production mask only when an active-standing policy inference completed before the current inference.",
+  "implementation_contract":["The latch is false after runtime reset.","The first active inference observes false and sets the persistent latch true only after preserving the pre-inference value.","Subsequent active inferences observe true.","Non-active states never restore Head."],
+  "acceptance":{"focused_latch_and_default_mask_contract_passes":true,"bundle_status":"PASS","normal_to_zero_recovery_auc_ratio_max":0.8,"normal_and_zero_byte_deterministic":true,"first_active_head_triplet_exact_zero":true,"later_head_nonzero_present":true,"no_PhysAnimExperimental_arguments":true,"runner_contains_onethread":true,"destructive_controls_fail_only_intended_criteria":true},
+  "decision_rule":{"supported":"Adopt the resulting behavior commit as production baseline and proceed to Neck.","falsified":"Revert production latch/default Head behavior while retaining E46 evidence."}
+}

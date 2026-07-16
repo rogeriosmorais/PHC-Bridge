@@ -1,0 +1,22 @@
+{
+  "checks": {
+    "automation_report_present": true,
+    "automation_success": true,
+    "manifest_identity_matches": true,
+    "manifest_present": true,
+    "required_artifacts_present": true,
+    "source_clean": true
+  },
+  "expected": {
+    "protocol": "F:\\NewEngine-AgentB\\.worktrees\\complete-hardening\\product-gates\\scripted-locomotion.v3.json",
+    "repetition": 1,
+    "source_commit": "68f86ffe8807424313bc2004021c9c28066cdce7",
+    "test": "PhysAnim.Product.ScriptedLocomotion.Normal",
+    "variant": "Normal"
+  },
+  "issues": [],
+  "report_root": "F:\\NewEngine-AgentB\\.worktrees\\complete-hardening\\_tmp\\stage2-completion-runs\\v3-normal-1-68f86ffe\\automation-report",
+  "run_root": "F:\\NewEngine-AgentB\\.worktrees\\complete-hardening\\_tmp\\stage2-completion-runs\\v3-normal-1-68f86ffe",
+  "schema_version": "physanim-ue-automation-validation/v1",
+  "verdict": "PASS"
+}

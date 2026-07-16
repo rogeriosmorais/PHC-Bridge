@@ -1,0 +1,99 @@
+{
+  "schema_version": "physanim-policy-tensor-contract/v1",
+  "status": "IMPLEMENTATION_CONTRACT_WITH_OPEN_PROVENANCE_GAPS",
+  "source_baseline": "409f8971e250212e3d8ccadbee2c675a1b82ee89",
+  "model": {
+    "runtime_inputs": ["self_obs", "mimic_target_poses", "terrain"],
+    "runtime_output": "actions",
+    "export_opset": 17,
+    "authoritative_training_checkpoint_present_in_checkout": false,
+    "confidence": "The tensor shape and current UE construction are proven by source and tests. Exact identity with the checkpoint's original ProtoMotions preprocessing remains unproven because the authoritative training checkout/configuration is incomplete."
+  },
+  "coordinate_systems": {
+    "ue_world": "centimeters, Z-up, X-forward, Y-right, left-handed",
+    "proto_runtime": "meters, Z-up, X-forward, Y-left, right-handed",
+    "polar_vector_conversion": "(x, y, z)_ue -> (x, -y, z)_proto",
+    "axial_vector_conversion": "(x, y, z)_ue -> (-x, y, -z)_proto",
+    "heading": "yaw extracted from canonical Proto root rotation by rotating +X and atan2(y,x)",
+    "heading_local": "inverse root heading rotates positions, linear velocities, angular velocities, and selected rotation representations"
+  },
+  "body_order": {
+    "count": 24,
+    "names": [
+      "Pelvis", "L_Hip", "L_Knee", "L_Ankle", "L_Toe", "R_Hip", "R_Knee", "R_Ankle", "R_Toe",
+      "Torso", "Spine", "Chest", "Neck", "Head", "L_Thorax", "L_Shoulder", "L_Elbow", "L_Wrist",
+      "L_Hand", "R_Thorax", "R_Shoulder", "R_Elbow", "R_Wrist", "R_Hand"
+    ],
+    "manny_mapping": [
+      "pelvis", "thigh_l", "calf_l", "foot_l", "ball_l", "thigh_r", "calf_r", "foot_r", "ball_r",
+      "spine_01", "spine_02", "spine_03", "neck_01", "head", "clavicle_l", "upperarm_l", "lowerarm_l",
+      "hand_l", "hand_l", "clavicle_r", "upperarm_r", "lowerarm_r", "hand_r", "hand_r"
+    ],
+    "confidence": "proven_current_runtime"
+  },
+  "inputs": {
+    "self_obs": {
+      "width": 358,
+      "dtype": "float32",
+      "blocks": [
+        {"name": "root_height", "offset": 0, "width": 1, "semantics": "root_z - ground_height, meters"},
+        {"name": "non_root_positions", "offset": 1, "width": 69, "semantics": "23 body positions relative to root, root-heading-local, xyz meters"},
+        {"name": "body_rotations", "offset": 70, "width": 144, "semantics": "24 heading-relative global rotations, tangent+normal six-vector"},
+        {"name": "body_linear_velocities", "offset": 214, "width": 72, "semantics": "24 root-heading-local xyz velocities, meters/second"},
+        {"name": "body_angular_velocities", "offset": 286, "width": 72, "semantics": "24 root-heading-local axial angular velocities, radians/second"}
+      ],
+      "confidence": "proven_current_runtime"
+    },
+    "mimic_target_poses": {
+      "width": 6495,
+      "dtype": "float32",
+      "future_steps": 15,
+      "future_step_seconds": 0.03333333333333333,
+      "nominal_horizon_seconds": 0.5,
+      "floats_per_future_step": 433,
+      "per_step_blocks": [
+        {"name": "body_delta_positions", "offset": 0, "width": 72, "semantics": "target body position minus same body's previous reference position, rotated by previous reference root heading inverse"},
+        {"name": "root_relative_positions", "offset": 72, "width": 72, "semantics": "target body position minus previous reference root position, rotated by previous reference root heading inverse"},
+        {"name": "body_delta_rotations", "offset": 144, "width": 144, "semantics": "previous same-body rotation inverse times target rotation, tangent+normal"},
+        {"name": "heading_relative_rotations", "offset": 288, "width": 144, "semantics": "previous reference root heading inverse times target global rotation, tangent+normal"},
+        {"name": "future_time", "offset": 432, "width": 1, "semantics": "actual sampled offset after animation-end clamping, seconds"}
+      ],
+      "first_step_reference": "current canonical body samples",
+      "subsequent_step_reference": "immediately preceding sampled future pose",
+      "confidence": "proven_current_runtime_but_training_identity_unproven"
+    },
+    "terrain": {
+      "width": 256,
+      "dtype": "float32",
+      "layout": "16x16 grid",
+      "semantics": "root_height - sampled_ground_height, meters",
+      "confidence": "proven_current_runtime"
+    }
+  },
+  "output": {
+    "actions": {
+      "width": 69,
+      "dtype": "float32",
+      "joint_count": 23,
+      "values_per_joint": 3,
+      "raw_semantics": "exponential-map joint rotation offsets in Proto/Isaac joint coordinates",
+      "runtime_postprocessing": ["finite validation", "optional zeroing", "clamp", "scale", "smoothing", "region-specific causal-standing scales", "Proto-to-UE quaternion conversion", "Manny neutral/bind composition", "constraint/range adaptation", "Physics Control publication"],
+      "confidence": "shape_and_current_runtime_path_proven; exact original checkpoint action normalization/range provenance partially unresolved"
+    }
+  },
+  "open_questions": [
+    "The original ProtoMotions checkpoint, smpl.yaml, motion-tracker config, and exact preprocessing implementation are not all present and pinned in this checkout.",
+    "Current UE future poses are derived from Pose Search asset sampling and Manny-to-SMPL canonical adaptation; exact equivalence to the training motion_lib data frame is not yet proven end to end.",
+    "The authoritative original action normalization and PD target-range transform must be verified against the checkpoint configuration rather than inferred from current runtime behavior.",
+    "The selected animation's root-motion frame, canonical Proto root frame, and current physical-body frame require a permanent end-to-end synthetic-vector parity test.",
+    "Animation-end clamping shortens future_time values near clip end; parity with the training sampler's wrapping or clipping behavior is unresolved."
+  ],
+  "authoritative_sources": [
+    "Training/physanim/export_onnx.py",
+    "PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimBridge.h",
+    "PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimBridge.cpp",
+    "PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.Observation.cpp",
+    "PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.PoseSearch.cpp",
+    "PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.Inference.cpp"
+  ]
+}

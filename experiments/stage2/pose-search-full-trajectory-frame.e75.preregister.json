@@ -1,0 +1,27 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E75",
+  "title": "Express the complete Pose Search trajectory in the authored animation frame",
+  "baseline_commit": "a28de08fc8476a3a60b21095c5c9435d40bc6a8b",
+  "date": "2026-07-16",
+  "e74_learning": {
+    "velocity_only_physical_root_net_displacement_cm": 164.24826129855538,
+    "velocity_only_final_tracking_error_cm": 142.4476421110778,
+    "velocity_only_selected_animation_counts": { "MM_Idle": 300 },
+    "diagnosis": "Velocity was rotated into the authored frame while current and desired trajectory facing remained in the actor frame, producing an internally inconsistent query."
+  },
+  "hypothesis": "Applying one actor-centered authored-frame rotation to both trajectory velocity and facing will preserve the E74 physical-progress improvement and allow the matching MF_Unarmed_Walk_Fwd poses to beat idle.",
+  "single_behavior_change": "The Pose Search predictor receives an actor-centered frame rotation derived from the inverse mesh-relative rotation. That same rotation is applied to current velocity, future velocity, current facing, and desired facing. Actor position remains the trajectory origin. World-space shell movement, yaw, locomotion authority velocity, policy inputs, action conditioning, gains, database assets, schema, weights, and selection policy remain unchanged.",
+  "tdd_contract": [
+    "Actor yaw 0 with mesh-relative yaw -90 resolves an authored-frame rotation of +90 degrees.",
+    "The frame maps actor-forward +X to database-forward +Y and actor-facing yaw 0 to authored-facing yaw +90.",
+    "At actor yaw 30 the same mesh-relative frame maps world actor-forward to world yaw 120 and facing yaw 30 to yaw 120.",
+    "Velocity magnitude, zero velocity, quaternion normalization, and inverse roundtrip are preserved.",
+    "Components without a mesh retain the identity frame so existing pure Stage2 tests remain unchanged.",
+    "The authoritative Normal episode selects MF_Unarmed_Walk_Fwd during sustained movement without an asset-name override.",
+    "Normal physical-root projected progress is positive, exceeds ZeroActions, and final root-shell error is below ZeroActions.",
+    "The identical shell path, exact 30-degree turn, control readback, support, and stop-to-standing contracts remain valid."
+  ],
+  "rejection_rule": "Reject and revert if forward locomotion is not selected, physical projected progress is nonpositive, Normal tracking is not better than ZeroActions, or any product/standing regression appears.",
+  "next_if_supported": "Preregister immutable scripted-locomotion protocol v2 using measured root progress, tracking, stability, and negative-control thresholds, then run all repetitions."
+}

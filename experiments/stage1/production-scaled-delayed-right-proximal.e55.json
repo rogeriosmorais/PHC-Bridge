@@ -1,0 +1,27 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "production-scaled-delayed-right-proximal-e55",
+  "recorded_utc": "2026-07-16T03:00:00Z",
+  "preregistration_commit": "a13cdec691bb2a853dfd48f59c727d493d679f28",
+  "production_behavior_commit": "f09679c67c1c6ff7ccf247c0ebf30d4f7a601b71",
+  "status": "VALID",
+  "hypothesis_verdict": "SUPPORTED",
+  "bundle_status": "PASS",
+  "bundle_failed_criteria": [],
+  "region": "RightProximal",
+  "scale": 0.03125,
+  "activation_timing": "after first active-policy cycle",
+  "normal_recovery_auc": [31.00405287777395, 31.00405287777395, 31.00405287777395],
+  "zero_actions_recovery_auc": [39.34945852607651, 39.34945852607651, 39.34945852607651],
+  "normal_to_zero_recovery_auc_ratio": 0.7879156166082403,
+  "normal_repetitions_byte_deterministic": true,
+  "zero_repetitions_byte_deterministic": true,
+  "production_behavior_flags": [],
+  "destructive_controls": {
+    "DropControlDispatch": {"failed_criteria": ["target_readback"]},
+    "ForcedSupportLoss": {"failed_criteria": ["support_gap"]}
+  },
+  "authoritative_bundle_artifact": "test-results/causal-standing/e55-production-right-proximal/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/production-scaled-delayed-right-proximal.e55.audit.json",
+  "next": "Screen the final masked Torso joint at a conservative delayed scale."
+}

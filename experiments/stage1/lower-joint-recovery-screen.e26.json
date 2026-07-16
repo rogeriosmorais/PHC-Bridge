@@ -1,0 +1,33 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "lower-joint-recovery-screen-e26",
+  "recorded_utc": "2026-07-15T18:35:00Z",
+  "source_commit": "d82b06eef9714cfb5c52f1b2858c2a011177ee55",
+  "status": "VALID",
+  "hypothesis_verdict": "FALSIFIED",
+  "product_success": false,
+  "reference_zero_actions_auc": 41.14179622283463,
+  "locked_candidate_max_auc": 32.913436978267704,
+  "arms": {
+    "left_hip": {"status":"FAIL", "recovery_auc":115.54409074443448, "failed_criteria":["runtime_state","pelvis_height","root_tilt","support_gap","policy_step_coverage","recovery"]},
+    "left_knee": {"status":"PASS", "recovery_auc":41.26766670989813, "failed_criteria":[]},
+    "left_ankle": {"status":"PASS", "recovery_auc":47.22743243262499, "failed_criteria":[]},
+    "left_toe": {"status":"PASS", "recovery_auc":41.14743832837719, "failed_criteria":[]},
+    "right_hip": {"status":"PASS", "recovery_auc":41.53072415185981, "failed_criteria":[]},
+    "right_knee": {"status":"PASS", "recovery_auc":53.04167101899271, "failed_criteria":[]},
+    "right_ankle": {"status":"PASS", "recovery_auc":40.175917369972275, "failed_criteria":[]},
+    "right_toe": {"status":"PASS", "recovery_auc":41.16578729744341, "failed_criteria":[]}
+  },
+  "validity": {
+    "fixture_authority": "PRODUCT_RUN",
+    "protocol_sha256": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+    "target_readback_ratio_all_runs": 1.0,
+    "single_joint_range_masks_verified": true
+  },
+  "causal_findings": [
+    "No individual lower-body action joint crosses the locked causal threshold.",
+    "Right ankle is the only individual that improves on zero actions, but only by 0.966 AUC units.",
+    "Safe individual outputs mostly reproduce the zero-action trajectory, while left hip is unstable and left ankle/right knee increase tracking error."
+  ],
+  "next": "Test baseline-residual policy actions: capture the standing policy output as a per-action calibration vector and dispatch only subsequent deviations from that baseline before unchanged conditioning and mapping."
+}

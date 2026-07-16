@@ -13,10 +13,12 @@
 #include "Animation/TrajectoryTypes.h"
 #include "PhysAnimBridge.h"
 #include "PhysAnimBalanceReadyTransition.h"
+#include "PhysAnimStandingActivation.h"
 #include "PhysAnimTruthTypes.h"
 
 #include "PhysAnimRuntimeTerminationPipeline.h"
 #include "PhysAnimProofArtifactEmitter.h"
+#include "PhysAnimProductGateFacts.h"
 #include "PhysAnimComponent.generated.h"
 
 class UAnimInstance;
@@ -27,6 +29,14 @@ class UCharacterMovementComponent;
 class UPhysicsControlComponent;
 class UPoseSearchDatabase;
 class USkeletalMeshComponent;
+
+struct FPhysAnimControlTargetSeed
+{
+	FQuat ParentWorldRotation = FQuat::Identity;
+	FQuat ChildWorldRotation = FQuat::Identity;
+	FQuat ParentRelativeTargetRotation = FQuat::Identity;
+	FQuat ParentActionAxisReferenceRotation = FQuat::Identity;
+};
 
 struct FBridgeIntentState
 {
@@ -124,16 +134,19 @@ struct FPhysAnimStabilizationSettings
 	bool bForceZeroActions = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
-	float ActionScale = 0.1f;
+	float ActionScale = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float ActionClampAbs = 0.2f;
+	float ActionClampAbs = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float ActionSmoothingAlpha = 0.25f;
+	float ActionSmoothingAlpha = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
+	bool bEnableProtoMannyConstraintAdapter = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
-	float StartupRampSeconds = 1.0f;
+	float StartupRampSeconds = 0.25f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "1.0"))
 	float PolicyControlRateHz = 30.0f;
@@ -163,13 +176,13 @@ struct FPhysAnimStabilizationSettings
 	float TrainingAlignedToeLimitPolicyBlend = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
-	bool bApplyTrainingAlignedLowerLimbTargetRangePolicy = true;
+	bool bApplyTrainingAlignedLowerLimbTargetRangePolicy = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float TrainingAlignedLowerLimbTargetRangePolicyBlend = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
-	bool bApplyTrainingAlignedDistalLocomotionTargetPolicy = true;
+	bool bApplyTrainingAlignedDistalLocomotionTargetPolicy = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float TrainingAlignedDistalLocomotionTargetPolicyBlend = 1.0f;
@@ -178,7 +191,7 @@ struct FPhysAnimStabilizationSettings
 	float DistalLocomotionTargetPolicyActivationSpeedCmPerSec = 50.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
-	bool bApplyTrainingAlignedDistalLocomotionCompositionPolicy = true;
+	bool bApplyTrainingAlignedDistalLocomotionCompositionPolicy = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float DistalLocomotionCompositionPolicyActivationSpeedCmPerSec = 50.0f;
@@ -196,10 +209,10 @@ struct FPhysAnimStabilizationSettings
 	float DistalLocomotionCompositionPolicyIntentGraceSeconds = 0.20f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
-	float MaxAngularStepDegreesPerSecond = 180.0f;
+	float MaxAngularStepDegreesPerSecond = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
-	float AngularStrengthMultiplier = 0.35f;
+	float AngularStrengthMultiplier = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float AngularDampingRatioMultiplier = 1.5f;
@@ -259,10 +272,10 @@ struct FPhysAnimStabilizationSettings
 	bool bDelayMovementUnlockUntilPolicySettled = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady"))
-	bool bRestoreCharacterMovementAfterStartupReady = true;
+	bool bRestoreCharacterMovementAfterStartupReady = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady"))
-	bool bEnableBridgeOwnedMovementWhileCharacterMovementLocked = true;
+	bool bEnableBridgeOwnedMovementWhileCharacterMovementLocked = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady && bEnableBridgeOwnedMovementWhileCharacterMovementLocked", ClampMin = "0.0"))
 	float BridgeOwnedMovementMaxPlanarSpeedCmPerSecond = 240.0f;
@@ -491,6 +504,7 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(ActionScale, Other.ActionScale) &&
 			FMath::IsNearlyEqual(ActionClampAbs, Other.ActionClampAbs) &&
 			FMath::IsNearlyEqual(ActionSmoothingAlpha, Other.ActionSmoothingAlpha) &&
+			bEnableProtoMannyConstraintAdapter == Other.bEnableProtoMannyConstraintAdapter &&
 			FMath::IsNearlyEqual(StartupRampSeconds, Other.StartupRampSeconds) &&
 			FMath::IsNearlyEqual(PolicyControlRateHz, Other.PolicyControlRateHz) &&
 			bApplyTrainingAlignedMassScales == Other.bApplyTrainingAlignedMassScales &&
@@ -626,6 +640,9 @@ enum class EPhysAnimRuntimeState : uint8
 	ReadyForActivation,
 	BridgeActive,
 	FailStopped,
+	Standing_Preparation,
+	Standing_FullSimulationActivation,
+	Standing_PolicyBlend,
 	BalanceEntry_Prepare,
 	BalanceEntry_LateValidate,
 	BalanceEntry_RootOn,
@@ -635,6 +652,24 @@ enum class EPhysAnimRuntimeState : uint8
 	BalanceActive_Standing,
 	LocomotionActiveShell,
 	LocomotionActiveShellDenied
+};
+
+enum class EPhysAnimExperimentalActionFamilyMask : uint8
+{
+	All,
+	Zero,
+	LowerOnly,
+	AxialOnly,
+	ArmsOnly,
+};
+
+enum class EPhysAnimExperimentalCausalStandingScaledRegion : uint8
+{
+	None,
+	Torso,
+	Neck,
+	LeftProximal,
+	RightProximal,
 };
 
 UENUM(BlueprintType)
@@ -952,6 +987,7 @@ struct FPhase1AutoCalibBaselineSnapshot
 	TArray<FPhase1AutoCalibBodyModifierState> BodyModifiers;
 	TMap<FName, FQuat> PreviousControlTargetRotations;
 	TMap<FName, FQuat> PolicyBlendStartControlTargetRotations;
+	TMap<FName, FQuat> PolicyNeutralControlTargetRotations;
 	TArray<float> ConditionedActionBuffer;
 	TArray<float> PreviousConditionedActionBuffer;
 	TArray<float> SelfObservationBuffer;
@@ -1012,6 +1048,7 @@ struct FPhase1AutoCalibBaselineSnapshot
 	bool bPhase1TiltDiagnosticEmitted = false;
 	bool bPhase1PelvisCouplingSkipLogged = false;
 	bool bPelvisResetAppliedThisTick = false;
+	int32 LastBodyModifierResetRequestCount = 0;
 	int32 HipQuarantineTicksRemaining = 0;
 	uint32 BalanceEntryRootOnFrameCount = 0;
 	uint32 BalanceEntrySettleFrameCount = 0;
@@ -1066,6 +1103,9 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double RootAngularDriftDeg = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double MaxRootTiltDeg = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double MaxBodyLinearSpeedCmPerSecond = 0.0;
@@ -1364,8 +1404,9 @@ class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPo
 	friend class FPhysAnimStage2AWalkSmokeTest;
 	friend class FPhysAnimStage2ATurnIntentTest;
 	friend class FPhysAnimStage2ATurnSmokeTest;
+	friend class FPhysAnimScriptedLocomotionRuntimeTest;
 	friend class FPhysAnimFailStopCircuitTest;
-	friend class FPhysAnimFailStopShortCircuitTest;
+	friend class FPhysAnimSteadyActionConditioningTest;
 	friend class FPhysAnimStage2ADumbbellLoadTest;
 	friend class FOverrideLoadTestSettingsCommand;
 
@@ -1453,9 +1494,292 @@ public:
 	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
 	const TMap<FName, FQuat>& GetPreviousControlTargetRotationsForDiagnostics() const { return PreviousControlTargetRotations; }
 	const TMap<FName, FQuat>& GetPolicyBlendStartControlTargetRotationsForDiagnostics() const { return PolicyBlendStartControlTargetRotations; }
+	const TArray<float>& GetRawPolicyActionsForDiagnostics() const { return ActionOutputBuffer; }
+	const TArray<float>& GetConditionedPolicyActionsForDiagnostics() const { return ConditionedActionBuffer; }
+	const PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot& GetFirstPolicyInferenceSnapshotForDiagnostics() const { return FirstPolicyInferenceSnapshot; }
+	static void ApplyCausalStandingPolicyActionCompatibility(
+		bool bStandingPolicyMode,
+		TArray<float>& InOutActions);
+	static void ApplyCausalStandingPolicyActionCompatibility(
+		bool bStandingPolicyMode,
+		bool bRestoreNeckHead,
+		TArray<float>& InOutActions);
+	static void ApplyCausalStandingPolicyActionCompatibility(
+		bool bStandingPolicyMode,
+		bool bRestoreNeck,
+		bool bRestoreHead,
+		TArray<float>& InOutActions);
+	static void ApplyCausalStandingPolicyActionCompatibility(
+		bool bStandingPolicyMode,
+		bool bRestoreSpineChest,
+		bool bRestoreNeck,
+		bool bRestoreHead,
+		TArray<float>& InOutActions);
+	static void ApplyCausalStandingPolicyActionCompatibility(
+		bool bStandingPolicyMode,
+		bool bRestoreSpineChest,
+		bool bRestoreNeck,
+		bool bRestoreHead,
+		bool bRestoreDistalHands,
+		TArray<float>& InOutActions);
+	static void ApplyCausalStandingPolicyActionScales(
+		bool bStandingPolicyMode,
+		float TorsoScale,
+		float SpineChestScale,
+		float NeckScale,
+		float HeadScale,
+		float LeftProximalScale,
+		float LeftDistalScale,
+		float RightProximalScale,
+		float RightDistalScale,
+		TArray<float>& InOutActions);
+	static bool IsCausalPolicyControlRuntimeState(EPhysAnimRuntimeState InRuntimeState);
+	static bool ShouldUseBalanceIdlePoseSearchState(EPhysAnimRuntimeState InRuntimeState);
+	static bool ShouldUseBridgeTrajectoryPoseSearchState(EPhysAnimRuntimeState InRuntimeState);
+	static float ResolveCausalStandingPolicyStrengthFactor(
+		bool bStandingPolicyMode,
+		bool bFirstActiveStandingPolicyCaptured,
+		EPhysAnimRuntimeState InRuntimeState);
+	static bool ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+		bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		EPhysAnimRuntimeState InRuntimeState);
+	static float ResolveCausalStandingNeckScaleAfterFirstPolicy(
+		bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		EPhysAnimRuntimeState InRuntimeState);
+	static float ResolveCausalStandingLeftProximalScaleAfterFirstPolicy(
+		bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		EPhysAnimRuntimeState InRuntimeState);
+	static float ResolveCausalStandingRightProximalScaleAfterFirstPolicy(
+		bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		EPhysAnimRuntimeState InRuntimeState);
+	static float ResolveCausalStandingTorsoScaleAfterFirstPolicy(
+		bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		EPhysAnimRuntimeState InRuntimeState);
+	static bool ShouldUseCausalStandingComponentActionAxis(
+		EPhysAnimRuntimeState InRuntimeState);
+	static FQuat ExpressCachedWorldActionAxisInMeshComponent(
+		const FQuat& ActionBindComponentWorldRotation,
+		const FQuat& CachedWorldActionAxisRotation);
+	static FQuat ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxis(
+		const FQuat& EffectiveActionAxisRotation,
+		const FQuat& MannyNeutralParentRelativeRotation,
+		const FQuat& ProtoPolicyRotationUe);
+#if WITH_DEV_AUTOMATION_TESTS
+	const PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot& GetFirstActiveStandingPolicyInferenceSnapshotForDiagnostics() const
+	{
+		return FirstActiveStandingPolicyInferenceSnapshot;
+	}
+	bool HasFirstActiveStandingConditionedActionsForTesting() const
+	{
+		return bFirstActiveStandingConditionedActionsCapturedForTesting;
+	}
+	const TArray<float>& GetFirstActiveStandingConditionedActionsForTesting() const
+	{
+		return FirstActiveStandingConditionedActionsForTesting;
+	}
+	static bool CaptureFirstActiveStandingConditionedActionsForTesting(
+		bool bActiveStanding,
+		TConstArrayView<float> ConditionedActions,
+		bool& bInOutCaptured,
+		TArray<float>& OutActions);
+	void SetProductControlDispatchDroppedForTesting(bool bDropped) { bProductControlDispatchDroppedForTesting = bDropped; }
+	bool IsProductControlDispatchDroppedForTesting() const { return bProductControlDispatchDroppedForTesting; }
+	void SetStandingVariantForTesting(EPhysAnimStandingVariant Variant) { StandingVariantForTesting = Variant; }
+	EPhysAnimStandingVariant GetStandingVariantForTesting() const { return StandingVariantForTesting; }
+	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
+	bool IsMannyLocalFrameRoundtripTraceEnabledForTesting() const { return bMannyLocalFrameRoundtripTraceEnabledForTesting; }
+	bool IsExperimentalComponentActionAxisEnabledForTesting() const { return bExperimentalComponentActionAxisEnabledForTesting; }
+	static bool ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
+		bool bConfigured,
+		EPhysAnimRuntimeState InRuntimeState);
+	bool IsExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting() const
+	{
+		return bExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting;
+	}
+	static bool ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
+		bool bConfigured,
+		EPhysAnimRuntimeState InRuntimeState);
+	bool IsExperimentalBindNeutralFromFirstPolicyEnabledForTesting() const
+	{
+		return bExperimentalBindNeutralFromFirstPolicyEnabledForTesting;
+	}
+	static bool ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
+		bool bConfigured,
+		EPhysAnimRuntimeState InRuntimeState);
+	bool IsExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting() const
+	{
+		return bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting;
+	}
+	static bool ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
+		bool bConfigured,
+		EPhysAnimRuntimeState InRuntimeState);
+	bool IsExperimentalCausalStandingSpineChestEnabledForTesting() const
+	{
+		return bExperimentalCausalStandingSpineChestEnabledForTesting;
+	}
+	bool IsExperimentalCausalStandingDistalHandsEnabledForTesting() const
+	{
+		return bExperimentalCausalStandingDistalHandsEnabledForTesting;
+	}
+	EPhysAnimExperimentalCausalStandingScaledRegion GetExperimentalCausalStandingScaledRegionForTesting() const
+	{
+		return ExperimentalCausalStandingScaledRegionForTesting;
+	}
+	float GetExperimentalCausalStandingScaledScaleForTesting() const
+	{
+		return ExperimentalCausalStandingScaledScaleForTesting;
+	}
+	bool IsExperimentalCausalStandingScaledRegionActiveForTesting() const
+	{
+		return ExperimentalCausalStandingScaledRegionForTesting !=
+			EPhysAnimExperimentalCausalStandingScaledRegion::None;
+	}
+	bool IsExperimentalCausalStandingNeckHeadEnabledForTesting() const
+	{
+		return bExperimentalCausalStandingNeckHeadEnabledForTesting;
+	}
+	bool IsExperimentalCausalStandingNeckEnabledForTesting() const
+	{
+		return bExperimentalCausalStandingNeckEnabledForTesting;
+	}
+	bool IsExperimentalCausalStandingHeadEnabledForTesting() const
+	{
+		return bExperimentalCausalStandingHeadEnabledForTesting;
+	}
+	bool IsExperimentalCausalStandingHeadActiveOnlyEnabledForTesting() const
+	{
+		return bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting;
+	}
+	bool IsExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting() const
+	{
+		return bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting;
+	}
+	static bool ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+		bool bHeadEnabled,
+		bool bActiveOnly,
+		EPhysAnimRuntimeState InRuntimeState);
+	static bool ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
+		bool bHeadEnabled,
+		bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		EPhysAnimRuntimeState InRuntimeState);
+	EPhysAnimExperimentalActionFamilyMask GetExperimentalActionFamilyMaskForTesting() const
+	{
+		return ExperimentalActionFamilyMaskForTesting;
+	}
+	static void ApplyExperimentalActionFamilyMaskForTesting(
+		EPhysAnimExperimentalActionFamilyMask Mask,
+		TArray<float>& InOutActions);
+	int32 GetExperimentalActionJointRangeStartForTesting() const
+	{
+		return ExperimentalActionJointRangeStartForTesting;
+	}
+	int32 GetExperimentalActionJointRangeCountForTesting() const
+	{
+		return ExperimentalActionJointRangeCountForTesting;
+	}
+	static void ApplyExperimentalActionJointRangeForTesting(
+		int32 StartJointIndex,
+		int32 JointCount,
+		TArray<float>& InOutActions);
+	bool IsExperimentalPolicyActionBaselineResidualEnabledForTesting() const
+	{
+		return bExperimentalPolicyActionBaselineResidualEnabledForTesting;
+	}
+	static bool ApplyExperimentalPolicyActionBaselineResidualForTesting(
+		bool bConfigured,
+		bool bForceZeroActions,
+		TConstArrayView<float> BaselineActions,
+		TArray<float>& InOutActions);
+	bool IsExperimentalPolicyActionZeroUntilBaselineEnabledForTesting() const
+	{
+		return bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting;
+	}
+	bool IsExperimentalPhysicsBodyObservationPositionsEnabledForTesting() const
+	{
+		return bExperimentalPhysicsBodyObservationPositionsEnabledForTesting;
+	}
+	static FVector SelectObservationWorldPositionForTesting(
+		bool bUsePhysicsBodyPosition,
+		const FVector& BoneWorldPosition,
+		const FVector& PhysicsBodyWorldPosition);
+	const TArray<FVector>& GetObservationBoneWorldPositionsForTesting() const
+	{
+		return ObservationBoneWorldPositionsForTesting;
+	}
+	const TArray<FVector>& GetObservationPhysicsBodyWorldPositionsForTesting() const
+	{
+		return ObservationPhysicsBodyWorldPositionsForTesting;
+	}
+	static bool ApplyExperimentalPolicyActionZeroUntilBaselineForTesting(
+		bool bConfigured,
+		bool bBaselineAvailable,
+		bool bForceZeroActions,
+		TArray<float>& InOutActions);
+	float GetExperimentalActiveStrengthFactorForTesting() const
+	{
+		return ExperimentalActiveStrengthFactorForTesting;
+	}
+	static float ResolveExperimentalActiveStrengthFactorForTesting(
+		float ConfiguredFactor,
+		bool bFirstActiveStandingPolicyCaptured,
+		EPhysAnimRuntimeState InRuntimeState);
+	bool IsExperimentalCheckpointTorqueCeilingEnabledForTesting() const
+	{
+		return bExperimentalCheckpointTorqueCeilingEnabledForTesting;
+	}
+	static bool ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
+		bool bConfigured,
+		bool bFirstActiveStandingPolicyCaptured,
+		EPhysAnimRuntimeState InRuntimeState);
+	bool IsExperimentalCheckpointForcePdEnabledForTesting() const
+	{
+		return bExperimentalCheckpointForcePdEnabledForTesting;
+	}
+	static bool ShouldUseExperimentalCheckpointForcePdForRuntimeStateForTesting(
+		bool bConfigured,
+		bool bFirstActiveStandingPolicyCaptured,
+		EPhysAnimRuntimeState InRuntimeState);
+	static bool TryBuildCheckpointForcePdControlDataForTesting(
+		FName BoneName,
+		const FPhysicsControlData& BaselineData,
+		FPhysicsControlData& OutControlData);
+	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
+	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
+	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
+	{
+		return FirstActiveStandingActionSemanticTrace;
+	}
+	const PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace& GetMannyLocalFrameRoundtripTraceForTesting() const
+	{
+		return FirstActiveStandingMannyLocalFrameRoundtripTrace;
+	}
+	const PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot& GetPolicyInputProvenanceSnapshotForTesting() const
+	{
+		return FirstPolicyInputProvenanceSnapshot;
+	}
+	const PhysAnimBridge::FPhysAnimLocomotionFrameReplaySnapshot& GetLocomotionFrameReplaySnapshotForTesting() const
+	{
+		return FirstLocomotionFrameReplaySnapshot;
+	}
+	const PhysAnimBridge::FPhysAnimStartupChronologyTrace& GetStartupChronologyTraceForTesting() const
+	{
+		return StartupChronologyTrace;
+	}
+	const PhysAnimBridge::FPhysAnimFirstPolicyBodySourceTrace& GetFirstPolicyBodySourceTraceForTesting() const
+	{
+		return FirstPolicyBodySourceTrace;
+	}
+	const PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceTrace& GetFirstPolicyGroundReferenceTraceForTesting() const
+	{
+		return FirstPolicyGroundReferenceTrace;
+	}
+	void ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine);
+#endif
 	void ConsumeUpperBodyPendingResets();
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
+	float GetAttachedLoadMassKg() const;
 	const FPhysAnimControlTargetDiagnostics& GetLastControlTargetDiagnostics() const { return LastControlTargetDiagnostics; }
+	int32 GetLastBodyModifierResetRequestCount() const { return LastBodyModifierResetRequestCount; }
 	bool WasPelvisResetAppliedThisTick() const { return bPelvisResetAppliedThisTick; }
 	bool WasPolicyTargetAppliedLastFrame() const { return bPolicyTargetsAppliedLastFrame; }
 	bool WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame() const { return bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame; }
@@ -1506,6 +1830,9 @@ public:
 	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
 	bool GetForceSupportFailure() const { return bForceSupportFailure; }
 	void SetForceSupportFailure(bool bInForce) { bForceSupportFailure = bInForce; }
+#if WITH_DEV_AUTOMATION_TESTS
+	bool HasProductSupportContactForTesting() const;
+#endif
 	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
 	bool DoesBridgeOwnPhysics() const { return RuntimeStateOwnsBridgePhysics(RuntimeState); }
 	EBridgeLocomotionRequestState GetLocomotionRequestState() const { return BridgeLocomotionRequestState; }
@@ -1557,6 +1884,14 @@ public:
 	bool HasActivatedStandingPerturbationApplied() const { return bActivatedStandingPerturbationApplied; }
 
 	static EPhysAnimRuntimeState MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase TransitionPhase);
+	static bool IsStandingActivationRuntimeState(EPhysAnimRuntimeState State)
+	{
+		return State == EPhysAnimRuntimeState::Standing_Preparation ||
+			State == EPhysAnimRuntimeState::Standing_FullSimulationActivation ||
+			State == EPhysAnimRuntimeState::Standing_PolicyBlend ||
+			State == EPhysAnimRuntimeState::BalanceActive_Standing;
+	}
+	FPhysAnimStandingActivationStatus GetStandingActivationStatus() const { return StandingActivation.GetStatus(); }
 
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	bool IsReadyForScriptedPresentation() const;
@@ -1625,6 +1960,55 @@ public:
 #endif
 
 #if WITH_DEV_AUTOMATION_TESTS
+	bool TestOnlyTryOpenStage2ALocomotionRequestGate(const TCHAR* RequestReason)
+	{
+		return TryOpenStage2ALocomotionRequestGate(RequestReason);
+	}
+	bool TestOnlyTryActivateStage2AScriptedLocomotionIntent(
+		float DeltaSeconds,
+		float IntentMagnitude,
+		float YawDeltaDegrees,
+		bool bPublishTrajectoryConditioning,
+		float NominalSpeedCmPerSecond = -1.0f)
+	{
+		return TryActivateStage2AScriptedLocomotionIntent(
+			DeltaSeconds,
+			IntentMagnitude,
+			YawDeltaDegrees,
+			bPublishTrajectoryConditioning,
+			NominalSpeedCmPerSecond);
+	}
+	bool TestOnlyStopStage2AScriptedLocomotionAndReturnToStanding()
+	{
+		return StopStage2AScriptedLocomotionAndReturnToStanding();
+	}
+	static FQuat TestOnlyResolveBridgePoseSearchCurrentFacing(
+		const FQuat& ActorWorldFacing,
+		const FQuat& MeshWorldFacing,
+		bool bHasMesh)
+	{
+		return ResolveBridgePoseSearchCurrentFacing(
+			ActorWorldFacing,
+			MeshWorldFacing,
+			bHasMesh);
+	}
+	static FQuat TestOnlyResolveBridgePoseSearchDesiredFacing(
+		const FQuat& DesiredActorWorldFacing,
+		const FQuat& CurrentActorWorldFacing,
+		const FQuat& CurrentMeshWorldFacing,
+		bool bHasMesh)
+	{
+		return ResolveBridgePoseSearchDesiredFacing(
+			DesiredActorWorldFacing,
+			CurrentActorWorldFacing,
+			CurrentMeshWorldFacing,
+			bHasMesh);
+	}
+	const FBridgeIntentState& GetBridgeIntentStateForTesting() const { return BridgeIntentState; }
+	const FBridgeTrajectoryState& GetBridgeTrajectoryStateForTesting() const { return BridgeTrajectoryState; }
+	const FBridgeShellState& GetBridgeShellStateForTesting() const { return BridgeShellState; }
+	EStage2ALocomotionTerminalState GetStage2ALocomotionTerminalStateForTesting() const { return Stage2ALastLocomotionTerminalState; }
+	const FString& GetStage2ALocomotionTelemetryForTesting() const { return LastStage2ALocomotionTelemetryLine; }
 	static bool TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState State) { return IsBalanceEntryState(State); }
 	static bool TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState State) { return IsBalanceActiveState(State); }
 	void TestOnlySetBridgeLocomotionGateIntent(float IntentMagnitude, double IntentAgeSeconds);
@@ -2075,12 +2459,10 @@ private:
 	bool bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
 	EPhysAnimTerminalReason StartupProofDeferredTerminalReason = EPhysAnimTerminalReason::None;
 
-	/** Persistent session state: true if at least one attempt achieved authentic product success. 
-	 * Used to gate the activation of detailed stability measurement metrics. */
-	bool bFirstProductSuccessAchieved = false;
-
 	FString LiveRuntimeEvidenceAttemptUuid;
 	float LiveRuntimeEvidenceStandingSeconds = 0.0f;
+	FPhysAnimStandingWindowAccumulator ProductGateStandingWindow;
+	FPhysAnimBodyContinuityAccumulator ProductGateBodyContinuity;
 	float LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
 	int64 LiveRuntimeEvidenceSubstepCounter = 0;
 
@@ -2133,10 +2515,17 @@ private:
 	bool ValidateModelDescriptorContract(FString& OutError);
 	bool QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	bool GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& OutBodySamples, FString& OutError) const;
+#if WITH_DEV_AUTOMATION_TESTS
+	bool GatherCurrentPhysicalBodySamplesForReplay(
+		TArray<FPhysAnimBodySample>& OutBodySamples,
+		FString& OutError) const;
+	void CaptureStartupChronologySampleForTesting(const TCHAR* Stage);
+#endif
 	bool SampleFuturePoses(const FPoseSearchBlueprintResult& SearchResult, TArray<FPhysAnimFuturePoseSample>& OutFutureSamples, FString& OutError) const;
-	bool ResolveMimicTargetReferenceDataOffset(
+	bool ResolveMimicTargetReferenceDataFrame(
 		const FPoseSearchBlueprintResult& SearchResult,
-		FVector2D& OutDataOffsetXY,
+		FTransform& OutWorldRoot,
+		FTransform& OutDataRoot,
 		FString& OutError) const;
 	bool RunInference(FString& OutError);
 	FPhysAnimStabilizationSettings ResolveEffectiveStabilizationSettings() const;
@@ -2159,13 +2548,20 @@ private:
 	void ApplyTrainingAlignedToeLimitPolicy(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResetTrainingAlignedToeLimitPolicy();
 	void ResetBridgePhysicsState();
-	bool GatherCurrentPoseControlTargetOrientations(TMap<FName, FQuat>& OutTargetOrientations, FString& OutError) const;
+	bool GatherCurrentPoseControlTargetSeeds(TMap<FName, FPhysAnimControlTargetSeed>& OutTargetSeeds, FString& OutError) const;
 	bool SeedControlTargetsFromCurrentPose(float DeltaTime, FString& OutError);
 	void UpdateBridgeLocomotionGateTiming(const FPhysAnimStabilizationSettings& EffectiveSettings, double CurrentTimeSeconds);
 	void UpdateBridgeLocomotionAuthorityState(const FVector& QueryVelocity, const FPhysAnimStabilizationSettings& EffectiveSettings, double CurrentTimeSeconds);
 	bool IsBridgeLocomotionQueryActive() const;
 	bool IsBridgeLocomotionEntryRequested(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	bool PrepareStandingActivation(FString& OutFailureReason);
+	bool ValidateStandingActivationRecords(FString& OutFailureReason) const;
+	FPhysAnimStandingActivationReadback PublishStandingPhysicsControlState(
+		const FPhysAnimStabilizationSettings& EffectiveSettings,
+		float LinearBlendAlpha,
+		bool bCommitFullSimulation,
+		FString& OutFailureReason);
 	void LogActivationSummary(
 		const FPhysAnimStabilizationSettings& EffectiveSettings,
 		const TCHAR* Context,
@@ -2185,8 +2581,20 @@ private:
 	bool CheckRuntimeInstability(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
 	void LogBodyModifierTelemetrySnapshot(const TCHAR* Context) const;
 	void ResetPendingBodyModifiersToCachedTargets();
+#if WITH_DEV_AUTOMATION_TESTS
+	float ResolveSelfObservationGroundHeight(
+		const TArray<FPhysAnimBodySample>& CurrentBodySamples,
+		PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues* OutGroundReferenceValues = nullptr
+		) const;
+#else
 	float ResolveSelfObservationGroundHeight(const TArray<FPhysAnimBodySample>& CurrentBodySamples) const;
-	bool BuildTerrainObservation(const TArray<FPhysAnimBodySample>& CurrentBodySamples, TArray<float>& OutTerrain, FString& OutError) const;
+#endif
+	bool BuildTerrainObservation(
+		const TArray<FPhysAnimBodySample>& CurrentBodySamples,
+		TArray<float>& OutTerrain,
+		FString& OutError,
+		TArray<float>* OutGroundHeightsForDiagnostics = nullptr,
+		FTransform* OutRootWorldTransformForDiagnostics = nullptr) const;
 	bool SampleTerrainGroundHeights(
 		const FVector& RootLocation,
 		const FQuat& RootRotation,
@@ -2255,6 +2663,15 @@ private:
 	bool QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	void UpdateBridgePoseSearchTrajectory(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResolveBridgePoseSearchQueryVelocity(const FPhysAnimStabilizationSettings& EffectiveSettings, FVector& OutQueryVelocity, float* OutIntentMagnitude = nullptr) const;
+	static FQuat ResolveBridgePoseSearchCurrentFacing(
+		const FQuat& ActorWorldFacing,
+		const FQuat& MeshWorldFacing,
+		bool bHasMesh);
+	static FQuat ResolveBridgePoseSearchDesiredFacing(
+		const FQuat& DesiredActorWorldFacing,
+		const FQuat& CurrentActorWorldFacing,
+		const FQuat& CurrentMeshWorldFacing,
+		bool bHasMesh);
 	void ApplyBridgePoseSearchSelectionPolicy(
 		FPoseSearchBlueprintResult& InOutSearchResult,
 		float QueryDeltaTimeSeconds,
@@ -2338,6 +2755,10 @@ private:
 	TSharedPtr<UE::NNE::IModelInstanceCPU> ModelInstanceCPU;
 
 	TArray<FTransform> CachedSmplObservationRestComponentTransforms;
+	TArray<FQuat> CachedSmplObservationRestBodyComponentRotations;
+	TMap<FName, FPhysAnimControlTargetSeed> CachedTPoseControlTargetSeeds;
+	bool bHasNeutralPelvisActorRelativeRotation = false;
+	FQuat NeutralPelvisActorRelativeRotation = FQuat::Identity;
 
 	TObjectPtr<UNNEModelData> LoadedModelData = nullptr;
 	TObjectPtr<UPoseSearchDatabase> LoadedPoseSearchDatabase = nullptr;
@@ -2352,6 +2773,55 @@ private:
 	TArray<float> RecentActionMagnitudeHistory;
 	TArray<float> PreviousConditionedActionBuffer;
 	TArray<float> ConditionedActionBuffer;
+	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstPolicyInferenceSnapshot;
+	bool bFirstActiveStandingPolicyInferenceCompleted = false;
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference = false;
+#if WITH_DEV_AUTOMATION_TESTS
+	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstActiveStandingPolicyInferenceSnapshot;
+	TArray<float> FirstActiveStandingConditionedActionsForTesting;
+	bool bFirstActiveStandingConditionedActionsCapturedForTesting = false;
+	PhysAnimBridge::FPhysAnimActionSemanticTrace FirstActiveStandingActionSemanticTrace;
+	PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace FirstActiveStandingMannyLocalFrameRoundtripTrace;
+	PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot FirstPolicyInputProvenanceSnapshot;
+	PhysAnimBridge::FPhysAnimLocomotionFrameReplaySnapshot FirstLocomotionFrameReplaySnapshot;
+	PhysAnimBridge::FPhysAnimStartupChronologyTrace StartupChronologyTrace;
+	PhysAnimBridge::FPhysAnimFirstPolicyBodySourceTrace FirstPolicyBodySourceTrace;
+	PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceTrace FirstPolicyGroundReferenceTrace;
+	bool bProductControlDispatchDroppedForTesting = false;
+	bool bActionSemanticTraceEnabledForTesting = false;
+	bool bMannyLocalFrameRoundtripTraceEnabledForTesting = false;
+	bool bExperimentalComponentActionAxisEnabledForTesting = false;
+	bool bExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting = false;
+	bool bExperimentalBindNeutralFromFirstPolicyEnabledForTesting = false;
+	bool bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = false;
+	bool bExperimentalCausalStandingSpineChestEnabledForTesting = false;
+	bool bExperimentalCausalStandingDistalHandsEnabledForTesting = false;
+	EPhysAnimExperimentalCausalStandingScaledRegion ExperimentalCausalStandingScaledRegionForTesting =
+		EPhysAnimExperimentalCausalStandingScaledRegion::None;
+	float ExperimentalCausalStandingScaledScaleForTesting = 1.0f;
+	bool bExperimentalCausalStandingNeckHeadEnabledForTesting = false;
+	bool bExperimentalCausalStandingNeckEnabledForTesting = false;
+	bool bExperimentalCausalStandingHeadEnabledForTesting = false;
+	bool bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting = false;
+	bool bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting = false;
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting = false;
+	EPhysAnimExperimentalActionFamilyMask ExperimentalActionFamilyMaskForTesting =
+		EPhysAnimExperimentalActionFamilyMask::All;
+	int32 ExperimentalActionJointRangeStartForTesting = INDEX_NONE;
+	int32 ExperimentalActionJointRangeCountForTesting = 0;
+	bool bExperimentalPolicyActionBaselineResidualEnabledForTesting = false;
+	bool bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting = false;
+	bool bExperimentalPhysicsBodyObservationPositionsEnabledForTesting = false;
+	bool bExperimentalPolicyActionBaselineResidualStartedForTesting = false;
+	float ExperimentalActiveStrengthFactorForTesting = 1.0f;
+	mutable TArray<FVector> ObservationBoneWorldPositionsForTesting;
+	mutable TArray<FVector> ObservationPhysicsBodyWorldPositionsForTesting;
+	bool bExperimentalCheckpointTorqueCeilingEnabledForTesting = false;
+	bool bExperimentalCheckpointForcePdEnabledForTesting = false;
+	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
+	bool bStartupChronologyTraceEnabledForTesting = false;
+	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
+#endif
 	TArray<UE::NNE::FTensorBindingCPU> InputBindings;
 	TArray<UE::NNE::FTensorBindingCPU> OutputBindings;
 
@@ -2421,6 +2891,7 @@ private:
 	double BridgeTraceLastFlushTimeSeconds = -1.0;
 	TMap<FName, FQuat> PreviousControlTargetRotations;
 	TMap<FName, FQuat> PolicyBlendStartControlTargetRotations;
+	TMap<FName, FQuat> PolicyNeutralControlTargetRotations;
 	bool bPolicyTargetsAppliedLastFrame = false;
 	bool bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
 	bool bStartupBringUpFrozenByBalanceEntry = false;
@@ -2507,6 +2978,7 @@ private:
 	ECollisionEnabled::Type OriginalCapsuleCollisionEnabled = ECollisionEnabled::NoCollision;
 	bool bHasSavedCapsuleCollisionState = false;
 	bool bHasSavedCharacterMovementState = false;
+	bool bOriginalCharacterMovementActive = true;
 	bool bOriginalCharacterMovementTickEnabled = false;
 	uint8 OriginalCharacterMovementMode = 0;
 	uint8 OriginalCharacterCustomMovementMode = 0;
@@ -2531,6 +3003,9 @@ private:
 	FVector BalanceScenarioImpactPelvisAngularVelPost = FVector::ZeroVector;
 
 	FPhysAnimBalanceReadyTransition BalanceReadyTransition;
+	FPhysAnimStandingActivation StandingActivation;
+	float StandingActivationElapsedSeconds = 0.0f;
+	bool bStandingFullSimulationCommitted = false;
 	FPhase1AcceptedConvergenceSnapshot SafePhase1ConvergenceSnapshot;
 	bool bPendingBalanceModeStartRequest = false;
 	bool bPendingBalanceModeStartAttemptIssued = false;
@@ -2541,6 +3016,7 @@ private:
 	bool bPhase1PelvisCouplingSkipLogged = false;
 	FPhase1PelvisCouplingRotationForensics LastPhase1PelvisCouplingRotationForensics;
 	bool bPelvisResetAppliedThisTick = false;
+	int32 LastBodyModifierResetRequestCount = 0;
 #if !UE_BUILD_SHIPPING
 	TOptional<FPhase1AutoCalibParams> ActivePhase1AutoCalibParams;
 	bool bPhase1AutoCalibOwnsStartRequests = false;
@@ -2619,9 +3095,20 @@ public:
 		FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics,
 		FString& OutError);
 
-	static FQuat BuildCurrentPoseControlTargetOrientation(
+	static FPhysAnimControlTargetSeed BuildCurrentPoseControlTargetSeed(
 		const FQuat& ParentWorldRotation,
 		const FQuat& ChildWorldRotation);
+	static bool BuildSmplBindBodyComponentRotations(
+		const FQuat& MeshWorldRotation,
+		const TMap<FName, FPhysAnimControlTargetSeed>& TPoseControlTargetSeeds,
+		TArray<FQuat>& OutBodyComponentRotations,
+		FString& OutError);
+	static float CalculateNeutralCalibratedPelvisTiltDegrees(
+		const FQuat& CurrentPelvisWorldRotation,
+		const FQuat& NeutralPelvisActorRelativeRotation,
+		const FQuat& ActorWorldRotation);
+	bool TryMeasureNeutralCalibratedPelvisTiltDegrees(float& OutTiltDegrees) const;
+	static bool ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState RuntimeState);
 	static float ResolveShellCouplingPlanarOffsetDeltaCm(
 		const FVector& OwnerLocationCm,
 		const FVector& RootLocationCm,
@@ -2723,6 +3210,16 @@ public:
 		bool bFirstPolicyEnabledFrame,
 		bool bDistalLocomotionCompositionModeActive,
 		float DeltaTime);
+	static float ResolveObservationGroundWorldZ(
+		bool bHasStaticGroundTrace,
+		float StaticGroundTraceZ,
+		bool bHasWalkableFloor,
+		bool bHasBlockingFloorHit,
+		float FloorImpactPointZ,
+		float CapsuleCenterZ,
+		float CapsuleHalfHeight,
+		float FloorDistance,
+		float FallbackGroundWorldZ);
 	static float ResolveObservationGroundWorldZFromFloor(
 		bool bHasWalkableFloor,
 		bool bHasBlockingFloorHit,
@@ -2739,13 +3236,10 @@ public:
 		const TArray<FPhysAnimBodySample>& SourceBodySamples,
 		float GroundWorldZ,
 		TArray<FPhysAnimBodySample>& OutBodySamples);
-	static FVector2D ResolveMimicTargetReferenceDataOffsetXY(
-		const FVector& CurrentSelectedWorldRootPosition,
-		const FVector& CurrentSelectedDataRootPosition);
-	static void MakeMimicTargetCurrentReferenceBodySamples(
+	static void MakeMimicTargetDataFrameBodySamples(
 		const TArray<FPhysAnimBodySample>& SourceBodySamples,
-		const FVector2D& DataOffsetXY,
-		float GroundWorldZ,
+		const FTransform& CurrentSelectedWorldRoot,
+		const FTransform& CurrentSelectedDataRoot,
 		TArray<FPhysAnimBodySample>& OutBodySamples);
 	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);
 	static bool ShouldPrewarmPhysicsControlActivationPose(bool bHasSkeletalMeshComponent, bool bHasLeaderPoseComponent);
@@ -2796,6 +3290,36 @@ public:
 		float PolicyControlIntervalSeconds,
 		float& InOutAccumulatorSeconds,
 		int32& OutElapsedSteps);
+	static FQuat ComposeProtoPolicyTargetInMannyBindFrame(
+		const FPhysAnimControlTargetSeed& MannyBindSeed,
+		const FQuat& ProtoPolicyRotationUe);
+	static FQuat ComposeProtoPolicyTargetAroundMannyNeutral(
+		const FPhysAnimControlTargetSeed& MannyBindSeed,
+		const FQuat& MannyNeutralParentRelativeRotation,
+		const FQuat& ProtoPolicyRotationUe);
+#if WITH_DEV_AUTOMATION_TESTS
+	static FQuat ExpressCachedWorldActionAxisInMeshComponentForTesting(
+		const FQuat& ActionBindComponentWorldRotation,
+		const FQuat& CachedWorldActionAxisRotation);
+	static FQuat ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+		const FQuat& EffectiveActionAxisRotation,
+		const FQuat& MannyNeutralParentRelativeRotation,
+		const FQuat& ProtoPolicyRotationUe);
+	bool BuildMannyLocalFrameRoundtripControlForTesting(
+		int32 ControlIndex,
+		FName MannyBoneName,
+		FName ControlName,
+		FName InitialControlChildBoneName,
+		FName InitialControlParentBoneName,
+		const FPhysAnimControlTargetSeed& MannyBindSeed,
+		const FQuat& MannyNeutralParentRelativeRotation,
+		const FQuat& ActualDecodedRotationUe,
+		const FQuat& ActualMannyPreRangeTargetParentRelative,
+		const FString& EffectiveActionAxisMode,
+		const FQuat& EffectiveActionAxisRotation,
+		PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl& OutTrace,
+		FString& OutError) const;
+#endif
 	static FQuat BlendPolicyTargetRotation(const FQuat& BaselineRotation, const FQuat& PolicyTargetRotation, float PolicyAlpha);
 	static float CalculateControlTargetDeltaDegrees(const FQuat& PreviousRotation, const FQuat& TargetRotation);
 	static float CalculateControlAuthorityAlpha(
@@ -2830,6 +3354,9 @@ public:
 	static bool ShouldPreserveGameplayShellDuringBridgeActive(
 		bool bMovementSmokeModeEnabled,
 		bool bAllowCharacterMovementInBridgeActive);
+	static void ApplyCharacterMovementBridgeOwnership(
+		UCharacterMovementComponent* CharacterMovement,
+		bool bPreserveGameplayShell);
 	static FVector ResolveMovementSmokeLocalIntent(float ElapsedSeconds);
 	static FName ResolveMovementSmokePhaseName(float ElapsedSeconds);
 	static float GetMovementSmokeDurationSeconds();
@@ -2920,6 +3447,8 @@ public:
 		class USkeletalMeshComponent* SkeletalMesh,
 		class AActor* Owner,
 		const FName& PelvisBoneName,
+		bool bHasNeutralPelvisOrientation,
+		const FQuat& NeutralPelvisActorRelativeRotation,
 		FString& OutSourceName);
 
 	// TestOnly Seams for Watchdog Robustness (S1-FIX-WATCHDOG-ROBUSTNESS-01)
@@ -2937,7 +3466,7 @@ private:
 	friend class FPhysAnimStage2ATurnIntentTest;
 	friend class FPhysAnimStage2ATurnSmokeTest;
 	friend class FPhysAnimFailStopCircuitTest;
-	friend class FPhysAnimFailStopShortCircuitTest;
+	friend class FPhysAnimSteadyActionConditioningTest;
 	friend class FPhysAnimStage2ADumbbellLoadTest;
 	friend class FOverrideLoadTestSettingsCommand;
 
@@ -2955,6 +3484,13 @@ private:
 	void EmitStage2ALocomotionTelemetry(const TCHAR* LocomotionIntent, const TCHAR* CapsuleOrShellMotionSource, EStage2ALocomotionTerminalState TerminalState);
 	bool TryActivateStage2AWalkIntent(float DeltaSeconds);
 	bool TryActivateStage2ATurnIntent(float DeltaSeconds, float YawDeltaDegrees);
+	bool TryActivateStage2AScriptedLocomotionIntent(
+		float DeltaSeconds,
+		float IntentMagnitude,
+		float YawDeltaDegrees,
+		bool bPublishTrajectoryConditioning,
+		float NominalSpeedCmPerSecond = -1.0f);
+	bool StopStage2AScriptedLocomotionAndReturnToStanding();
 	FVector BuildStage2AWalkDeltaCm(float DeltaSeconds) const;
 	void ApplyStage2AKinematicShellWalkDelta(const FVector& DeltaCm);
 	static const TCHAR* Stage2ATerminalStateToString(EStage2ALocomotionTerminalState TerminalState);

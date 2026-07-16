@@ -1,0 +1,24 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E67",
+  "title": "Restore the pre-769ae82 Pose Search predictor velocity contract",
+  "baseline_commit": "3362791096eb8fc63e559db6627abe96e54da3aa",
+  "date": "2026-07-16",
+  "observed_failure": {
+    "scripted_normal_selected_animation": "MM_Idle",
+    "locomotion_query_speed_cm_per_second": 160.0,
+    "accepted_shell_speed_cm_per_second": 60.0,
+    "historical_regression_commit": "769ae822db00c56cf17a2bd7d7698e37b68d2284",
+    "code_cause": "Commit 769ae82 changed GetCurrentState/GetVelocity from the stabilized Pose Search query velocity to accepted shell velocity, changed Predict from query velocity to accepted/desired shell velocity, and injected synthetic history samples. The commit message records that the locomotion fix was unsuccessful. Before it, the predictor consistently generated the trajectory from the stabilized query velocity."
+  },
+  "hypothesis": "Motion Matching will again select locomotion candidates when its predictor receives the same stabilized query velocity for current state and future prediction that the last working implementation used. Accepted shell velocity remains authoritative for physical displacement, but must not replace the independent animation-query velocity.",
+  "single_behavior_change": "Restore the pre-769ae82 predictor contract: GetCurrentState/GetVelocity publish ResolveBridgePoseSearchQueryVelocity; Predict initializes and targets the resolved query velocity; remove the synthetic locomotion-history rewrite added by 769ae82. Preserve all current scripted shell authority, runtime gates, policy control, gains, assets, scenario timings, and selection policy.",
+  "tdd_contract": [
+    "With full walk intent, accepted shell speed 60 cm/s, and stabilized query speed 160 cm/s, GetCurrentState and GetVelocity return 160 cm/s.",
+    "The first 0.20-second future trajectory sample advances 32 cm from the actor location, matching the 160 cm/s query rather than the 60 cm/s shell speed.",
+    "Zero intent continues to publish and predict zero query velocity.",
+    "The scripted E60 Normal episode selects at least one non-idle animation during the moving phases without forcing an asset by name.",
+    "No Pose Search database/schema asset, policy action scale, Physics Control gain, shell speed, scripted timing, or acceptance threshold changes."
+  ],
+  "next_if_supported": "Run Normal and ZeroActions scripted episodes, then the complete locked causal/control bundle."
+}

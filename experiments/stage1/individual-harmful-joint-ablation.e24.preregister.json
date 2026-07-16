@@ -1,0 +1,40 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "individual-harmful-joint-ablation-e24",
+  "recorded_utc": "2026-07-15T17:25:00Z",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "At least one individual ProtoMotions joint inside each E23-sufficient region is independently sufficient for standing failure on the Manny plant.",
+  "arms": [
+    {"name":"zero", "start_joint":0, "joint_count":0},
+    {"name":"torso", "start_joint":8, "joint_count":1},
+    {"name":"spine", "start_joint":9, "joint_count":1},
+    {"name":"chest", "start_joint":10, "joint_count":1},
+    {"name":"right_thorax", "start_joint":18, "joint_count":1},
+    {"name":"right_shoulder", "start_joint":19, "joint_count":1},
+    {"name":"right_elbow", "start_joint":20, "joint_count":1}
+  ],
+  "single_changed_variable": "The single post-conditioning Proto action joint retained; all other conditioned action scalars are exactly zero.",
+  "locked_configuration": {
+    "runtime_behavior_commit":"c01d2d9cd609312c7b844e813aea1eb8ed877ecf",
+    "same_binary":true,
+    "variant":"RealOnnxPolicy",
+    "action_axis":"mesh-component parent-bind axis from first policy",
+    "neutral_source":"captured stable standing neutral",
+    "constraint_range_mapping_and_projection":"enabled and unchanged",
+    "actuation":"current 8 Hz acceleration-mode plant",
+    "fixed_timestep_seconds":0.016666666666666666,
+    "capture_window_seconds":10.0,
+    "perturbation":"none"
+  },
+  "validity_gates": [
+    "First-policy snapshot including all 69 raw ONNX outputs is byte-identical across arms.",
+    "Every conditioned triplet outside the declared single joint is exactly zero.",
+    "Zero arm is physically stable and differs only on the required nonzero-action criterion.",
+    "Each arm has 601 physics samples, 300 policy samples, and target readback ratio 1.0."
+  ],
+  "support": "One or more individual joints reproduce failure while another individual in the same parent region passes.",
+  "interaction_result": "All individual joints pass, requiring pairwise combinations within the parent region.",
+  "falsification": "Every individual in each region fails similarly, so the region is not meaningfully localized at joint resolution.",
+  "next": "If an individual joint fails, inspect its axis components and mapped Manny control. If all individuals pass, run contiguous pairs and then add noncontiguous-set support only if required."
+}

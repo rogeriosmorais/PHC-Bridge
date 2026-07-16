@@ -1,0 +1,243 @@
+{
+  "schema_version": "physanim-evidence-driven-investigation/v1",
+  "experiment_id": "active-standing-constraint-range-remap-bypass-e4",
+  "recorded_utc": "2026-07-14T17:52:32Z",
+  "experiment_type": "same_commit_runtime_ab",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "run_validity": "INVALID",
+  "invalid_reason": "The first policy-input snapshot differed between variants before the active-standing-only intervention could execute, so the required identical pre-intervention state was not established.",
+  "hypothesis": "Proto's full-range action has already been decoded as an absolute joint target, so MapProtoPolicyTargetToMannyConstraintRange is a causal distortion. Bypassing only that remap while retaining AdaptParentRelativeTarget safety projection should improve locked standing behavior.",
+  "supporting_evidence_before_experiment": {
+    "source_experiment": "experiments/stage1/active-standing-action-semantics.e3.json",
+    "constraint_range_mapped_control_count": 14,
+    "lower_body_mean_constraint_range_mapping_delta_deg": 27.156594,
+    "lower_body_maximum_constraint_range_mapping_delta_deg": 47.093262,
+    "lower_body_maximum_constraint_range_mapping_bone": "foot_l",
+    "maximum_constraint_projection_delta_deg": 8.858796,
+    "target_readback_match_ratio": 1.0
+  },
+  "competing_explanations": [
+    "The remap is required to translate Proto's full plus-or-minus-pi actuator range into Manny's authored joint ranges; bypassing it will drive more targets into safety projection and worsen behavior.",
+    "A remaining observation or initialization mismatch makes the policy request poor recovery targets independently of range adaptation.",
+    "Uncontrolled launch-to-launch runtime variation can confound a single A/B pair even when command-line configuration is identical."
+  ],
+  "single_changed_variable": {
+    "name": "active_standing_constraint_range_remap",
+    "baseline": "enabled",
+    "experimental": "bypassed",
+    "activation": "-PhysAnimExperimentalConstraintRangeRemapBypass",
+    "scope": "WITH_DEV_AUTOMATION_TESTS and RealOnnxPolicy and BalanceActive_Standing only",
+    "safety_projection_retained": true,
+    "action_semantic_trace_enabled_in_both_variants": true,
+    "production_default_changed": false,
+    "activation_contract_changed": false,
+    "serialization_contract_changed": false,
+    "acceptance_thresholds_changed": false
+  },
+  "expected_if_hypothesis_correct": "The experimental trace has zero constraint-range remap delta while safety projection remains active and target readback remains 1.0; the locked failed-criteria set strictly shrinks without adding a new failure.",
+  "falsification_observation": "The trace proves the remap was bypassed but the failed-criteria set is unchanged or worse, a new locked failure appears, or safety projection saturates the unremapped targets without reducing failures.",
+  "validity_requirement": "The baseline and experimental variants must reach the active-standing-only intervention from the same first policy input under the same commit, model, seed, fixed timestep, initial pose, and no-perturbation configuration.",
+  "locked_judges": {
+    "protocol": "product-gates/standing-plant-ladder.v2.json",
+    "protocol_version": 2,
+    "protocol_status": "LOCKED",
+    "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+    "evaluator": "scripts/evaluate_standing_plant.py",
+    "automation_test": "PhysAnim.Development.StandingPlant.RealOnnxPolicy",
+    "variant": "RealOnnxPolicy",
+    "fixed_delta_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "perturbation": "none_for_standing_plant_layer",
+    "deterministic_seed": "unchanged_harness_default_no_override",
+    "initial_pose": "unchanged_standing_plant_fixture",
+    "repetition": 1,
+    "acceptance_threshold_changes": "none",
+    "primary_metrics": [
+      "exact failed-criteria set",
+      "minimum pelvis-height ratio",
+      "maximum root tilt",
+      "maximum root and body linear and angular speeds",
+      "maximum support gap",
+      "constraint range-remap and projection deltas",
+      "target write/readback completeness and error"
+    ]
+  },
+  "implementation": {
+    "source_commit": "98433c4d8fb963403223e6631b6fc364ad40d382",
+    "source_tree_dirty": false,
+    "commit_subject": "Add test-only constraint range remap bypass",
+    "model_path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+    "model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+    "deterministic_contract_tests": [
+      "PhysAnim.ProductHarness.DropDispatchSwitch",
+      "PhysAnim.Bridge.ActionSemanticTraceContract"
+    ],
+    "deterministic_contract_test_status": "PASS",
+    "serena_diagnostics_status": "PASS",
+    "full_editor_build_status": "PASS"
+  },
+  "baseline": {
+    "artifact_root": "test-results/adapter-constraint-range-remap-e4/RealOnnxPolicy-constraint-remap-e4-baseline",
+    "range_remap_bypass_enabled": false,
+    "action_semantic_trace_enabled": true,
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "key_metrics": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.975475,
+      "minimum_pelvis_height_ratio": 0.15324,
+      "maximum_root_tilt_deg": 103.503227,
+      "maximum_root_linear_speed_cm_per_sec": 1015.734299,
+      "maximum_root_angular_speed_deg_per_sec": 691.660015,
+      "maximum_body_linear_speed_cm_per_sec": 1183.699187,
+      "maximum_body_angular_speed_deg_per_sec": 1802.030466,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "target_readback_match_ratio": 1.0
+    },
+    "semantic_trace": {
+      "captured": true,
+      "capture_error": "",
+      "action_joint_count": 23,
+      "control_target_count": 21,
+      "first_active_action_l2": 0.960449,
+      "mean_constraint_range_mapping_delta_deg": 19.090731,
+      "maximum_constraint_range_mapping_delta_deg": 72.645248,
+      "mean_constraint_projection_delta_deg": 0.691456,
+      "maximum_constraint_projection_delta_deg": 8.856072,
+      "target_write_count": 21,
+      "readback_success_count": 21,
+      "maximum_readback_error_deg": 0.000001708
+    },
+    "sha256": {
+      "manifest": "6084183A506EB31B5E4759FABB1863E915A105D6B723A7D588E07F88DE68E3D7",
+      "evaluation": "22B67AF69F652B081B4D7CB0D6430D601BB65C928E87DCCEA79BD88DAC72652C",
+      "physics": "E1205FBB590B108CE4BBC590502FBE3BC65AE7A27F7178FDCFF7134B3FCA0E3B",
+      "policy": "EDD2EEAE8545375EECE30A9A1428B1AF0809048B1322D57075EC3D9D13BC76F8",
+      "first_policy_input_snapshot": "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3",
+      "active_standing_policy_input_snapshot": "1B30C9C6612D0A671FB86A125161BC1F9985092E79C4925BA77B8849506DFBD5",
+      "action_semantic_trace": "876C1C762FC26E863167DDB95002AFB18F58B43202C779135A5376232D370350"
+    }
+  },
+  "experimental": {
+    "artifact_root": "test-results/adapter-constraint-range-remap-e4/RealOnnxPolicy-constraint-remap-e4-experimental",
+    "range_remap_bypass_enabled": true,
+    "action_semantic_trace_enabled": true,
+    "safety_projection_enabled": true,
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "root_angular_speed",
+      "body_linear_speed",
+      "body_angular_speed",
+      "pelvis_height",
+      "root_tilt",
+      "support_gap"
+    ],
+    "key_metrics": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.96373,
+      "minimum_pelvis_height_ratio": 0.153111,
+      "maximum_root_tilt_deg": 125.039627,
+      "maximum_root_linear_speed_cm_per_sec": 1114.898594,
+      "maximum_root_angular_speed_deg_per_sec": 1253.74859,
+      "maximum_body_linear_speed_cm_per_sec": 1888.966062,
+      "maximum_body_angular_speed_deg_per_sec": 9404.083285,
+      "maximum_support_gap_ms": 450.0,
+      "maximum_penetration_cm": 0.0,
+      "target_readback_match_ratio": 1.0
+    },
+    "semantic_trace": {
+      "captured": true,
+      "capture_error": "",
+      "action_joint_count": 23,
+      "control_target_count": 21,
+      "first_active_action_l2": 0.95511,
+      "mean_constraint_range_mapping_delta_deg": 0.000000163,
+      "maximum_constraint_range_mapping_delta_deg": 0.000001708,
+      "mean_constraint_projection_delta_deg": 10.333749,
+      "maximum_constraint_projection_delta_deg": 67.032845,
+      "maximum_constraint_projection_bone": "lowerarm_r",
+      "lower_body_projection_deltas_deg": {
+        "thigh_l": 8.4,
+        "calf_l": 29.05,
+        "foot_l": 24.32,
+        "thigh_r": 5.99,
+        "calf_r": 2.77,
+        "foot_r": 42.03
+      },
+      "target_write_count": 21,
+      "readback_success_count": 21,
+      "maximum_readback_error_deg": 0.000001708
+    },
+    "sha256": {
+      "manifest": "E040DC081E2BBAC51265746C5C20E600977EACDFF2B15452CE3A3E440C0155B0",
+      "evaluation": "1C70F3A3AE92FB02A8B799DC1C38FB4203BAC7DE5AD6018C59294970621C1BA8",
+      "physics": "7EAEE4546AFAF31DD001D76221EEBA2E86024E2BB477D4ECB0782CC90BFE2D78",
+      "policy": "F3DA33A1C3E03F7251BCB5E90D7E2FD7C47E18460DC0C7A8FDB24E523741830F",
+      "first_policy_input_snapshot": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_policy_input_snapshot": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "3C4A3BB93CA044627AD8A929E489C5BFE20E1FA13E054862C403EFAD065E862D"
+    }
+  },
+  "pre_intervention_equivalence": {
+    "passed": false,
+    "first_policy_input_snapshot_hash_identical": false,
+    "self_observation_max_abs_difference": 0.002320558,
+    "self_observation_rms_difference": 0.000439617,
+    "mimic_target_max_abs_difference": 0.002570421,
+    "mimic_target_rms_difference": 0.000108575,
+    "terrain_max_abs_difference": 0.000044107,
+    "terrain_rms_difference": 0.000044107,
+    "first_action_max_abs_difference": 0.008536816,
+    "first_action_rms_difference": 0.002517887,
+    "baseline_first_action_l2": 0.996767,
+    "experimental_first_action_l2": 1.000538,
+    "active_standing_self_observation_max_abs_difference": 0.100039912,
+    "active_standing_self_observation_rms_difference": 0.019519862,
+    "active_standing_action_max_abs_difference": 0.015448451,
+    "active_standing_action_rms_difference": 0.003139375
+  },
+  "observed_direction_not_causal_verdict": {
+    "intervention_semantically_applied": true,
+    "range_mapping_mean_delta_change_deg": -19.090731,
+    "projection_mean_delta_change_deg": 9.642293,
+    "projection_max_delta_change_deg": 58.176772,
+    "failed_criteria_count_change": 3,
+    "new_failed_criteria": [
+      "root_angular_speed",
+      "body_angular_speed",
+      "support_gap"
+    ],
+    "maximum_root_tilt_change_deg": 21.5364,
+    "maximum_root_angular_speed_change_deg_per_sec": 562.088575,
+    "maximum_body_linear_speed_change_cm_per_sec": 705.266875,
+    "maximum_body_angular_speed_change_deg_per_sec": 7602.052819,
+    "maximum_support_gap_change_ms": 450.0,
+    "direction": "STRONGLY_WORSE_BUT_CONFOUNDED"
+  },
+  "conclusion": {
+    "hypothesis_status": "NOT_ADJUDICATED",
+    "experiment_status": "INVALID",
+    "summary": "The development-only override correctly removed the constraint-range remap while preserving the existing safety projection and 21-of-21 target readback. Projection then increased from a maximum of 8.856 degrees to 67.033 degrees and the locked failure count increased from three to six. That adverse direction is mechanistically consistent with the competing explanation that Manny range mapping is required. However, the first policy-input snapshot already differed before the active-standing-only branch could execute, violating the pre-intervention equivalence requirement. The pair therefore cannot support or falsify the causal hypothesis.",
+    "promotion_decision": "DO_NOT_PROMOTE",
+    "experimental_code_decision": "RETAIN_TEST_ONLY_OVERRIDE_FOR_ONE_CONTROLLED_RERUN_AFTER_DETERMINISM_AUDIT"
+  },
+  "next_highest_information_experiment": {
+    "status": "SELECTED_NOT_RUN",
+    "name": "RealOnnxPolicy pre-intervention determinism negative control",
+    "hypothesis": "The standing-plant fixture has launch-to-launch pre-intervention variation under nominally identical configuration, which can invalidate semantic A/B comparisons.",
+    "behavior_change": "none",
+    "method": "Run three consecutive trace-enabled, remap-enabled RealOnnxPolicy baseline repetitions on the same clean commit and binary. Compare exact first-policy snapshot hashes, per-section differences, first actions, active-standing snapshots, and locked metric spread.",
+    "expected_if_correct": "At least two unchanged baseline repetitions produce different first-policy snapshot hashes and nonzero first-policy input/action differences.",
+    "falsifier": "All three first-policy snapshots and first actions are bit-identical; E4's baseline launch is then treated as an isolated malformed run and E4 is rerun with a fresh adjacent baseline.",
+    "followup_if_supported": "Instrument the earliest differing observation source before any further action-semantic behavior experiment.",
+    "followup_if_falsified": "Rerun the unchanged E4 baseline and bypass variant, requiring exact first-policy snapshot equality before causal adjudication."
+  }
+}

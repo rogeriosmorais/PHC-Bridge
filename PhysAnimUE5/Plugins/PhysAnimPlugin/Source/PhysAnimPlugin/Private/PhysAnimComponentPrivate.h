@@ -405,8 +405,8 @@ namespace PhysAnimComponentInternal
 		TEXT("How many times the deterministic PIE movement smoke timeline repeats before completing."));
 	inline TAutoConsoleVariable<int32> CVarPhysAnimAllowCharacterMovementInBridgeActive(
 		TEXT("physanim.AllowCharacterMovementInBridgeActive"),
-		1,
-		TEXT("When enabled, BridgeActive preserves capsule collision and CharacterMovement so the player can drive the character with normal gameplay input."));
+		0,
+		TEXT("Explicit diagnostic opt-in that preserves capsule collision and CharacterMovement during bridge ownership."));
 	inline TAutoConsoleVariable<int32> CVarPhysAnimShowBridgeStatusIndicator(
 		TEXT("physanim.ShowBridgeStatusIndicator"),
 		1,

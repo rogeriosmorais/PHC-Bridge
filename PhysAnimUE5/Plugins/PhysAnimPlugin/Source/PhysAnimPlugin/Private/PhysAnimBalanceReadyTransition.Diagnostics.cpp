@@ -11,26 +11,75 @@ void FPhysAnimBalanceReadyTransition::MarkSafePhase2Denied(class UPhysAnimCompon
 
 void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings)
 {
+	Phase1TopologyRecord = {};
+	bHasPhase1TopologyRecord = false;
 	if (!Owner)
 	{
 		return;
 	}
 
-	USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
+	USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
+	UPhysicsControlComponent* const PhysicsControl = Owner->PhysicsControlComponent.Get();
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-	FBodyInstance* PelvisBody = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
-	if (!PelvisBody)
-	{
-		return;
-	}
 
 	int32 ProximalSimCount = 0;
 	int32 DistalSimCount = 0;
 	int32 UpperSimCount = 0;
 	int32 TotalSimCount = 0;
-	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+	for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
-		if (ShouldKeepBoneKinematic(BoneName, Settings))
+		FPhysAnimPhase1BodyTopologyObservation Observation;
+		Observation.BoneName = BoneName;
+		Observation.bExpectedSimulating = !ShouldKeepBoneKinematic(BoneName, Settings);
+
+		const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+		const FPhysicsBodyModifierRecord* const ModifierRecord = PhysicsControl
+			? FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName)
+			: nullptr;
+		Observation.bModifierRecordPresent = ModifierRecord != nullptr;
+		if (ModifierRecord)
+		{
+			const EPhysicsMovementType MovementType = ModifierRecord->BodyModifier.ModifierData.MovementType;
+			Observation.bModifierReportedSimulating = MovementType == EPhysicsMovementType::Simulated;
+			Observation.bModifierReportedKinematic = MovementType == EPhysicsMovementType::Kinematic;
+		}
+
+		const FBodyInstance* const BodyInstance = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
+		Observation.bBodyInstanceValid = BodyInstance && BodyInstance->IsValidBodyInstance();
+		Observation.bBodySimulating = Observation.bBodyInstanceValid && BodyInstance->IsInstanceSimulatingPhysics();
+		Observation.bMismatch = IsPhase1TopologyObservationMismatch(
+			Observation.bExpectedSimulating,
+			Observation.bModifierRecordPresent,
+			Observation.bModifierReportedSimulating,
+			Observation.bModifierReportedKinematic,
+			Observation.bBodyInstanceValid,
+			Observation.bBodySimulating);
+
+		if (Observation.bMismatch)
+		{
+			TArray<FString> MismatchReasons;
+			if (!Observation.bModifierRecordPresent) MismatchReasons.Add(TEXT("modifier_record_missing"));
+			if (!Observation.bBodyInstanceValid) MismatchReasons.Add(TEXT("body_instance_invalid"));
+			if (Observation.bModifierRecordPresent)
+			{
+				const bool bModifierMatchesExpected = Observation.bExpectedSimulating
+					? Observation.bModifierReportedSimulating
+					: Observation.bModifierReportedKinematic;
+				if (!bModifierMatchesExpected) MismatchReasons.Add(TEXT("modifier_expected_mismatch"));
+			}
+			if (Observation.bModifierRecordPresent && Observation.bBodyInstanceValid)
+			{
+				const bool bModifierMatchesBody =
+					(Observation.bModifierReportedSimulating && Observation.bBodySimulating) ||
+					(Observation.bModifierReportedKinematic && !Observation.bBodySimulating);
+				if (!bModifierMatchesBody) MismatchReasons.Add(TEXT("modifier_body_mismatch"));
+			}
+			Observation.MismatchReason = FString::Join(MismatchReasons, TEXT("+"));
+			Phase1TopologyRecord.MismatchCount++;
+		}
+
+		Phase1TopologyRecord.BodyObservations.Add(Observation);
+		if (!Observation.bBodySimulating)
 		{
 			continue;
 		}
@@ -50,7 +99,13 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 		TotalSimCount++;
 	}
 
-	Phase1TopologyRecord.bRootSimulating = !ShouldKeepBoneKinematic(RootBoneName, Settings);
+	const FPhysAnimPhase1BodyTopologyObservation* const RootObservation =
+		Phase1TopologyRecord.BodyObservations.FindByPredicate(
+			[RootBoneName](const FPhysAnimPhase1BodyTopologyObservation& Observation)
+			{
+				return Observation.BoneName == RootBoneName;
+			});
+	Phase1TopologyRecord.bRootSimulating = RootObservation && RootObservation->bBodySimulating;
 	Phase1TopologyRecord.ProximalSimCount = ProximalSimCount;
 	Phase1TopologyRecord.DistalSimCount = DistalSimCount;
 	Phase1TopologyRecord.UpperBodySimCount = UpperSimCount;
@@ -60,17 +115,24 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 	Phase1TopologyRecord.ProximalOwnershipMode = ProximalSimCount > 0 ? EBalanceReadyGroupOwnershipMode::Simulating : EBalanceReadyGroupOwnershipMode::Kinematic;
 	Phase1TopologyRecord.DistalOwnershipMode = DistalSimCount > 0 ? EBalanceReadyGroupOwnershipMode::Simulating : EBalanceReadyGroupOwnershipMode::Kinematic;
 
-	Phase1TopologyRecord.UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
+	Phase1TopologyRecord.UpperBodyOwnershipMode = UpperSimCount > 0
+		? EBalanceReadyUpperBodyOwnershipMode::None
+		: EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
 	if (GVerbosePhase1Forensics != 0)
 	{
-		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_OWNERSHIP_FROZEN mode=LateValidationKinematicHold source=Phase1Contract"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_OWNERSHIP_OBSERVED mode=%s source=modifier_and_body_readback"),
+			BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode));
 	}
 
-	// Capture authoritative suppression state for Phase 1.
-	// Since Phase 1 always suppresses policy and resets (using held poses), we set these
-	// flags to true to reflect the active Phase 1 contract.
-	Phase1TopologyRecord.bPolicySuppressed = true;
-	Phase1TopologyRecord.bResetsSuppressed = true;
+	const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
+	Phase1TopologyRecord.bPolicySuppressed =
+		WasPolicySuppressedInObservedFrame(ControlTargetDiagnostics.NumNormalPolicyTargetsWritten);
+	Phase1TopologyRecord.bResetsSuppressed = WereResetsSuppressedInObservedFrame(
+		Owner->GetPendingBodyModifierCachedResetNames().Num(),
+		Owner->GetLastBodyModifierResetRequestCount());
+	Phase1TopologyRecord.bAuthoritative =
+		Phase1TopologyRecord.BodyObservations.Num() == PhysAnimBridge::GetRequiredBodyModifierBoneNames().Num() &&
+		Phase1TopologyRecord.MismatchCount == 0;
 	bHasPhase1TopologyRecord = true;
 
 	auto GetModeName = [](EBalanceReadyGroupOwnershipMode Mode)
@@ -80,7 +142,7 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 
 	if (GVerbosePhase1Forensics != 0)
 	{
-		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE1_TOPOLOGY_SNAPSHOT topology=root=%s proximal=%s distal=%s upper=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d resetsSuppressed=%d"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE1_TOPOLOGY_SNAPSHOT topology=root=%s proximal=%s distal=%s upper=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d resetsSuppressed=%d authoritative=%d mismatchCount=%d"),
 			GetModeName(Phase1TopologyRecord.RootOwnershipMode),
 			GetModeName(Phase1TopologyRecord.ProximalOwnershipMode),
 			GetModeName(Phase1TopologyRecord.DistalOwnershipMode),
@@ -91,7 +153,26 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 			Phase1TopologyRecord.DistalSimCount,
 			Phase1TopologyRecord.UpperBodySimCount,
 			Phase1TopologyRecord.bPolicySuppressed ? 1 : 0,
-			Phase1TopologyRecord.bResetsSuppressed ? 1 : 0);
+			Phase1TopologyRecord.bResetsSuppressed ? 1 : 0,
+			Phase1TopologyRecord.bAuthoritative ? 1 : 0,
+			Phase1TopologyRecord.MismatchCount);
+		for (const FPhysAnimPhase1BodyTopologyObservation& Observation : Phase1TopologyRecord.BodyObservations)
+		{
+			if (!Observation.bMismatch)
+			{
+				continue;
+			}
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
+				TEXT("[PhysAnimBalance] PHASE1_TOPOLOGY_MISMATCH bone=%s reason=%s expectedSim=%d modifierPresent=%d modifierSim=%d modifierKin=%d bodyValid=%d bodySim=%d"),
+				*Observation.BoneName.ToString(),
+				*Observation.MismatchReason,
+				Observation.bExpectedSimulating ? 1 : 0,
+				Observation.bModifierRecordPresent ? 1 : 0,
+				Observation.bModifierReportedSimulating ? 1 : 0,
+				Observation.bModifierReportedKinematic ? 1 : 0,
+				Observation.bBodyInstanceValid ? 1 : 0,
+				Observation.bBodySimulating ? 1 : 0);
+		}
 	}
 }
 

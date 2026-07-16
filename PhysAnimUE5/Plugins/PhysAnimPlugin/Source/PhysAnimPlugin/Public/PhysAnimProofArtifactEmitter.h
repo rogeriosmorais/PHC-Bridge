@@ -6,7 +6,14 @@
 struct FPhysAnimProofArtifactEmitInput
 {
 	FString AttemptUuid;
+	FString AttemptNonce;
+	FString SourceCommit;
+	bool bSourceTreeDirty = true;
+	FString FinalRuntimeOutcome;
+	TOptional<double> SetupOverrideCount;
 	double StandingSeconds = 0.0;
+	int32 StandingWindowSampleCount = 0;
+	double StandingWindowMaxDeltaSec = 0.0;
 	int32 RuntimeHitCount = 0;
 	int32 MappedSupportHitCount = 0;
 	FPhysAnimRuntimeTerminationPipelineResult PipelineResult;
@@ -43,7 +50,7 @@ namespace PhysAnimProofArtifactEmitter
 
 	void LogAttemptResult(
 		const FString& AttemptUuid,
-		bool bPassed,
+		bool bCaptureCompleted,
 		double StandingSeconds,
 		EPhysAnimTerminalReason TerminalReason);
 

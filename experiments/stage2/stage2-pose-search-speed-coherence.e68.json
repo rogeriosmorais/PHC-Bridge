@@ -1,0 +1,43 @@
+{
+  "schema_version": "physanim-experiment-result/v1",
+  "experiment_id": "E68",
+  "status": "SUPPORTED_POSE_SEARCH_RESTORED_SCENARIO_RETIME_REQUIRED",
+  "baseline_commit": "d50164318d936b52b092c8713e2bef57aa05f439",
+  "behavior_commit": "3f046f1b17dd49148d09f248ed0d7769b312eb1d",
+  "regression_commits": {
+    "predictor_velocity_regression": "769ae822db00c56cf17a2bd7d7698e37b68d2284",
+    "stage2_speed_split": "41571245c249949ccc22b29d04c5106614ce080f"
+  },
+  "root_cause": "Stage2 introduced a duplicate 60 cm/s shell speed after Pose Search had been stabilized around a 160 cm/s query. The unchanged locomotion database contains approximately 300 cm/s root-motion walks. The 60 cm/s physical history made MM_Idle cheaper than every locomotion candidate even when future trajectory conditioning requested 160 cm/s.",
+  "changes": [
+    "Restored the pre-769ae82 predictor query-velocity contract in E67.",
+    "Removed the duplicate Stage2 60 cm/s speed and derived Stage2 shell speed from the effective stabilized Pose Search speed, clamped by the production bridge maximum."
+  ],
+  "tests": {
+    "PhysAnim.Locomotion.ScriptedRuntime": "PASS",
+    "PhysAnim.Locomotion.Stage2AGate": "PASS",
+    "PhysAnim.Locomotion.Stage2ATurnIntent": "PASS",
+    "PhysAnim.Locomotion.Stage2AWalkIntent": "PASS"
+  },
+  "authoritative_run": {
+    "root": "test-results/scripted-locomotion/e68-speed-coherence/Normal-1",
+    "human_input": false,
+    "script_step_failure_count": 0,
+    "selected_animation_counts": {
+      "MM_Idle": 178,
+      "MF_Unarmed_Walk_Left": 122
+    },
+    "moving_phase_non_idle_counts": {
+      "Acceleration": 8,
+      "Cruise": 60,
+      "MovingTurn": 30,
+      "Deceleration": 24
+    },
+    "shell_path_length_cm": 603.80000422894955,
+    "net_planar_displacement_cm": 592.53307933951828,
+    "yaw_delta_deg": 30.0,
+    "final_runtime_state": "BalanceActive_Standing",
+    "final_shell_speed_cm_per_sec": 0.0
+  },
+  "conclusion": "Pose Search is restored without forcing an animation by name. The old scripted phase durations now exceed the locked path-length band because they were authored around the regressed 60 cm/s shell speed. Retiming the scripted scenario is the next isolated variable."
+}

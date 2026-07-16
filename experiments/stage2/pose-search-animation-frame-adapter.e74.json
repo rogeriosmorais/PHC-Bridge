@@ -1,0 +1,31 @@
+{
+  "schema_version": "physanim-experiment-result/v1",
+  "experiment_id": "E74",
+  "status": "REJECTED_VELOCITY_ONLY_FRAME_ADAPTER",
+  "baseline_commit": "54e719876835018e7f7069d69ecd59adc08e00b3",
+  "behavior_commit": "e0a4ea4fe7e8459764a0f84d165e01caee82618b",
+  "date": "2026-07-16",
+  "tests": {
+    "PhysAnim.Development.PoseSearchAssetDirections": "PASS",
+    "PhysAnim.Locomotion": "PASS"
+  },
+  "authoritative_normal": {
+    "run_root": "test-results/scripted-locomotion/e74-frame-adapter/Normal-1",
+    "shell_path_length_cm": 211.80000288784504,
+    "physical_root_path_length_cm": 218.83304904421928,
+    "physical_root_net_planar_displacement_cm": 164.24826129855538,
+    "physical_root_overall_delta_xy_cm": [135.587781852547, -92.70083468828452],
+    "final_root_shell_tracking_error_cm": 142.4476421110778,
+    "max_root_shell_tracking_error_cm": 144.83852937511293,
+    "selected_animation_counts": {
+      "MM_Idle": 300
+    },
+    "final_runtime_state": "BalanceActive_Standing"
+  },
+  "comparison_to_e73_normal": {
+    "physical_root_net_displacement_improved_cm": 105.49300292479293,
+    "final_tracking_error_reduced_cm": 127.48750974262333
+  },
+  "rejection_reason": "The velocity-only adapter improved physical progress and tracking, but failed the preregistered Motion Matching criterion: no forward locomotion clip was selected. Current/future velocity moved into the animation frame while trajectory facing stayed in the actor frame, leaving the Pose Search query internally inconsistent.",
+  "next": "Revert E74 and preregister a full trajectory-frame adapter that transforms velocity and facing coherently while preserving shell motion and all controller settings."
+}

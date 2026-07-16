@@ -1,0 +1,97 @@
+{
+  "protocol": "product-gates/scripted-locomotion.v3.json",
+  "runs": [
+    {
+      "causal_verdict": "FAIL",
+      "failed_criteria": [
+        "root_to_shell_progress_ratio_max",
+        "tracking_error_time_average_cm",
+        "final_tracking_error_cm",
+        "max_tracking_error_cm",
+        "root_route_lateral_displacement_cm"
+      ],
+      "fixture_verdict": "PASS",
+      "metrics": {
+        "assistance_clean": true,
+        "classification": "FORWARD_TRACKING",
+        "final_tracking_error_cm": 599.7084281748643,
+        "forbidden_assistance_observed": [],
+        "max_tracking_error_cm": 646.4908173630495,
+        "note": "These are interpretable endpoints, not product thresholds or a weighted acceptance score.",
+        "root_net_displacement_cm": 783.1211855627785,
+        "root_path_length_cm": 1759.6302405107126,
+        "root_route_lateral_displacement_cm": 330.0643880172959,
+        "root_route_projected_progress_cm": 710.1663826456584,
+        "root_to_shell_progress_ratio": 3.4357209339978003,
+        "schema_version": "physanim-locomotion-causal-metrics/v1",
+        "shell_net_progress_cm": 206.7008340573545,
+        "shell_path_length_cm": 211.80000194907188,
+        "tracking_error_auc_cm_sec": 3489.770847121456,
+        "tracking_error_time_average_cm": 348.9770847121456
+      },
+      "run_id": "v3-normal-1-68f86ffe"
+    },
+    {
+      "causal_verdict": "FAIL",
+      "failed_criteria": [
+        "root_to_shell_progress_ratio_max",
+        "tracking_error_time_average_cm",
+        "final_tracking_error_cm",
+        "max_tracking_error_cm",
+        "root_route_lateral_displacement_cm"
+      ],
+      "fixture_verdict": "PASS",
+      "metrics": {
+        "assistance_clean": true,
+        "classification": "FORWARD_TRACKING",
+        "final_tracking_error_cm": 599.7084281748643,
+        "forbidden_assistance_observed": [],
+        "max_tracking_error_cm": 646.4908173630495,
+        "note": "These are interpretable endpoints, not product thresholds or a weighted acceptance score.",
+        "root_net_displacement_cm": 783.1211855627785,
+        "root_path_length_cm": 1759.6302405107126,
+        "root_route_lateral_displacement_cm": 330.0643880172959,
+        "root_route_projected_progress_cm": 710.1663826456584,
+        "root_to_shell_progress_ratio": 3.4357209339978003,
+        "schema_version": "physanim-locomotion-causal-metrics/v1",
+        "shell_net_progress_cm": 206.7008340573545,
+        "shell_path_length_cm": 211.80000194907188,
+        "tracking_error_auc_cm_sec": 3489.770847121456,
+        "tracking_error_time_average_cm": 348.9770847121456
+      },
+      "run_id": "v3-normal-2-68f86ffe"
+    },
+    {
+      "causal_verdict": "FAIL",
+      "failed_criteria": [
+        "root_to_shell_progress_ratio_max",
+        "tracking_error_time_average_cm",
+        "final_tracking_error_cm",
+        "max_tracking_error_cm",
+        "root_route_lateral_displacement_cm"
+      ],
+      "fixture_verdict": "PASS",
+      "metrics": {
+        "assistance_clean": true,
+        "classification": "FORWARD_TRACKING",
+        "final_tracking_error_cm": 599.7084281748643,
+        "forbidden_assistance_observed": [],
+        "max_tracking_error_cm": 646.4908173630495,
+        "note": "These are interpretable endpoints, not product thresholds or a weighted acceptance score.",
+        "root_net_displacement_cm": 783.1211855627785,
+        "root_path_length_cm": 1759.6302405107126,
+        "root_route_lateral_displacement_cm": 330.0643880172959,
+        "root_route_projected_progress_cm": 710.1663826456584,
+        "root_to_shell_progress_ratio": 3.4357209339978003,
+        "schema_version": "physanim-locomotion-causal-metrics/v1",
+        "shell_net_progress_cm": 206.7008340573545,
+        "shell_path_length_cm": 211.80000194907188,
+        "tracking_error_auc_cm_sec": 3489.770847121456,
+        "tracking_error_time_average_cm": 348.9770847121456
+      },
+      "run_id": "v3-normal-3-68f86ffe"
+    }
+  ],
+  "schema_version": "physanim-scripted-locomotion-v3-causal-evidence/v1",
+  "source_commit": "68f86ffe8807424313bc2004021c9c28066cdce7"
+}

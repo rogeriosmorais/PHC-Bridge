@@ -1,0 +1,24 @@
+{
+  "schema_version": "physanim-product-impact-policy/v1",
+  "policy_version": 1,
+  "status": "LOCKED",
+  "unknown_path_policy": "PRODUCT_IMPACTING",
+  "product_patterns": [
+    "PhysAnimUE5/**",
+    "Training/**",
+    "product-gates/**",
+    "scripts/**",
+    ".codex/config.toml",
+    ".gemini/settings.json",
+    ".mcp.json"
+  ],
+  "non_product_patterns": [
+    "docs/**",
+    "graphify-out/**",
+    ".agents/**",
+    ".claude/**",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "README.md"
+  ]
+}

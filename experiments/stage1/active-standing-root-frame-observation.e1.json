@@ -1,0 +1,130 @@
+{
+  "schema_version": "physanim-evidence-driven-investigation/v1",
+  "experiment_id": "active-standing-root-frame-observation-e1",
+  "recorded_utc": "2026-07-14T16:44:00Z",
+  "experiment_type": "instrumentation_only",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "The first inference that can influence BalanceActive_Standing still receives an approximately 30 degree live-root versus PoseSearch-target-root mismatch, placing the first target-relative position and rotation slice outside the checkpoint's learned input distribution.",
+  "supporting_evidence_before_experiment": {
+    "snapshot_scope": "first_inference_in_standing_preparation",
+    "root_relative_rotation_deg": 31.043,
+    "rigid_fit_rotation_deg": 32.323,
+    "rigid_fit_residual_m": 0.0089,
+    "target_relative_position_max_abs_sigma": 11.92,
+    "target_relative_rotation_max_abs_sigma": 9.3
+  },
+  "competing_explanations": [
+    "The preparation snapshot may not represent the first policy-active inference; the root mismatch could disappear by BalanceActive_Standing.",
+    "Observation/action handedness or Manny constraint-axis decoding may remain incorrect even if root-frame semantics are corrected."
+  ],
+  "single_changed_variable": {
+    "name": "active_standing_policy_input_observability",
+    "baseline": false,
+    "instrumented": true,
+    "production_behavior_changed": false,
+    "target_behavior_changed": false,
+    "physics_behavior_changed": false,
+    "acceptance_thresholds_changed": false
+  },
+  "expected_if_hypothesis_correct": "The first active-standing snapshot retains a large root-relative rotation and multi-sigma first-slice position and rotation outliers.",
+  "falsification_observation": "The first active-standing target-relative root is near identity and its first-slice channels are within the learned distribution while RealOnnxPolicy still fails.",
+  "locked_judges": {
+    "protocol": "product-gates/standing-plant-ladder.v2.json",
+    "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+    "evaluator": "scripts/evaluate_standing_plant.py",
+    "variant": "RealOnnxPolicy",
+    "fixed_delta_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "perturbation": "none_for_standing_plant_layer",
+    "deterministic_seed": "unchanged_harness_default_no_override",
+    "initial_pose": "unchanged_standing_plant_fixture",
+    "acceptance_threshold_changes": "none"
+  },
+  "model": {
+    "path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+    "sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19"
+  },
+  "baseline": {
+    "source_commit": "4432bed12a8e82b179167dc5f76d1974d14e44a9",
+    "artifact_root": "test-results/standing-plant-runs/20260714T153526Z-4432bed1-bc67cfb0/RealOnnxPolicy-1-a174b2b4",
+    "status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "key_metrics": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.987,
+      "minimum_pelvis_height_ratio": 0.1534,
+      "maximum_root_tilt_deg": 105.401,
+      "maximum_root_linear_speed_cm_per_sec": 818.947,
+      "maximum_root_angular_speed_deg_per_sec": 558.735,
+      "maximum_body_linear_speed_cm_per_sec": 1119.794,
+      "maximum_body_angular_speed_deg_per_sec": 1742.67,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "target_readback_match_ratio": 1.0
+    }
+  },
+  "instrumented_baseline": {
+    "source_commit": "e5f7372aa385cb07fa8e51222e48504a8e6be33d",
+    "artifact_root": "test-results/adapter-root-frame-observation/RealOnnxPolicy-active-input-baseline-20260714T164335Z",
+    "status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "key_metrics": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.987,
+      "minimum_pelvis_height_ratio": 0.1534,
+      "maximum_root_tilt_deg": 105.401,
+      "maximum_root_linear_speed_cm_per_sec": 818.947,
+      "maximum_root_angular_speed_deg_per_sec": 558.735,
+      "maximum_body_linear_speed_cm_per_sec": 1119.794,
+      "maximum_body_angular_speed_deg_per_sec": 1742.67,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "target_readback_match_ratio": 1.0
+    },
+    "first_active_standing_inference": {
+      "captured": true,
+      "root_relative_rotation_deg": 31.037,
+      "rigid_fit_rotation_deg": 24.768,
+      "rigid_fit_residual_m": 0.044986,
+      "action_l2": 0.95511,
+      "target_relative_position_max_abs_sigma": 12.2,
+      "target_relative_position_rms_sigma": 1.37,
+      "target_relative_position_first_slice_rms_sigma": 5.3,
+      "target_relative_position_values_above_5_sigma": 26,
+      "target_relative_rotation_max_abs_sigma": 10.5,
+      "target_relative_rotation_rms_sigma": 0.97,
+      "target_relative_rotation_first_slice_rms_sigma": 3.74,
+      "target_relative_rotation_values_above_5_sigma": 25
+    }
+  },
+  "result_comparison": {
+    "runtime_metrics_bit_identical": true,
+    "instrumentation_changed_behavior": false
+  },
+  "conclusion": {
+    "hypothesis_status": "SUPPORTED",
+    "summary": "The approximately 31 degree root mismatch and severe first-slice distribution outliers persist into the first policy-active inference. The competing explanation that the mismatch was preparation-only is falsified. This does not yet prove that root anchoring will improve standing, and it does not rule out an additional action or constraint-axis error."
+  },
+  "next_highest_information_experiment": {
+    "status": "PROPOSED_NOT_RUN",
+    "single_variable": "Under an explicit development-only harness override, capture the PoseSearch data-to-live root transform at the first active-standing inference and freeze that transform for the run.",
+    "required_ab": "Rerun the unchanged RealOnnxPolicy baseline beside the root-aligned variant using the same commit, seed, timestep, pose, no-perturbation standing-plant window, and evaluator.",
+    "primary_semantic_metric": "First active-standing target-relative root rotation and normalized first-slice position/rotation outliers.",
+    "behavioral_metrics": [
+      "minimum_pelvis_height_ratio",
+      "maximum_root_tilt_deg",
+      "maximum_body_linear_speed_cm_per_sec",
+      "target_readback_match_ratio"
+    ],
+    "promotion_rule": "Do not promote. If the A/B supports the hypothesis, remove the experimental override or leave it test-only, then promote the behavior in a separate commit and rerun the locked ladder."
+  }
+}

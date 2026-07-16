@@ -1,0 +1,295 @@
+{
+  "schema_version": "physanim-evidence-driven-investigation/v1",
+  "experiment_id": "active-standing-manny-local-frame-roundtrip-e15",
+  "recorded_utc": "2026-07-15T01:13:02.8976829Z",
+  "experiment_type": "same_commit_behavior_neutral_instrumentation_ab_with_independent_roundtrip_evaluator",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "NOT_ESTABLISHED",
+  "preregistration": {
+    "path": "experiments/stage1/active-standing-manny-local-frame-roundtrip.e15.preregister.json",
+    "commit": "3398c9bb9e72c06522f3a8c055b5b35df376a81b"
+  },
+  "hypothesis": "The action-side Manny neutral/bind-axis composition is not symmetric with the observation-side Manny-bind-to-canonical-SMPL recovery, so an absolute ProtoMotions joint target does not round-trip through the two adapters as the same canonical joint rotation before constraint-range adaptation.",
+  "supporting_runtime_evidence_before_experiment": [
+    "E14 established exact agreement between the checkpoint's 69 conditioned actions and the pinned ProtoMotions v2.3 decoder while RealOnnxPolicy still failed body linear speed, pelvis height, and root tilt.",
+    "E3 established exact target publication/readback and showed a distinct Manny neutral/bind composition stage before protective range adaptation.",
+    "E13 showed that bypassing constraint-range mapping worsened the locked result, focusing the next semantic check upstream of that protective stage.",
+    "The controlled-target plant has stood under the same fully simulated topology."
+  ],
+  "competing_explanations": [
+    "The action and observation transforms are symmetric for all one-to-one mapped joints and the captured activation neutral correctly represents ProtoMotions identity.",
+    "The adapters are symmetric but an upstream root, heading, future-pose, velocity, or other observation semantic is wrong.",
+    "The full semantic contract is correct and this checkpoint/reference state lacks a standing solution for the current initial condition."
+  ],
+  "single_changed_variable": {
+    "name": "first_active_standing_manny_local_frame_roundtrip_trace",
+    "baseline_value": false,
+    "experimental_value": true,
+    "activation": "-PhysAnimMannyLocalFrameRoundtripTrace",
+    "behavior_change": "none",
+    "production_default_change": "none",
+    "activation_contract_or_serialization_change": "none",
+    "locked_protocol_or_threshold_change": "none"
+  },
+  "expected_if_hypothesis_correct": "The trace-on arm remains behaviorally identical to baseline, but at least one decisive one-to-one joint exceeds 0.001 degrees for identity, actual decoded, or known-axis action-to-observation round trip.",
+  "falsification_observation": "The trace-on arm is behaviorally identical to baseline and all 19 decisive one-to-one joints round-trip identity, the actual decoded target, and all positive/negative XYZ probes within 0.001 degrees with complete finite frame data.",
+  "locked_judges": {
+    "protocol": {
+      "path": "product-gates/standing-plant-ladder.v2.json",
+      "sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB"
+    },
+    "model": {
+      "path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+      "sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19"
+    },
+    "runtime_evaluator": "scripts/evaluate_standing_plant.py",
+    "contract_evaluator": "scripts/evaluate_manny_local_frame_roundtrip.py",
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "initial_pose": "unchanged standing-plant harness default",
+    "perturbation": "none",
+    "seed": "unchanged standing-plant harness default",
+    "axis_probe_degrees": 10.0,
+    "roundtrip_angular_tolerance_degrees": 0.001
+  },
+  "implementation": {
+    "runtime_source_commit": "59bcf9ba39d2aab8dd101745039355224aa96354",
+    "evaluator_commit": "b2b1047e2d6002e36b33edc83632f1ccf33509c2",
+    "instrumentation_commit": "59bcf9ba39d2aab8dd101745039355224aa96354",
+    "source_tree_dirty": false,
+    "build_count": 1,
+    "binary_reused_between_arms": true,
+    "trace_schema": "physanim-manny-local-frame-roundtrip/v1",
+    "trace_artifact_name": "manny-local-frame-roundtrip.json",
+    "runtime_behavior_files_changed": false,
+    "production_defaults_changed": false
+  },
+  "validation": {
+    "focused_contract_evaluator_tests": {
+      "command": "python -m pytest scripts/tests/test_manny_local_frame_roundtrip_evaluator.py -q",
+      "status": "PASS",
+      "passed": 12
+    },
+    "fast_deterministic_tests": {
+      "command": "python -m pytest scripts/tests -q",
+      "status": "PASS",
+      "passed": 111
+    },
+    "ue_build": {
+      "command": ".\\scripts\\build.ps1",
+      "status": "PASS",
+      "result": "target up to date"
+    },
+    "ue_contract_tests": [
+      {
+        "name": "PhysAnim.Bridge.MannyLocalFrameRoundtripTraceContract",
+        "status": "PASS"
+      },
+      {
+        "name": "PhysAnim.ProductHarness.DropDispatchSwitch",
+        "status": "PASS"
+      },
+      {
+        "name": "PhysAnim.Bridge.ActionSemanticTraceContract",
+        "status": "PASS"
+      }
+    ],
+    "serena_diagnostics": {
+      "status": "CLEAN",
+      "affected_cpp_files_checked": 9
+    },
+    "graphify_update": "completed",
+    "runtime_log_readback": {
+      "command": "python .\\scripts\\read_logs.py",
+      "status": "READ",
+      "baseline_automation_warnings": 48,
+      "experimental_automation_warnings": 47,
+      "automation_errors_per_arm": 0,
+      "notes": "The one-warning count difference is outside the preregistered neutrality judges and reflects log-rate/timing output; all raw physics, policy, input, action-semantic, render, locked criteria, and behavioral metrics are exact."
+    }
+  },
+  "baseline": {
+    "name": "trace_disabled",
+    "run_id": "RealOnnxPolicy-manny-frame-e15-trace-disabled",
+    "artifact_root": "test-results/manny-local-frame-roundtrip/trace-disabled-59bcf9b",
+    "configuration": "Clean runtime commit; reused binary; locked standing-plant v2; RealOnnxPolicy; 1/60 s; 10 s; unchanged seed and initial pose; no perturbation; Manny local-frame trace disabled.",
+    "automation_status": "PASS_WITH_WARNINGS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "trace": {
+      "enabled": false,
+      "captured": false,
+      "control_count": 0
+    },
+    "key_metrics": {
+      "physics_sample_count": 601,
+      "policy_sample_count": 300,
+      "minimum_pelvis_height_cm": 13.986960983769706,
+      "minimum_pelvis_height_ratio": 0.15336580018044577,
+      "maximum_root_tilt_deg": 105.40127563476562,
+      "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+      "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+      "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+      "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "target_write_attempts": 6300,
+      "target_readback_matches": 6300,
+      "target_readback_match_ratio": 1.0,
+      "maximum_readback_error_deg": 0.000004517745487845102,
+      "inference_successes": 300,
+      "pose_search_valid_samples": 300,
+      "minimum_simulated_bodies": 22,
+      "minimum_matching_controls": 21,
+      "movement_reclaim_count": 0,
+      "shell_helper_used_count": 0,
+      "topology_change_count": 0
+    },
+    "sha256": {
+      "automation_report": "D0D4FE4CAA0DD912681859B68F68D160970F7A828A5455FFCA70B1EE2BDCA072",
+      "manifest": "ED74B2835E0FCD191780B9558BF1A27027C184B742F87941EA834C264182B0A6",
+      "evaluation": "54E58BB7B1936EC4CA562696F3C9BC378ACF076336290F94AB8A6168FF4246E7",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "first_policy_input": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_input": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "55B2937501E18360B83252FBC6AA0D688B75AFCEDE3BB77F15605CBE26966028",
+      "manny_local_frame_trace": "C5B2C603A07C56145D1F56AAF07E9F06494BFA8FA2B263B5985F7617B0357A7C",
+      "render": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C"
+    }
+  },
+  "experimental": {
+    "name": "trace_enabled",
+    "run_id": "RealOnnxPolicy-manny-frame-e15-trace-enabled",
+    "artifact_root": "test-results/manny-local-frame-roundtrip/trace-enabled-59bcf9b",
+    "configuration": "Identical clean commit, reused binary, model, protocol, timestep, window, seed, pose, perturbation, evaluator, and thresholds; only -PhysAnimMannyLocalFrameRoundtripTrace was enabled.",
+    "automation_status": "PASS_WITH_WARNINGS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "trace": {
+      "enabled": true,
+      "captured": true,
+      "capture_scope": "first_active_standing_pre_range_target",
+      "capture_error": "",
+      "control_count": 21,
+      "decisive_one_to_one_control_count": 19,
+      "collapsed_diagnostic_control_count": 2
+    },
+    "key_metrics": {
+      "physics_sample_count": 601,
+      "policy_sample_count": 300,
+      "minimum_pelvis_height_cm": 13.986960983769706,
+      "minimum_pelvis_height_ratio": 0.15336580018044577,
+      "maximum_root_tilt_deg": 105.40127563476562,
+      "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+      "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+      "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+      "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "target_write_attempts": 6300,
+      "target_readback_matches": 6300,
+      "target_readback_match_ratio": 1.0,
+      "maximum_readback_error_deg": 0.000004517745487845102,
+      "inference_successes": 300,
+      "pose_search_valid_samples": 300,
+      "minimum_simulated_bodies": 22,
+      "minimum_matching_controls": 21,
+      "movement_reclaim_count": 0,
+      "shell_helper_used_count": 0,
+      "topology_change_count": 0
+    },
+    "contract_evaluation": {
+      "artifact": "test-results/manny-local-frame-roundtrip/trace-enabled-59bcf9b/manny-local-frame-roundtrip-evaluation.json",
+      "status": "VALID",
+      "contract_verdict": "MISMATCH",
+      "product_success": false,
+      "total_control_count": 21,
+      "complete_frame_control_count": 21,
+      "decisive_one_to_one_control_count": 19,
+      "decisive_roundtrip_case_count": 152,
+      "failing_identity_joint_count": 19,
+      "failing_actual_joint_count": 19,
+      "failing_axis_probe_count": 114,
+      "maximum_identity_roundtrip_angular_error_degrees": 35.96254933170872,
+      "maximum_actual_roundtrip_angular_error_degrees": 106.60165199918951,
+      "maximum_axis_probe_roundtrip_angular_error_degrees": 47.155155860096905,
+      "maximum_policy_neutral_vs_action_bind_parent_relative_angular_delta_degrees": 35.962549331708686,
+      "maximum_policy_neutral_vs_observation_bind_parent_relative_angular_delta_degrees": 35.962549331708686,
+      "maximum_action_bind_vs_observation_bind_parent_relative_angular_delta_degrees": 0.0,
+      "maximum_component_corrected_action_axis_vs_observation_parent_bind_angular_delta_degrees": 0.0,
+      "component_to_world_rotation_angle_degrees": {
+        "minimum": 90.0,
+        "maximum": 90.0
+      },
+      "maximum_quaternion_norm_error": 2.220446049250313e-16,
+      "normalized_quaternion_count": 693,
+      "top_identity_error": {
+        "joint": "upperarm_r",
+        "degrees": 35.96254933170872
+      },
+      "top_actual_error": {
+        "joint": "calf_r",
+        "degrees": 106.60165199918951
+      },
+      "top_axis_probe_error": {
+        "joint": "upperarm_r",
+        "probe": "positive_y_10_deg",
+        "degrees": 47.155155860096905
+      },
+      "sha256": "DC3BD2BBADB2203F277A0A61284E7EA0EE7E4A219B4D5C07977EE99D9D5CAB65"
+    },
+    "sha256": {
+      "automation_report": "7C03C5B1FFD1D7057FD67EA4CC96F57EAC3A07269957263E0D6ECC6211705576",
+      "manifest": "2555D200E6032C0FDCFB5EA8E20473105168FA0289A54C8303C5C4D73DFBE803",
+      "evaluation": "D3ED4E67521221D693B8F9737BA41C089C93F1506CC2AAD64BE802ECF5E38020",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "first_policy_input": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_input": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "55B2937501E18360B83252FBC6AA0D688B75AFCEDE3BB77F15605CBE26966028",
+      "manny_local_frame_trace": "B94914FB47B1362E664276A4F11CA3019A507B50FD5579FBEE1EBB23587B8953",
+      "render": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C"
+    }
+  },
+  "instrumentation_neutrality": {
+    "status": "EXACT",
+    "physics_stream_equal": true,
+    "policy_stream_equal": true,
+    "first_policy_input_equal": true,
+    "active_standing_input_equal": true,
+    "existing_action_semantic_trace_equal": true,
+    "render_equal": true,
+    "failed_criteria_equal": true,
+    "all_locked_behavioral_metrics_equal": true
+  },
+  "result": {
+    "hypothesis_status": "SUPPORTED",
+    "support_rule_satisfied": true,
+    "falsification_rule_satisfied": false,
+    "conclusion": "The live action-side transform is not the inverse of the live observation-side transform before range adaptation. Identity input isolates a policy-neutral-versus-bind offset on all 19 decisive joints. Nonzero targets additionally expose direct use of a world-captured action axis against component-space observation recovery: the component-to-world rotation is 90 degrees in this harness. The cached action and observation bind parent-relative rotations match exactly, and the action axis matches the observation parent bind after explicit world-to-component conversion, so the mismatch is localized to the runtime choice of neutral and frame during action composition rather than missing or corrupt bind calibration.",
+    "product_success": false
+  },
+  "retention": {
+    "retained": "Development-only round-trip trace, independent evaluator, malformed-artifact tests, frame-ownership tests, operation-order metadata, and raw runtime artifacts.",
+    "rejected_behavior_removed": "not applicable; E15 introduced no behavior experiment",
+    "production_promotion": "none"
+  },
+  "next_experiment": {
+    "selection": "Test only the action conjugation-axis frame behind a development override: use the cached T-pose parent axis expressed in mesh component space instead of its world-space value, while keeping the captured policy neutral, range mapping, constraints, physics, protocol, and all other variables unchanged.",
+    "reason": "The 90-degree component-to-world rotation expands actual-target error to 106.602 degrees and known-axis error to 47.155 degrees, while identity input is axis-independent and provides a fixed neutral-offset control.",
+    "expected_if_supported": "Identity round-trip errors remain byte-for-byte unchanged, while each actual and XYZ-probe round-trip error collapses to that joint's existing identity residual within 0.001 degrees; baseline remains unchanged and the physical verdict is reported without threshold changes.",
+    "falsification_observation": "The trace confirms component-space axis selection but actual/probe errors do not collapse to the unchanged per-joint identity residuals within tolerance.",
+    "promotion": "No production promotion until the separate override experiment succeeds; neutral-versus-bind will remain a later one-variable experiment."
+  }
+}

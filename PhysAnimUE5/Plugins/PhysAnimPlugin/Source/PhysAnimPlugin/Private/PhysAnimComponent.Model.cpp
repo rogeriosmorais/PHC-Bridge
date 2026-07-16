@@ -29,14 +29,16 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 				OutError = TEXT("PhysAnimComponent requires a valid TPoseReference animation to align bone axes. Please assign a 1-frame T-Pose AnimSequence.");
 				return false;
 			}
-			if (CachedSmplObservationRestComponentTransforms.IsEmpty())
+			if (CachedSmplObservationRestComponentTransforms.IsEmpty() ||
+				CachedSmplObservationRestBodyComponentRotations.Num() != PhysAnimBridge::NumSmplBodies)
 			{
-				OutError = TEXT("Live T-pose capture did not populate cached rest transforms before model initialization.");
+				OutError = TEXT("Live T-pose capture did not populate synchronized bone/body rest transforms before model initialization.");
 				return false;
 			}
 			ActivatedStandingStabilityMetrics.bPolicyModelLoaded = true;
 			ActivatedStandingStabilityMetrics.PolicyModelName = LoadedModelData->GetName();
 			ActivatedStandingStabilityMetrics.PolicyRuntimeName = ActiveRuntimeName;
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] PhcPolicy loaded successfully on GPU: ModelName=%s, RuntimeName=%s"), *ActivatedStandingStabilityMetrics.PolicyModelName, *ActivatedStandingStabilityMetrics.PolicyRuntimeName);
 			return true;
 		}
 	}
@@ -61,14 +63,16 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 				OutError = TEXT("PhysAnimComponent requires a valid TPoseReference animation to align bone axes. Please assign a 1-frame T-Pose AnimSequence.");
 				return false;
 			}
-			if (CachedSmplObservationRestComponentTransforms.IsEmpty())
+			if (CachedSmplObservationRestComponentTransforms.IsEmpty() ||
+				CachedSmplObservationRestBodyComponentRotations.Num() != PhysAnimBridge::NumSmplBodies)
 			{
-				OutError = TEXT("Live T-pose capture did not populate cached rest transforms before model initialization.");
+				OutError = TEXT("Live T-pose capture did not populate synchronized bone/body rest transforms before model initialization.");
 				return false;
 			}
 			ActivatedStandingStabilityMetrics.bPolicyModelLoaded = true;
 			ActivatedStandingStabilityMetrics.PolicyModelName = LoadedModelData->GetName();
 			ActivatedStandingStabilityMetrics.PolicyRuntimeName = ActiveRuntimeName;
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] PhcPolicy loaded successfully on CPU (fallback): ModelName=%s, RuntimeName=%s"), *ActivatedStandingStabilityMetrics.PolicyModelName, *ActivatedStandingStabilityMetrics.PolicyRuntimeName);
 			return true;
 		}
 	}

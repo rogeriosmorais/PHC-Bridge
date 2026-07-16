@@ -276,6 +276,8 @@ struct FPhysAnimRunArtifactSnapshot
 	bool bCapsuleContractPassed = true;
 
 	double HoldDurationSec = 0.0;
+	double BalanceActiveStandingContinuousSec = 0.0;
+	int32 BalanceActiveStandingExitCount = 0;
 	double SupportUptimeSec = 0.0;
 	double MaxRootTiltDeg = 0.0;
 	double PeakAngularSpeedDegPerSec = 0.0;
@@ -347,10 +349,15 @@ struct FPhysAnimRunArtifactSnapshot
 	bool bRendererFacingMotionUsedNullRhi = false;
 	int32 RuntimeBodySampleCount = 0;
 	int32 RuntimeSimulatingBodyCount = 0;
+	int32 RuntimeMinSimulatingBodyCount = 0;
 	int32 CriticalBodyValidMask = 0;
 	int32 CriticalBodySimulatingMask = 0;
 	int32 SupportBodyValidMask = 0;
 	int32 SupportBodySimulatingMask = 0;
+	int32 CriticalBodyValidAllFramesMask = 0;
+	int32 CriticalBodySimulatingAllFramesMask = 0;
+	int32 SupportBodyValidAllFramesMask = 0;
+	int32 SupportBodySimulatingAllFramesMask = 0;
 	double RuntimeMaxBodyLinearSpeedCmPerSecond = 0.0;
 	double RuntimeMaxBodyAngularSpeedDegPerSecond = 0.0;
 	bool bPhysicalPerturbationApplied = false;

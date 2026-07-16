@@ -5,7 +5,9 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_RunInference);
 
-	const bool bCaptureMetrics = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+	const bool bCaptureMetrics =
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell ||
 		((RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
 		  RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
 		  RuntimeState == EPhysAnimRuntimeState::ReadyForActivation) && bLiveRuntimeEvidenceProofActive);
@@ -91,6 +93,27 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		}
 		return false;
 	}
+	FirstPolicyInferenceSnapshot.CaptureFirst(
+		SelfObservationBuffer,
+		MimicTargetPosesBuffer,
+		TerrainBuffer,
+		ActionOutputBuffer);
+	bFirstActiveStandingPolicyCapturedBeforeCurrentInference =
+		bFirstActiveStandingPolicyInferenceCompleted;
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		bFirstActiveStandingPolicyInferenceCompleted = true;
+	}
+#if WITH_DEV_AUTOMATION_TESTS
+	bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting =
+		bFirstActiveStandingPolicyCapturedBeforeCurrentInference;
+	FirstActiveStandingPolicyInferenceSnapshot.CaptureFirstIf(
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing,
+		SelfObservationBuffer,
+		MimicTargetPosesBuffer,
+		TerrainBuffer,
+		ActionOutputBuffer);
+#endif
 	PreviousActionOutputBuffer = ActionOutputsBeforeRun;
 	if (bCaptureMetrics)
 	{
@@ -128,19 +151,154 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 	ConditioningSettings.bForceZeroActions = EffectiveSettings.bForceZeroActions;
 	ConditioningSettings.ActionClampAbs = EffectiveSettings.ActionClampAbs;
 	ConditioningSettings.ActionSmoothingAlpha = EffectiveSettings.ActionSmoothingAlpha;
-	ConditioningSettings.ActionScale =
-		EffectiveSettings.ActionScale * CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+	// Standing influence is applied once in parent-relative target space. Keep raw policy
+	// conditioning variant-specific, but do not multiply the shared activation alpha here.
+	ConditioningSettings.ActionScale = EffectiveSettings.ActionScale;
+	const TArray<float>* ActionsForConditioning = &ActionOutputBuffer;
+#if WITH_DEV_AUTOMATION_TESTS
+	TArray<float> BaselineResidualActions;
+	const bool bResidualModeConfigured =
+		bExperimentalPolicyActionBaselineResidualEnabledForTesting ||
+		bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting;
+	if (bResidualModeConfigured)
+	{
+		BaselineResidualActions = ActionOutputBuffer;
+		const bool bActionsExplicitlyZero = !ActionOutputBuffer.ContainsByPredicate(
+			[](const float Value)
+			{
+				return !FMath::IsNearlyZero(Value);
+			});
+		const bool bForceZeroActions = EffectiveSettings.bForceZeroActions || bActionsExplicitlyZero;
+		const bool bBaselineAvailable =
+			FirstActiveStandingPolicyInferenceSnapshot.Actions.Num() == ActionOutputBuffer.Num();
+		const bool bPreCaptureZeroApplied = ApplyExperimentalPolicyActionZeroUntilBaselineForTesting(
+			bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting,
+			bBaselineAvailable,
+			bForceZeroActions,
+			BaselineResidualActions);
+		const bool bResidualApplied = !bPreCaptureZeroApplied &&
+			ApplyExperimentalPolicyActionBaselineResidualForTesting(
+				true,
+				bForceZeroActions,
+				FirstActiveStandingPolicyInferenceSnapshot.Actions,
+				BaselineResidualActions);
+		if (bPreCaptureZeroApplied || bResidualApplied)
+		{
+			ActionsForConditioning = &BaselineResidualActions;
+		}
+		if (bPreCaptureZeroApplied)
+		{
+			PreviousConditionedActionBuffer.Reset();
+		}
+		else if (bResidualApplied && !bExperimentalPolicyActionBaselineResidualStartedForTesting)
+		{
+			PreviousConditionedActionBuffer.Reset();
+			bExperimentalPolicyActionBaselineResidualStartedForTesting = true;
+		}
+	}
+#endif
 	const bool bSuccess = BuildConditionedActions(
-		ActionOutputBuffer,
-		PreviousConditionedActionBuffer.Num() == ActionOutputBuffer.Num() ? &PreviousConditionedActionBuffer : nullptr,
+		*ActionsForConditioning,
+		PreviousConditionedActionBuffer.Num() == ActionsForConditioning->Num() ? &PreviousConditionedActionBuffer : nullptr,
 		ConditioningSettings,
 		ConditionedActionBuffer,
 		LastActionDiagnostics,
 		OutError);
 	if (bSuccess)
 	{
+		float TorsoScale = ResolveCausalStandingTorsoScaleAfterFirstPolicy(
+			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+			RuntimeState);
+		float SpineChestScale = 1.0f;
+		float NeckScale = ResolveCausalStandingNeckScaleAfterFirstPolicy(
+			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+			RuntimeState);
+		float HeadScale = ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+			RuntimeState)
+			? 1.0f
+			: 0.0f;
+		float LeftProximalScale = ResolveCausalStandingLeftProximalScaleAfterFirstPolicy(
+			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+			RuntimeState);
+		float LeftDistalScale = 1.0f;
+		float RightProximalScale = ResolveCausalStandingRightProximalScaleAfterFirstPolicy(
+			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+			RuntimeState);
+		float RightDistalScale = 1.0f;
+#if WITH_DEV_AUTOMATION_TESTS
+		if (bExperimentalCausalStandingNeckEnabledForTesting)
+		{
+			NeckScale = 1.0f;
+		}
+		if (bExperimentalCausalStandingHeadEnabledForTesting)
+		{
+			HeadScale =
+				(bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting
+					? ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
+						true,
+						bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting,
+						RuntimeState)
+					: ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+						true,
+						bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting,
+						RuntimeState))
+				? 1.0f
+				: 0.0f;
+		}
+		if (IsExperimentalCausalStandingScaledRegionActiveForTesting() &&
+			ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+				bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+				RuntimeState))
+		{
+			switch (ExperimentalCausalStandingScaledRegionForTesting)
+			{
+			case EPhysAnimExperimentalCausalStandingScaledRegion::Torso:
+				TorsoScale = ExperimentalCausalStandingScaledScaleForTesting;
+				break;
+			case EPhysAnimExperimentalCausalStandingScaledRegion::Neck:
+				NeckScale = ExperimentalCausalStandingScaledScaleForTesting;
+				break;
+			case EPhysAnimExperimentalCausalStandingScaledRegion::LeftProximal:
+				LeftProximalScale = ExperimentalCausalStandingScaledScaleForTesting;
+				break;
+			case EPhysAnimExperimentalCausalStandingScaledRegion::RightProximal:
+				RightProximalScale = ExperimentalCausalStandingScaledScaleForTesting;
+				break;
+			default:
+				break;
+			}
+		}
+#endif
+		ApplyCausalStandingPolicyActionScales(
+			IsCausalPolicyControlRuntimeState(RuntimeState),
+			TorsoScale,
+			SpineChestScale,
+			NeckScale,
+			HeadScale,
+			LeftProximalScale,
+			LeftDistalScale,
+			RightProximalScale,
+			RightDistalScale,
+			ConditionedActionBuffer);
+#if WITH_DEV_AUTOMATION_TESTS
+		ApplyExperimentalActionFamilyMaskForTesting(
+			ExperimentalActionFamilyMaskForTesting,
+			ConditionedActionBuffer);
+		ApplyExperimentalActionJointRangeForTesting(
+			ExperimentalActionJointRangeStartForTesting,
+			ExperimentalActionJointRangeCountForTesting,
+			ConditionedActionBuffer);
+		CaptureFirstActiveStandingConditionedActionsForTesting(
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing,
+			ConditionedActionBuffer,
+			bFirstActiveStandingConditionedActionsCapturedForTesting,
+			FirstActiveStandingConditionedActionsForTesting);
+#endif
 		PreviousConditionedActionBuffer = ConditionedActionBuffer;
-		const bool bCaptureMetrics = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		const bool bCaptureMetrics =
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+			RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell ||
 			((RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
 			  RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
 			  RuntimeState == EPhysAnimRuntimeState::ReadyForActivation) && bLiveRuntimeEvidenceProofActive);
@@ -158,7 +316,9 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 				ActivatedStandingStabilityMetrics.PolicyActionClampedFloatMax,
 				LastActionDiagnostics.NumClampedActionFloats);
 
-			// §S2-IMPL-SYNC-INFERENCE-01: Action Magnitude Variance check
+			// A steady observation may legitimately produce a steady deterministic action.
+			// Record scalar magnitude variance for evidence, but do not turn convergence
+			// into a runtime failure; causal responsiveness is a protocol-level property.
 			RecentActionMagnitudeHistory.Add(LastActionDiagnostics.RawMeanAbs);
 			if (RecentActionMagnitudeHistory.Num() > 10)
 			{
@@ -174,13 +334,6 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 				for (float Mag : RecentActionMagnitudeHistory) { Variance += FMath::Square(Mag - Mean); }
 				
 				ActivatedStandingStabilityMetrics.ActionMagnitudeVariance = static_cast<double>(Variance);
-
-				if (Variance <= UE_SMALL_NUMBER && Mean > UE_SMALL_NUMBER)
-				{
-					PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] ACTION_FROZEN variance=0.0 mean=%.4f over 10 frames — failure of intent."), Mean);
-					FailStop(TEXT("Model action output is frozen (zero variance over 10 frames)."));
-					return false;
-				}
 			}
 		}
 	}

@@ -1,0 +1,64 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "production-spine-chest-restoration-e40",
+  "recorded_utc": "2026-07-15T21:35:47Z",
+  "preregistration_commit": "85c27ccf23d5c99042efa08d3b6a8553fd3101af",
+  "production_behavior_commit": "3bbcfc54225293a185b23c8d211f25b853cb91f6",
+  "status": "VALID",
+  "hypothesis_verdict": "SUPPORTED",
+  "product_candidate_success": true,
+  "production_success": true,
+  "bundle_status": "PASS",
+  "bundle_failed_criteria": [],
+  "fixture_authority": "PRODUCT_RUN",
+  "protocol_sha256": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+  "model_onnx_sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+  "experimental_command_line_flags": [],
+  "production_action_joint_indices": [0,1,2,3,4,5,6,7,9,10],
+  "normal_recovery_auc": [31.92874218833949,31.92874218833949,31.92874218833949],
+  "zero_actions_recovery_auc": [41.14179622283463,41.14179622283463,41.14179622283463],
+  "normal_to_zero_recovery_auc_ratio": 0.7760658289056013,
+  "locked_maximum_ratio": 0.8,
+  "normal_absolute_pass_count": 3,
+  "zero_actions_absolute_pass_count": 3,
+  "target_readback_ratio_normal": 1.0,
+  "target_readback_ratio_zero_actions": 1.0,
+  "destructive_controls": {
+    "DropControlDispatch": {
+      "status": "FAIL",
+      "failed_criteria": ["target_readback"],
+      "target_readback_match_ratio": 0.5617136486701704
+    },
+    "ForcedSupportLoss": {
+      "status": "FAIL",
+      "failed_criteria": ["support_gap"],
+      "target_readback_match_ratio": 1.0
+    }
+  },
+  "validity": {
+    "source_tree_clean_in_all_manifests": true,
+    "source_commit_matches_all_runs": true,
+    "model_hash_matches_all_runs": true,
+    "locked_protocol_hash_matches": true,
+    "runner_has_no_experimental_arguments": true,
+    "evidence_has_no_experimental_arguments": true,
+    "normal_lower_joints_nonzero_present": true,
+    "normal_torso_joint_8_exact_zero": true,
+    "normal_spine_chest_nonzero_present": true,
+    "normal_remaining_upper_exact_zero": true,
+    "zero_actions_all_conditioned_scalars_exact_zero": true,
+    "normal_strength_multiplier_transition": [1.0,1.5],
+    "zero_actions_strength_multipliers": [1.0],
+    "normal_repetitions_deterministic": true,
+    "zero_repetitions_deterministic": true
+  },
+  "causal_findings": [
+    "The validated Spine+Chest candidate reproduces exactly as default production behavior without any experimental behavior arguments.",
+    "The strict no-flag bundle passes at ratio 0.7760658289056013, below the locked maximum 0.8.",
+    "All three Normal and all three ZeroActions repetitions are byte-deterministic across policy input, policy output, physics evidence and first-active conditioned actions.",
+    "Production now uses lower-body joints 0-7 plus Spine and Chest joints 9-10; catastrophic torso joint 8, Neck, Head and all arms remain masked."
+  ],
+  "authoritative_bundle_artifact": "test-results/causal-standing/e40-production-spine-chest/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/production-spine-chest-restoration.e40.audit.json",
+  "next": "Use production commit 3bbcfc54225293a185b23c8d211f25b853cb91f6 as the new immutable upper-body restoration baseline. Continue with a separately preregistered distal wrist/hand restoration experiment."
+}

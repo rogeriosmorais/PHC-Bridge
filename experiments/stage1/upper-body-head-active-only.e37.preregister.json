@@ -1,0 +1,50 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "upper-body-head-active-only-e37",
+  "preregistered_utc": "2026-07-15T20:33:29Z",
+  "production_baseline_behavior_commit": "1555e8863d00cd4fbe6fc293cac93966fca9682c",
+  "latest_evidence_commit": "71e00d5124300048c4fa73dc4ef9ddc936a231a7",
+  "hypothesis": "Keeping Proto joint 12 (Head) masked during standing preparation and policy blend, then restoring it only in BalanceActive_Standing, preserves E36's causal recovery advantage while restoring exact Normal determinism.",
+  "causal_variable": {
+    "name": "head_action_activation_timing",
+    "control": "restored throughout all standing activation states",
+    "candidate": "restored only in BalanceActive_Standing",
+    "retained_action_joints_when_active": [0,1,2,3,4,5,6,7,12],
+    "command_line_opt_in": "-PhysAnimExperimentalCausalStandingUpperBody=HeadActiveOnly"
+  },
+  "held_constant": [
+    "E36 Head-only action membership",
+    "E33 production plant and lower-body behavior",
+    "model, protocol, thresholds, fixed timestep, perturbation and evidence format",
+    "component action axis, neutral, range mapping and projection",
+    "Normal 1.0 to 1.5 strength timing and ZeroActions strength 1.0"
+  ],
+  "historical_basis": [
+    "E36 passed the causal bundle at ratio 0.742708 but split into two first-policy input trajectories.",
+    "E33 is deterministic when upper-body actions remain masked during preparation.",
+    "Delaying only Head action directly tests whether preparation-time Head feedback caused the bifurcation."
+  ],
+  "implementation_plan": [
+    "Add an automation-only HeadActiveOnly selector and a tested runtime-state gate.",
+    "Write helper contracts before implementation: false in preparation/full-sim/blend and true only in BalanceActive_Standing.",
+    "Run focused Unreal red then green and commit the candidate.",
+    "Run the locked Normal x3, ZeroActions x3 and two destructive controls.",
+    "Audit exact masks by runtime sample, strength paths, hashes and determinism."
+  ],
+  "acceptance": {
+    "bundle_status": "PASS",
+    "maximum_normal_to_zero_recovery_auc_ratio": 0.8,
+    "normal_absolute_pass_count": 3,
+    "zero_actions_absolute_pass_count": 3,
+    "normal_repetitions_deterministic": true,
+    "zero_repetitions_deterministic": true,
+    "head_actions_before_active_standing": "exactly zero",
+    "head_actions_during_active_standing": "nonzero policy behavior present",
+    "destructive_controls": "fail only intended criteria"
+  },
+  "decision_rule": {
+    "supported": "Record E37 and preregister a separate no-flag production promotion for Head active-only.",
+    "falsified": "Keep E33 lower-only production unchanged and move to separately preregistered spine/chest restoration.",
+    "invalid": "Repeat only for a violated validity condition."
+  }
+}

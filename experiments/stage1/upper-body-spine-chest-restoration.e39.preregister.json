@@ -1,0 +1,68 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "upper-body-spine-chest-restoration-e39",
+  "preregistered_utc": "2026-07-15T21:12:07Z",
+  "production_baseline_behavior_commit": "1555e8863d00cd4fbe6fc293cac93966fca9682c",
+  "latest_evidence_commit": "c9338c702b9e5c02819d3acaf06a8fea201d6d56",
+  "hypothesis": "Restoring ProtoMotions joints 9-10 (Spine and Chest) in addition to the production lower-body joints 0-7, while keeping catastrophic torso joint 8 and all other upper-body actions zero, preserves the complete locked causal-standing product contract.",
+  "causal_variable": {
+    "name": "retained_policy_action_joints",
+    "control": [0,1,2,3,4,5,6,7],
+    "candidate": [0,1,2,3,4,5,6,7,9,10],
+    "candidate_region": "SpineChest",
+    "command_line_opt_in": "-PhysAnimExperimentalCausalStandingUpperBody=SpineChest"
+  },
+  "held_constant": [
+    "E33 production lower-body standing behavior",
+    "Head, Neck, torso joint 8 and all arm actions remain exactly zero",
+    "source model and ONNX hash",
+    "locked causal-standing protocol and evaluator thresholds",
+    "component-space action-axis composition",
+    "captured standing neutral",
+    "constraint range mapping and safety projection",
+    "8 Hz acceleration-mode control plant",
+    "Normal delayed policy strength transition 1.0 to 1.5",
+    "ZeroActions strength multiplier 1.0",
+    "fixed timestep, perturbation, render capture, seed and product variants"
+  ],
+  "historical_basis": [
+    "E23's trunk group 8-10 failed, but E24 localized the catastrophic independent failure entirely to Proto joint 8 (Torso).",
+    "E24 Spine joint 9 and Chest joint 10 each passed independently with low root tilt.",
+    "E39 tests the remaining non-catastrophic contiguous pair while explicitly excluding Torso."
+  ],
+  "implementation_plan": [
+    "Add an automation-only SpineChest selector that changes only the standing action compatibility mask.",
+    "Write parser and exact-mask contracts before implementation: joints 0-7 and 9-10 retained; joint 8 and 11-22 zero.",
+    "Run focused Unreal red then green and commit the candidate before product runs.",
+    "Run the complete locked bundle: Normal x3, ZeroActions x3, DropControlDispatch x1 and ForcedSupportLoss x1.",
+    "Audit exact masks, first-active evidence, strength paths, hashes, determinism, model/protocol identity and destructive controls."
+  ],
+  "acceptance": {
+    "bundle_status": "PASS",
+    "normal_absolute_pass_count": 3,
+    "zero_actions_absolute_pass_count": 3,
+    "maximum_normal_to_zero_recovery_auc_ratio": 0.8,
+    "normal_target_readback_match_ratio": 1.0,
+    "zero_target_readback_match_ratio": 1.0,
+    "drop_control_dispatch_required_status": "FAIL",
+    "drop_control_dispatch_required_failed_criteria": ["target_readback"],
+    "forced_support_loss_required_status": "FAIL",
+    "forced_support_loss_required_failed_criteria": ["support_gap"],
+    "normal_conditioned_joint_requirements": {
+      "indices_0_to_7": "nonzero policy behavior present",
+      "index_8": "exactly zero",
+      "indices_9_to_10": "nonzero policy behavior present",
+      "indices_11_to_22": "exactly zero"
+    },
+    "zero_actions_all_conditioned_scalars": "exactly zero",
+    "normal_strength_multipliers": [1.0,1.5],
+    "zero_actions_strength_multipliers": [1.0],
+    "normal_repetitions_deterministic": true,
+    "zero_repetitions_deterministic": true
+  },
+  "decision_rule": {
+    "supported": "Record E39 as a valid experimental upper-body increment and preregister a separate no-flag production promotion before changing the default mask.",
+    "falsified": "Keep E33 lower-only production unchanged and localize Spine and Chest with separately preregistered single-joint causal bundles.",
+    "invalid": "Repeat only if a preregistered validity condition, command-line configuration, evidence artifact or protocol invariant is violated."
+  }
+}

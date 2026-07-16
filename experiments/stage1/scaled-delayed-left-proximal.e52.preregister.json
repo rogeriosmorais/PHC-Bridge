@@ -1,0 +1,19 @@
+{
+  "schema_version": "physanim-preregistration/v1",
+  "experiment_id": "scaled-delayed-left-proximal-e52",
+  "preregistered_utc": "2026-07-16T01:10:00Z",
+  "fixed_baseline_commit": "5b582ad88a6d56881087fc8d22a6777bc888fab8",
+  "single_variable": "Enable left proximal arm joints 13-15 at scale 0.25 after the first completed active-standing policy inference.",
+  "development_arguments": [
+    "-PhysAnimExperimentalCausalStandingScaledRegion=LeftProximal",
+    "-PhysAnimExperimentalCausalStandingScaledScale=0.25"
+  ],
+  "execution": "-onethread",
+  "acceptance": [
+    "Locked 3 Normal + 3 ZeroActions + 2 destructive-control bundle passes.",
+    "Normal and ZeroActions streams are byte-deterministic.",
+    "Normal/ZeroActions recovery-AUC ratio is <= 0.8.",
+    "First-active left proximal scalars are exactly zero and later scalars are nonzero.",
+    "Torso and right proximal scalars remain exactly zero."
+  ]
+}

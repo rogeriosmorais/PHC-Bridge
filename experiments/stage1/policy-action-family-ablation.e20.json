@@ -1,0 +1,231 @@
+{
+  "schema_version": "physanim-investigation-experiment/v1",
+  "experiment_id": "policy-action-family-ablation-e20",
+  "recorded_utc": "2026-07-15T16:20:21.961724+00:00",
+  "status": "VALID",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "NOT_EVALUATED",
+  "preregistration": {
+    "path": "experiments/stage1/policy-action-family-ablation.e20.preregister.json",
+    "commit": "acfd256916ad13a42f7cd8e98f93dd6aa8d5f849"
+  },
+  "behavior_commit": "e45ac4232ef629e7f195ca26283018c893badb45",
+  "validation": {
+    "focused_unreal_contract": "PASS",
+    "serena_diagnostics": "CLEAN",
+    "same_binary_all_arms": true,
+    "first_policy_snapshot_exact": true,
+    "target_readback_ratio_one_all_arms": true,
+    "mask_contract": "PASS for every conditioned scalar in every policy sample"
+  },
+  "arms": {
+    "zero": {
+      "artifact_root": "test-results/action-axis-frame/e20-action-family/e20/zero",
+      "evaluation": {
+        "failed_criteria": [
+          "real_policy_action"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\action-family\\e20\\zero\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-action-family-e20-zero",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "minimum_pelvis_height_ratio": 1.0185699218771989,
+        "pelvis_below_80_cm_sec": null,
+        "pelvis_below_20_cm_sec": null,
+        "maximum_root_tilt_deg": 5.131096839904785,
+        "maximum_root_linear_speed_cm_per_sec": 21.20395208143491,
+        "maximum_root_angular_speed_deg_per_sec": 63.17853965667131,
+        "maximum_body_linear_speed_cm_per_sec": 74.37030071946367,
+        "maximum_body_angular_speed_deg_per_sec": 195.22882971970353,
+        "maximum_support_gap_ms": 0,
+        "target_readback_match_ratio": 1.0
+      },
+      "sha256": {
+        "manifest.json": "63313DE0B97F80D7A9287D011C4299997C7BC3438A53E1D927C352D3DCBC01F6",
+        "evaluation.json": "244B76CF3CCB778D172648D8EA6F2104FB8C440320F04A0AEAE78211CB1AD2F8",
+        "physics.jsonl": "5DF9989B36F7EEB7250CCB4020BAD4FCA69E2FC054994640A58041839063C6DC",
+        "policy.jsonl": "616FAB030A37255CF994158707DD5C9483B43269507FA042ADD22F474820307E",
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "render.png": "50EBDEB9D94341C3F16BBFAEACBD4143CEA58190327A1328B47C87F67B0AA29A"
+      }
+    },
+    "lower_only": {
+      "artifact_root": "test-results/action-axis-frame/e20-action-family/e20/lower_only",
+      "evaluation": {
+        "failed_criteria": [],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\action-family\\e20\\lower_only\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-action-family-e20-lower_only",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "PASS",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "minimum_pelvis_height_ratio": 0.9598570327828604,
+        "pelvis_below_80_cm_sec": null,
+        "pelvis_below_20_cm_sec": null,
+        "maximum_root_tilt_deg": 17.663745880126953,
+        "maximum_root_linear_speed_cm_per_sec": 42.295869170482106,
+        "maximum_root_angular_speed_deg_per_sec": 140.18929851047295,
+        "maximum_body_linear_speed_cm_per_sec": 140.14559898452106,
+        "maximum_body_angular_speed_deg_per_sec": 697.657411988012,
+        "maximum_support_gap_ms": 0,
+        "target_readback_match_ratio": 1.0
+      },
+      "sha256": {
+        "manifest.json": "3A87B0B8D6491F18D4B119BB4BC7E0F07088810E9B33E09D72EC16A78004EF5E",
+        "evaluation.json": "ABE5CA51E1F5B36992C40DFCB9AFC2A2F238E77DA89411FD771F8D0B78ED31A7",
+        "physics.jsonl": "8BDCD63A203D8BD8000311D259FDADC261525B042F3BA5F329D4E51C1BC1BF1F",
+        "policy.jsonl": "02D1F45DFD26549ED099075146C3A992AFDCE7B605043F2B18C3D5EC440668CC",
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "render.png": "15679473743C856358F07FE783C2C22DDAB08683D43212D3F57ADAEDD30E1ABE"
+      }
+    },
+    "axial_only": {
+      "artifact_root": "test-results/action-axis-frame/e20-action-family/e20/axial_only",
+      "evaluation": {
+        "failed_criteria": [
+          "root_angular_speed",
+          "body_linear_speed",
+          "body_angular_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\action-family\\e20\\axial_only\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-action-family-e20-axial_only",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "minimum_pelvis_height_ratio": 0.15757573541235428,
+        "pelvis_below_80_cm_sec": 0.3333333507180214,
+        "pelvis_below_20_cm_sec": 0.4500000234693289,
+        "maximum_root_tilt_deg": 109.18029022216797,
+        "maximum_root_linear_speed_cm_per_sec": 1031.5200978563282,
+        "maximum_root_angular_speed_deg_per_sec": 769.9580273798204,
+        "maximum_body_linear_speed_cm_per_sec": 1562.4335542410677,
+        "maximum_body_angular_speed_deg_per_sec": 4581.511357423289,
+        "maximum_support_gap_ms": 0,
+        "target_readback_match_ratio": 1.0
+      },
+      "sha256": {
+        "manifest.json": "6313CDF967E682B7FF7ECC4FF82D467DDD46805A5BDBCBEB1F7C037D7CF49B61",
+        "evaluation.json": "941DE6A4679861B06DD803B6FE5AAF5D48C700F75369ACC1E5F771C86CEA02BE",
+        "physics.jsonl": "C1A2B7B31C47AE9F77989718C8799B89DDEC9E465A7262A7370097795ECC8543",
+        "policy.jsonl": "FEDDFB6243C05141CA73A74D0919FA2E8C7A9E0F9E87519C876E29A2E1B4ADB9",
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "render.png": "E743319055B9404DF1EFBAFE357387DBC74FD50A0832168D81B03C402FD6C9DA"
+      }
+    },
+    "arms_only": {
+      "artifact_root": "test-results/action-axis-frame/e20-action-family/e20/arms_only",
+      "evaluation": {
+        "failed_criteria": [
+          "root_linear_speed",
+          "root_angular_speed",
+          "body_linear_speed",
+          "runtime_state",
+          "pelvis_height",
+          "root_tilt",
+          "support_gap",
+          "policy_step_coverage"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\action-family\\e20\\arms_only\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-action-family-e20-arms_only",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "minimum_pelvis_height_ratio": 0.0,
+        "pelvis_below_80_cm_sec": 1.7833334263414145,
+        "pelvis_below_20_cm_sec": 1.9666667692363262,
+        "maximum_root_tilt_deg": 91.51758575439453,
+        "maximum_root_linear_speed_cm_per_sec": 1681.780646137914,
+        "maximum_root_angular_speed_deg_per_sec": 1514.7955790923397,
+        "maximum_body_linear_speed_cm_per_sec": 1754.4932439217018,
+        "maximum_body_angular_speed_deg_per_sec": 2858.8789502712557,
+        "maximum_support_gap_ms": 1566.666666666668,
+        "target_readback_match_ratio": 1.0
+      },
+      "sha256": {
+        "manifest.json": "172C43DF0D622EA98B4261AACE77575C0DEAC8CE697206D112102460A64F5251",
+        "evaluation.json": "0D3B8CDF488678E3E7B1C4CAA24176B7F295F5E02572CC3FD55CD269C76221BB",
+        "physics.jsonl": "1492AAC5F23802D573D6A039EC54278A4DF091E24809BDC33AB480E4EB19CAD7",
+        "policy.jsonl": "615A676B394E2CE3E5020F84CF1E24ED99FC434046109AFF1D106FD7305B2868",
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "render.png": "EAB69FC885B10F24E5D52D840FE42B924765485F25E146E7F1053828CA83E7A4"
+      }
+    },
+    "all": {
+      "artifact_root": "test-results/action-axis-frame/e20-action-family/e20/all",
+      "evaluation": {
+        "failed_criteria": [
+          "root_angular_speed",
+          "body_linear_speed",
+          "body_angular_speed",
+          "pelvis_height",
+          "root_tilt",
+          "support_gap"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\action-family\\e20\\all\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-action-family-e20-all",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "minimum_pelvis_height_ratio": 0.15773154655174942,
+        "pelvis_below_80_cm_sec": 0.46666669100522995,
+        "pelvis_below_20_cm_sec": 0.6333333663642406,
+        "maximum_root_tilt_deg": 119.27613067626953,
+        "maximum_root_linear_speed_cm_per_sec": 1125.2602811118936,
+        "maximum_root_angular_speed_deg_per_sec": 1226.4575596554985,
+        "maximum_body_linear_speed_cm_per_sec": 1761.481564281443,
+        "maximum_body_angular_speed_deg_per_sec": 4382.048416648814,
+        "maximum_support_gap_ms": 150,
+        "target_readback_match_ratio": 1.0
+      },
+      "sha256": {
+        "manifest.json": "6A4460E353B71DD3AC483C72799843FF1168BFF3B513D81D0CB41F14282F7244",
+        "evaluation.json": "74ACF04589EA4212494EE13197D2DCAFE796A3D09B15177E68D9F1FC90B56061",
+        "physics.jsonl": "A54962775AE8EAD86A2EC3F03056A4AE6BFACF17CF1E0E82CBFAB0B4B257D591",
+        "policy.jsonl": "72F14A5D172527955DEDB46A3C991EC294BB26118D0D35E72EE6DAD8B2C04003",
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "render.png": "6C0DAE250AF263BC6753DEAED76417AE51C4DF3BC68F3D61E276193CB05AF113"
+      }
+    }
+  },
+  "conclusion": {
+    "hypothesis_supported_or_falsified": "SUPPORTED_WITH_TWO_INDEPENDENT_HARMFUL_FAMILIES",
+    "learned": "The full plant, inference path, and target dispatch can hold for ten seconds with zero actions and with nonzero lower-body actions. Lower-only passes every development hold criterion. Axial-only collapses by 0.333 s and arms-only collapses independently by 1.783 s. Therefore axial and arm action families are each sufficient to destroy standing, while lower-body actions are compatible with standing.",
+    "zero_arm_note": "The zero arm is physically stable and fails only the RealOnnxPolicy evaluator's intentional nonzero-action criterion; the locked ZeroActions ladder separately passes.",
+    "production_promotion": false,
+    "thresholds_or_protocol_changed": false
+  },
+  "next_experiment": "Use the now-available pinned ProtoMotions checkpoint package to compare trained per-joint PD authority and actuator limits against UE. Then subdivide axial actions into torso/spine/chest versus neck/head and arms into proximal versus distal sets, preserving raw model output and all downstream stages."
+}

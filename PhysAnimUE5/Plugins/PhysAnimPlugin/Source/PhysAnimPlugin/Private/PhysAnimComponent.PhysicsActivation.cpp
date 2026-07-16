@@ -169,15 +169,17 @@ void UPhysAnimComponent::EnterReadyForActivation(
 }
 
 
-bool UPhysAnimComponent::GatherCurrentPoseControlTargetOrientations(TMap<FName, FQuat>& OutTargetOrientations, FString& OutError) const
+bool UPhysAnimComponent::GatherCurrentPoseControlTargetSeeds(
+	TMap<FName, FPhysAnimControlTargetSeed>& OutTargetSeeds,
+	FString& OutError) const
 {
-	OutTargetOrientations.Reset();
+	OutTargetSeeds.Reset();
+	OutError.Reset();
 	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
-	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	AActor* const OwnerActor = GetOwner();
-	if (!SkeletalMesh || !PhysicsControl || !OwnerActor)
+	if (!SkeletalMesh || !OwnerActor)
 	{
-		OutError = TEXT("Current-pose target gathering requires the owner, skeletal mesh component, and Physics Control component.");
+		OutError = TEXT("Current-pose target gathering requires the owner and skeletal mesh component.");
 		return false;
 	}
 
@@ -217,11 +219,23 @@ bool UPhysAnimComponent::GatherCurrentPoseControlTargetOrientations(TMap<FName, 
 			return false;
 		}
 
-		const FQuat ParentWorldRotation = PhysicsControl->GetCachedBoneOrientation(SkeletalMesh, InitialControl->ParentBoneName).Quaternion();
-		const FQuat ChildWorldRotation = PhysicsControl->GetCachedBoneOrientation(SkeletalMesh, InitialControl->ChildBoneName).Quaternion();
-		OutTargetOrientations.Add(
+		const FBodyInstance* const ParentBody = SkeletalMesh->GetBodyInstance(InitialControl->ParentBoneName);
+		const FBodyInstance* const ChildBody = SkeletalMesh->GetBodyInstance(InitialControl->ChildBoneName);
+		if (!ParentBody || !ParentBody->IsValidBodyInstance() || !ChildBody || !ChildBody->IsValidBodyInstance())
+		{
+			OutError = FString::Printf(
+				TEXT("Could not resolve physical bodies for control '%s' (parent='%s', child='%s')."),
+				*ControlName.ToString(),
+				*InitialControl->ParentBoneName.ToString(),
+				*InitialControl->ChildBoneName.ToString());
+			return false;
+		}
+
+		const FQuat ParentWorldRotation = ParentBody->GetUnrealWorldTransform().GetRotation();
+		const FQuat ChildWorldRotation = ChildBody->GetUnrealWorldTransform().GetRotation();
+		OutTargetSeeds.Add(
 			ControlName,
-			BuildCurrentPoseControlTargetOrientation(ParentWorldRotation, ChildWorldRotation));
+			BuildCurrentPoseControlTargetSeed(ParentWorldRotation, ChildWorldRotation));
 	}
 
 	return true;
@@ -237,33 +251,55 @@ bool UPhysAnimComponent::SeedControlTargetsFromCurrentPose(float DeltaTime, FStr
 		return false;
 	}
 
-	TMap<FName, FQuat> CurrentPoseTargetOrientations;
-	if (!GatherCurrentPoseControlTargetOrientations(CurrentPoseTargetOrientations, OutError))
+	TMap<FName, FPhysAnimControlTargetSeed> CurrentPoseTargetSeeds;
+	if (!GatherCurrentPoseControlTargetSeeds(CurrentPoseTargetSeeds, OutError))
 	{
 		return false;
 	}
 
-	PreviousControlTargetRotations.Reset();
-	PolicyBlendStartControlTargetRotations.Reset();
-
-	for (const TPair<FName, FQuat>& Pair : CurrentPoseTargetOrientations)
+	for (const TPair<FName, FPhysAnimControlTargetSeed>& Pair : CurrentPoseTargetSeeds)
 	{
 		if (!PhysicsControl->GetControlExists(Pair.Key))
 		{
 			OutError = FString::Printf(TEXT("Missing required control '%s' while seeding current-pose targets."), *Pair.Key.ToString());
 			return false;
 		}
+	}
 
-		PreviousControlTargetRotations.Add(Pair.Key, Pair.Value);
-		PolicyBlendStartControlTargetRotations.Add(Pair.Key, Pair.Value);
-		PhysicsControl->SetControlTargetOrientation(
+	PreviousControlTargetRotations.Reset();
+	PolicyBlendStartControlTargetRotations.Reset();
+	PolicyNeutralControlTargetRotations.Reset();
+
+	for (const TPair<FName, FPhysAnimControlTargetSeed>& Pair : CurrentPoseTargetSeeds)
+	{
+		if (!PhysicsControl->SetControlTargetPoses(
 			Pair.Key,
-			Pair.Value.Rotator(),
+			FVector::ZeroVector,
+			Pair.Value.ParentWorldRotation.Rotator(),
+			FVector::ZeroVector,
+			Pair.Value.ChildWorldRotation.Rotator(),
 			DeltaTime,
-			true,
-			false,
-			true,
-			false);
+			true))
+		{
+			OutError = FString::Printf(
+				TEXT("Physics Control rejected current-pose target '%s'."),
+				*Pair.Key.ToString());
+			return false;
+		}
+		FPhysicsControlTarget Readback;
+		if (!PhysicsControl->GetControlTarget(Pair.Key, Readback) ||
+			Pair.Value.ParentRelativeTargetRotation.AngularDistance(Readback.TargetOrientation.Quaternion()) >
+				FMath::DegreesToRadians(0.1f))
+		{
+			OutError = FString::Printf(
+				TEXT("Current-pose target readback mismatch for '%s'."),
+				*Pair.Key.ToString());
+			return false;
+		}
+		const FQuat ParentRelativeTarget = Readback.TargetOrientation.Quaternion();
+		PreviousControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
+		PolicyBlendStartControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
+		PolicyNeutralControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
 	}
 
 	return true;

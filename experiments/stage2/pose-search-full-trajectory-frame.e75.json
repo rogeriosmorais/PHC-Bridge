@@ -1,0 +1,25 @@
+{
+  "schema_version": "physanim-experiment-result/v1",
+  "experiment_id": "E75",
+  "status": "REJECTED_FULL_QUERY_FRAME_ROTATION",
+  "baseline_commit": "a28de08fc8476a3a60b21095c5c9435d40bc6a8b",
+  "behavior_commit": "123becbbe88aa2115ff084eb3606afcc0ae4eea7",
+  "date": "2026-07-16",
+  "tests": {
+    "PhysAnim.Development.PoseSearchAssetDirections": "PASS",
+    "PhysAnim.Locomotion": "PASS"
+  },
+  "authoritative_normal": {
+    "run_root": "test-results/scripted-locomotion/e75-full-frame/Normal-1",
+    "shell_path_length_cm": 211.80000288784504,
+    "physical_root_path_length_cm": 198.88891735432387,
+    "physical_root_net_planar_displacement_cm": 143.42856926462963,
+    "physical_root_overall_delta_xy_cm": [115.06625570199327, -85.62424469752804],
+    "final_root_shell_tracking_error_cm": 148.5376142597397,
+    "max_root_shell_tracking_error_cm": 151.05461406521817,
+    "selected_animation_counts": { "MM_Idle": 300 },
+    "final_runtime_state": "BalanceActive_Standing"
+  },
+  "rejection_reason": "Rotating velocity and facing together preserved substantial physical progress but still produced no locomotion selection. Rotating current facing away from the live pose-history frame introduces a search discontinuity. The database/query path should remain in its established working frame; the directional defect must be corrected when the selected reference is converted into PHC policy observations/targets.",
+  "next": "Revert E75. Audit the sampled Pose Search reference path in PhysAnimComponent.PoseSearch.cpp and preregister a downstream animation-data-to-policy-frame adapter."
+}

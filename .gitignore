@@ -64,6 +64,7 @@ memory-bank/projectbrief.md
 memory-bank/systemPatterns.md
 memory-bank/techContext.md
 _tmp/
+.codex-tmp/
 .aider*
 .playwright-mcp/*
 workflow-graph/
@@ -71,13 +72,32 @@ workflow-graph/
 .mcp-graph-cache/
 mcp-auth-proxy.mjs
 package-lock.json
-package.json
 node_modules/
 cloudflared.log
 .antigravitycli/008854e9-b09d-4b6b-9675-4bcc0583e830.json
 test-results/logs/
 test-results/proof-artifacts/
 test-results/evidence-summaries/
+test-results/product-runs/
+test-results/standing-plant-runs/
+test-results/standing-input-snapshots/
+test-results/adapter-*/
+test-results/action-semantic-trace/
+test-results/action-decode-contract-e14/
+test-results/manny-local-frame-roundtrip/
+test-results/action-axis-frame/
 test-results/phase1-autocalib/
+test-results/**/*.receipt.json
+*.private.pem
+*.private.key
 *_tests_results.xml
 graphify-out/
+
+# Serena keeps its shared project configuration in version control, while
+# indexes and agent memories are local runtime state.
+.serena/.cache/
+.serena/memories/
+.serena/compile_commands.json
+.serena/logs/
+.serena/project.local.yml
+.serena/.gitignore

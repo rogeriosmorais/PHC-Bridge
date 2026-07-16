@@ -1,0 +1,43 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "policy-action-family-ablation-e20",
+  "recorded_utc": "2026-07-15T16:30:00Z",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "The nonzero ONNX output destabilizes standing through a specific anatomical action family rather than through inference, target dispatch, controls, or the passive plant. Post-inference family masking will identify the smallest action family sufficient to reproduce collapse.",
+  "locked_configuration": {
+    "base_commit": "67b8635",
+    "model_sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+    "protocol_sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB",
+    "variant": "RealOnnxPolicy",
+    "action_axis": "observation-parent-bind mesh-component axis from first policy",
+    "neutral_source": "captured stable standing neutral",
+    "constraint_range_mapper": "enabled and unchanged",
+    "safety_projection": "enabled and unchanged",
+    "gains_timing_pose_seed_perturbation": "unchanged; no perturbation"
+  },
+  "action_groups": {
+    "lower": "Proto joints 0-7: hips, knees, ankles, toes",
+    "axial": "Proto joints 8-12: torso, spine, chest, neck, head",
+    "arms": "Proto joints 13-22: thorax, shoulders, elbows, wrists, hands"
+  },
+  "arms": [
+    {"name":"zero","conditioned_actions":"all 69 values zero"},
+    {"name":"lower_only","conditioned_actions":"lower group retained; axial and arms zero"},
+    {"name":"axial_only","conditioned_actions":"axial group retained; lower and arms zero"},
+    {"name":"arms_only","conditioned_actions":"arms group retained; lower and axial zero"},
+    {"name":"all","conditioned_actions":"all model outputs retained"}
+  ],
+  "single_changed_variable": "Which post-conditioning anatomical action family is retained. Raw ONNX output, observations, inference, cadence, and every downstream stage remain unchanged.",
+  "validity_gates": [
+    "All arms use the same clean behavior commit and reused binary.",
+    "First-policy input and raw model output are byte-identical across all arms.",
+    "Masked conditioned outputs contain exactly the preregistered retained indices.",
+    "Inference cadence and target readback ratio remain valid in every arm.",
+    "The zero arm passes the locked ten-second hold; otherwise the ablation is invalid."
+  ],
+  "support": "At least one single-family arm reproduces the all-actions failure while another single-family arm passes, localizing a sufficient causal family.",
+  "interaction_result": "All single-family arms pass but all-actions fails, proving a cross-family interaction and requiring pairwise combinations next.",
+  "falsification": "Every single-family arm fails similarly, so no anatomical family localization is supported.",
+  "next": "Subdivide the sufficient family, or test pairwise combinations if the result is interactive, until the minimum failing joint subset is identified."
+}

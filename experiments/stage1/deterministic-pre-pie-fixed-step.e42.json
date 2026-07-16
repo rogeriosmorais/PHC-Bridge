@@ -1,0 +1,42 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "deterministic-pre-pie-fixed-step-e42",
+  "recorded_utc": "2026-07-15T22:25:00Z",
+  "preregistration_commit": "210dddd280fcd220dd9459533535fed43fd6890f",
+  "harness_behavior_commit": "64e5a8cb93eaf1bca199a7812c892a2a2419e5cb",
+  "production_controller_commit": "3bbcfc54225293a185b23c8d211f25b853cb91f6",
+  "status": "VALID",
+  "hypothesis_verdict": "FALSIFIED",
+  "controller_behavior_changes": [],
+  "test_harness_change_only": true,
+  "bundle_status": "PASS",
+  "bundle_failed_criteria": [],
+  "normal_to_zero_recovery_auc_ratio": 0.7720071144019577,
+  "normal_recovery_auc": [31.92874218833949,31.92874218833949,30.75471938508317],
+  "zero_actions_recovery_auc": [41.35809319979309,41.35809319979309,41.35809319979309],
+  "normal_snapshot_hashes": [
+    "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+    "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3"
+  ],
+  "zero_snapshot_hashes": [
+    "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3"
+  ],
+  "validity": {
+    "source_tree_clean_in_all_manifests": true,
+    "source_commit_matches_all_runs": true,
+    "model_hash_matches_all_runs": true,
+    "locked_protocol_hash_matches": true,
+    "no_experimental_behavior_arguments": true,
+    "production_mask_and_strength_paths_correct": true,
+    "destructive_controls_fail_only_intended_criteria": true
+  },
+  "findings": [
+    "Moving fixed-step activation before PIE preserves all causal-standing gates and controller behavior.",
+    "It does not eliminate the alternate first-policy state: Normal repetition 3 still uses the 723FD9 snapshot family while repetitions 1-2 use AAAF45.",
+    "ZeroActions becomes internally deterministic in this bundle, but on the alternate 723FD9 startup family.",
+    "The remaining bifurcation is not caused solely by the timing of FApp fixed-step activation; asynchronous engine, skeletal or Chaos initialization remains a plausible source."
+  ],
+  "authoritative_bundle_artifact": "test-results/causal-standing/e42-pre-pie-fixed-step/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/deterministic-pre-pie-fixed-step.e42.audit.json",
+  "next": "Preregister a single-threaded engine/Chaos execution screen. If it does not collapse the startup families, replace cross-process exact-repeat promotion with a deterministic same-state replay or in-process counterfactual architecture before continuing joint promotion."
+}

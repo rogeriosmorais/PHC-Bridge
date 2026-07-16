@@ -242,7 +242,7 @@ namespace
 				SummaryPath,
 				PhysAnimEvidenceSummary::SerializeToJsonString(MakeSummary(
 					TEXT("attempt-summary"),
-					EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate,
+					EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved,
 					EPhysAnimTerminalReason::None,
 					EPhysAnimEvidenceBaselineSegmentState::Active,
 					EPhysAnimEvidenceBaselineSegmentState::Active,
@@ -264,7 +264,7 @@ namespace
 			};
 			const FPhysAnimEvidenceCollectorResult Result = PhysAnimEvidenceCollector::Collect(Input);
 
-			TestFalse(TEXT("cross-attempt terminal, summary, and log are not promoted"), Result.ClassificationResult.Verdict == EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate);
+			TestFalse(TEXT("cross-attempt terminal, summary, and log are not promoted"), Result.ClassificationResult.Verdict == EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved);
 			TestTrue(TEXT("cross-attempt merge is insufficient evidence"), Result.ClassificationResult.Verdict == EPhysAnimEvidenceBaselineVerdict::InsufficientEvidence);
 			CleanupFixturePaths(Paths);
 		}
@@ -280,7 +280,7 @@ namespace
 				FDateTime(2026, 6, 10, 17, 0, 0),
 				true,
 				EPhysAnimTerminalReason::None,
-				EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate,
+				EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved,
 				EPhysAnimEvidenceBaselineSegmentState::Active,
 				EPhysAnimEvidenceBaselineSegmentState::Active,
 				EPhysAnimEvidenceBaselineSegmentState::Active,
@@ -337,7 +337,7 @@ namespace
 			TestNotEqual(
 				TEXT("contradiction does not become product success candidate"),
 				static_cast<uint8>(Result.ClassificationResult.Verdict),
-				static_cast<uint8>(EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate));
+				static_cast<uint8>(EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved));
 			CleanupFixturePaths(Paths);
 		}
 

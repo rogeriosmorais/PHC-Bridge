@@ -1,5 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimProtoMannyAdapter.h"
+#include "PhysicsEngine/BodyInstance.h"
 
 bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& OutBodySamples, FString& OutError) const
 {
@@ -12,9 +14,32 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 
 	OutBodySamples.Reset();
 	OutBodySamples.Reserve(PhysAnimBridge::NumSmplBodies);
+	if (CachedSmplObservationRestBodyComponentRotations.Num() != PhysAnimBridge::NumSmplBodies)
+	{
+		OutError = TEXT("The synchronized T-pose PhysicsAsset body-frame calibration is incomplete.");
+		return false;
+	}
+	if (CachedSmplObservationRestComponentTransforms.Num() != PhysAnimBridge::NumSmplBodies)
+	{
+		OutError = TEXT("The T-pose bone-frame calibration is incomplete.");
+		return false;
+	}
+	TArray<FQuat> CurrentBodyComponentRotations;
+	CurrentBodyComponentRotations.Reserve(PhysAnimBridge::NumSmplBodies);
+	FQuat CurrentRootBoneComponentRotation = FQuat::Identity;
 
 	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
-	const FQuat MeshWorldRotation = SkeletalMesh->GetComponentQuat();
+	const FQuat MeshWorldRotation = SkeletalMesh->GetComponentQuat().GetNormalized();
+	const FQuat WorldToComponentRotation = MeshWorldRotation.Inverse();
+	USkeletalMeshComponent* const MutableMesh = const_cast<USkeletalMeshComponent*>(SkeletalMesh);
+	bool bUsePhysicsBodyObservationPositions = false;
+#if WITH_DEV_AUTOMATION_TESTS
+	bUsePhysicsBodyObservationPositions = bExperimentalPhysicsBodyObservationPositionsEnabledForTesting;
+	ObservationBoneWorldPositionsForTesting.Reset();
+	ObservationBoneWorldPositionsForTesting.Reserve(PhysAnimBridge::NumSmplBodies);
+	ObservationPhysicsBodyWorldPositionsForTesting.Reset();
+	ObservationPhysicsBodyWorldPositionsForTesting.Reserve(PhysAnimBridge::NumSmplBodies);
+#endif
 
 	for (int32 i = 0; i < BoneNames.Num(); ++i)
 	{
@@ -26,38 +51,230 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 		}
 
 		const FTransform BoneWorldTransform = SkeletalMesh->GetBoneTransform(BoneName, RTS_World);
-		USkeletalMeshComponent* const MutableMesh = const_cast<USkeletalMeshComponent*>(SkeletalMesh);
+		if (i == 0)
+		{
+			CurrentRootBoneComponentRotation =
+				(WorldToComponentRotation * BoneWorldTransform.GetRotation().GetNormalized()).GetNormalized();
+		}
 		const FVector BoneLinearVelocity = MutableMesh->GetPhysicsLinearVelocity(BoneName);
 		const FVector BoneAngularVelocity = MutableMesh->GetPhysicsAngularVelocityInRadians(BoneName);
-
-		FTransform CurrentComponentTransform = BoneWorldTransform.GetRelativeTransform(SkeletalMesh->GetComponentTransform());
-		CurrentComponentTransform.NormalizeRotation();
-
-		FQuat CorrectedComponentRotation = CurrentComponentTransform.GetRotation().GetNormalized();
-		if (CachedSmplObservationRestComponentTransforms.IsValidIndex(i))
+		const FBodyInstance* const BodyInstance = MutableMesh->GetBodyInstance(BoneName);
+		if (!BodyInstance || !BodyInstance->IsValidBodyInstance())
 		{
-			const FMatrix CurrentComponentMatrix = CurrentComponentTransform.ToMatrixNoScale();
-			const FMatrix RestComponentMatrix = CachedSmplObservationRestComponentTransforms[i].ToMatrixNoScale();
-			const FMatrix CorrectedComponentMatrix = CurrentComponentMatrix * RestComponentMatrix.InverseFast();
-			CorrectedComponentRotation = FQuat(CorrectedComponentMatrix).GetNormalized();
+			OutError = FString::Printf(
+				TEXT("Missing synchronized physics body for observation bone '%s'."),
+				*BoneName.ToString());
+			return false;
 		}
-
-		const FQuat CorrectedWorldRotation =
-			(MeshWorldRotation * CorrectedComponentRotation).GetNormalized();
-
+		const FTransform PhysicsBodyWorldTransform = BodyInstance->GetUnrealWorldTransform();
+		const FQuat BodyWorldRotation = PhysicsBodyWorldTransform.GetRotation().GetNormalized();
+		const FVector BoneWorldPosition = BoneWorldTransform.GetLocation();
+		const FVector PhysicsBodyWorldPosition = PhysicsBodyWorldTransform.GetLocation();
+#if WITH_DEV_AUTOMATION_TESTS
+		ObservationBoneWorldPositionsForTesting.Add(BoneWorldPosition);
+		ObservationPhysicsBodyWorldPositionsForTesting.Add(PhysicsBodyWorldPosition);
+#endif
+		const FVector ObservationWorldPosition = SelectObservationWorldPositionForTesting(
+			bUsePhysicsBodyObservationPositions,
+			BoneWorldPosition,
+			PhysicsBodyWorldPosition);
+		CurrentBodyComponentRotations.Add(
+			(WorldToComponentRotation * BodyWorldRotation).GetNormalized());
 		OutBodySamples.Add(FPhysAnimBodySample(
-			PhysAnimBridge::UeWorldPositionToProtoRuntime(BoneWorldTransform.GetLocation()),
-			PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CorrectedWorldRotation),
+			PhysAnimBridge::UeWorldPositionToProtoRuntime(ObservationWorldPosition),
+			FQuat::Identity,
 			PhysAnimBridge::UeWorldVelocityToProtoRuntime(BoneLinearVelocity),
 			PhysAnimBridge::UeWorldRotationVectorToProtoRuntime(BoneAngularVelocity)));
+	}
+	const FQuat RootCanonicalRotation =
+		PhysAnimProtoMannyAdapter::BuildCanonicalSmplRootRotationFromBonePose(
+			MeshWorldRotation,
+			CachedSmplObservationRestComponentTransforms[0].GetRotation(),
+			CurrentRootBoneComponentRotation);
+
+	TArray<FQuat> CanonicalGlobalRotations;
+	FString AdapterError;
+	if (!PhysAnimProtoMannyAdapter::BuildCanonicalSmplRotationsFromBodyPose(
+		RootCanonicalRotation,
+		CachedSmplObservationRestBodyComponentRotations,
+		CurrentBodyComponentRotations,
+		CanonicalGlobalRotations,
+		AdapterError))
+	{
+		OutBodySamples.Reset();
+		OutError = FString::Printf(TEXT("Could not adapt live Manny bone rotations to SMPL: %s"), *AdapterError);
+		return false;
+	}
+
+	for (int32 BodyIndex = 0; BodyIndex < OutBodySamples.Num(); ++BodyIndex)
+	{
+		OutBodySamples[BodyIndex].Rotation =
+			PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CanonicalGlobalRotations[BodyIndex]);
 	}
 
 	return true;
 }
 
-
-float UPhysAnimComponent::ResolveSelfObservationGroundHeight(const TArray<FPhysAnimBodySample>& CurrentBodySamples) const
+#if WITH_DEV_AUTOMATION_TESTS
+bool UPhysAnimComponent::GatherCurrentPhysicalBodySamplesForReplay(
+	TArray<FPhysAnimBodySample>& OutBodySamples,
+	FString& OutError) const
 {
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		OutError = TEXT("Skeletal mesh component was not resolved for physical-body replay capture.");
+		return false;
+	}
+
+	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
+	OutBodySamples.Reset();
+	OutBodySamples.Reserve(BoneNames.Num());
+	for (const FName& BoneName : BoneNames)
+	{
+		const FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName);
+		if (!BodyInstance || !BodyInstance->IsValidBodyInstance())
+		{
+			OutBodySamples.Reset();
+			OutError = FString::Printf(
+				TEXT("Missing synchronized physical body '%s' during locomotion replay capture."),
+				*BoneName.ToString());
+			return false;
+		}
+
+		const FTransform PhysicalBodyWorldTransform = BodyInstance->GetUnrealWorldTransform();
+		OutBodySamples.Add(FPhysAnimBodySample(
+			PhysAnimBridge::UeWorldPositionToProtoRuntime(PhysicalBodyWorldTransform.GetLocation()),
+			PhysAnimBridge::UeWorldQuaternionToProtoRuntime(
+				PhysicalBodyWorldTransform.GetRotation().GetNormalized()),
+			PhysAnimBridge::UeWorldVelocityToProtoRuntime(
+				SkeletalMesh->GetPhysicsLinearVelocity(BoneName)),
+			PhysAnimBridge::UeWorldRotationVectorToProtoRuntime(
+				SkeletalMesh->GetPhysicsAngularVelocityInRadians(BoneName))));
+	}
+
+	OutError.Reset();
+	return true;
+}
+
+void UPhysAnimComponent::CaptureStartupChronologySampleForTesting(const TCHAR* Stage)
+{
+	const bool bRealOnnxPolicy = StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy;
+	const bool bCaptureStartupChronology =
+		bStartupChronologyTraceEnabledForTesting &&
+		bRealOnnxPolicy &&
+		!StartupChronologyTrace.bComplete &&
+		StartupChronologyTrace.CaptureError.IsEmpty();
+	const bool bCaptureFirstPolicyPriorSource =
+		bStartupChronologyTraceEnabledForTesting &&
+		bRealOnnxPolicy &&
+		!FirstPolicyBodySourceTrace.Prior.bRecorded &&
+		FirstPolicyBodySourceTrace.ValidationError.IsEmpty();
+	const bool bCaptureFirstPolicyGroundReferencePrior =
+		bStartupChronologyTraceEnabledForTesting &&
+		bRealOnnxPolicy &&
+		!FirstPolicyGroundReferenceTrace.Prior.bRecorded &&
+		FirstPolicyGroundReferenceTrace.ValidationError.IsEmpty();
+	if (!bCaptureStartupChronology &&
+		!bCaptureFirstPolicyPriorSource &&
+		!bCaptureFirstPolicyGroundReferencePrior)
+	{
+		return;
+	}
+
+	const AActor* const OwnerActor = GetOwner();
+	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	const UWorld* const World = GetWorld();
+	if (!Stage || !OwnerActor || !SkeletalMesh || !World)
+	{
+		StartupChronologyTrace.CaptureError = TEXT("Runtime context was incomplete during startup chronology capture.");
+		return;
+	}
+
+	TArray<FPhysAnimBodySample> BodySamples;
+	FString CaptureError;
+	if (!GatherCurrentBodySamples(BodySamples, CaptureError))
+	{
+		StartupChronologyTrace.CaptureError = CaptureError;
+		return;
+	}
+
+	FirstPolicyBodySourceTrace.CapturePriorIf(
+		bCaptureFirstPolicyPriorSource &&
+			FCString::Strcmp(Stage, TEXT("pre_state_machine")) == 0 &&
+			RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch,
+		Stage,
+		World->GetTimeSeconds(),
+		GetRuntimeStateName(RuntimeState),
+		PolicyControlTicksExecuted,
+		BodySamples);
+	const bool bAtPriorBoundary =
+		FCString::Strcmp(Stage, TEXT("pre_state_machine")) == 0 &&
+		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch &&
+		PolicyControlTicksExecuted == 0;
+	if (bCaptureFirstPolicyGroundReferencePrior && bAtPriorBoundary)
+	{
+		PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues GroundReferenceValues;
+		ResolveSelfObservationGroundHeight(BodySamples, &GroundReferenceValues);
+		FirstPolicyGroundReferenceTrace.CapturePriorIf(
+			true,
+			Stage,
+			World->GetTimeSeconds(),
+			GetRuntimeStateName(RuntimeState),
+			PolicyControlTicksExecuted,
+			GroundReferenceValues);
+	}
+	if (!bCaptureStartupChronology)
+	{
+		return;
+	}
+
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	if (SkeletalMesh->GetBoneIndex(RootBoneName) == INDEX_NONE)
+	{
+		StartupChronologyTrace.CaptureError = FString::Printf(
+			TEXT("Root observation bone '%s' was missing during startup chronology capture."),
+			*RootBoneName.ToString());
+		return;
+	}
+
+	const bool bCaptured = StartupChronologyTrace.CaptureIf(
+		true,
+		Stage,
+		World->GetTimeSeconds(),
+		GetRuntimeStateName(RuntimeState),
+		PolicyUpdateAccumulatorSeconds,
+		LastPolicyElapsedSteps,
+		PolicyControlTicksExecuted,
+		FirstPolicyInputProvenanceSnapshot.bCaptured,
+		OwnerActor->GetActorTransform(),
+		SkeletalMesh->GetComponentTransform(),
+		SkeletalMesh->GetBoneTransform(RootBoneName, RTS_World),
+		BodySamples);
+	if (!bCaptured && !StartupChronologyTrace.bComplete)
+	{
+		StartupChronologyTrace.CaptureError = TEXT("Startup chronology reached its fixed sample bound before the first policy tick.");
+	}
+}
+#endif
+
+
+#if WITH_DEV_AUTOMATION_TESTS
+float UPhysAnimComponent::ResolveSelfObservationGroundHeight(
+	const TArray<FPhysAnimBodySample>& CurrentBodySamples,
+	PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues* OutGroundReferenceValues
+	) const
+#else
+float UPhysAnimComponent::ResolveSelfObservationGroundHeight(
+	const TArray<FPhysAnimBodySample>& CurrentBodySamples) const
+#endif
+{
+#if WITH_DEV_AUTOMATION_TESTS
+	if (OutGroundReferenceValues)
+	{
+		*OutGroundReferenceValues = PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues();
+	}
+#endif
 	if (!CurrentBodySamples.IsValidIndex(0))
 	{
 		return 0.0f;
@@ -67,33 +284,86 @@ float UPhysAnimComponent::ResolveSelfObservationGroundHeight(const TArray<FPhysA
 	const ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
 	const UCharacterMovementComponent* const CharacterMovement = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr;
 	const UCapsuleComponent* const CapsuleComponent = CharacterOwner ? CharacterOwner->GetCapsuleComponent() : nullptr;
-	if (!SkeletalMesh || !CharacterMovement || !CapsuleComponent)
+	if (!SkeletalMesh)
 	{
 		return 0.0f;
 	}
 
 	const FVector RootWorldLocation = SkeletalMesh->GetBoneLocation(PhysAnimBridge::GetRootBoneName());
-	const FFindFloorResult& CurrentFloor = CharacterMovement->CurrentFloor;
-	const float GroundWorldZ = ResolveObservationGroundWorldZFromFloor(
-		CurrentFloor.IsWalkableFloor(),
-		CurrentFloor.HitResult.IsValidBlockingHit(),
-		CurrentFloor.HitResult.ImpactPoint.Z,
-		CapsuleComponent->GetComponentLocation().Z,
-		CapsuleComponent->GetScaledCapsuleHalfHeight(),
-		CurrentFloor.GetDistanceToFloor(),
+	FHitResult StaticGroundHit;
+#if WITH_DEV_AUTOMATION_TESTS
+	bool bStaticGroundTraceAttempted = false;
+#endif
+	bool bHasStaticGroundTrace = false;
+	if (UWorld* const World = GetWorld())
+	{
+#if WITH_DEV_AUTOMATION_TESTS
+		bStaticGroundTraceAttempted = true;
+#endif
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PhysAnimSelfObservationGround), false);
+		if (const AActor* const Owner = GetOwner())
+		{
+			QueryParams.AddIgnoredActor(Owner);
+		}
+
+		const FVector TraceStart = RootWorldLocation + FVector(0.0, 0.0, PhysAnimComponentInternal::TerrainTraceStartAboveRootCm);
+		const FVector TraceEnd = RootWorldLocation - FVector(0.0, 0.0, PhysAnimComponentInternal::TerrainTraceEndBelowRootCm);
+		bHasStaticGroundTrace = World->LineTraceSingleByObjectType(
+			StaticGroundHit,
+			TraceStart,
+			TraceEnd,
+			FCollisionObjectQueryParams(FCollisionObjectQueryParams::InitType::AllStaticObjects),
+			QueryParams) && StaticGroundHit.IsValidBlockingHit();
+	}
+
+	const FFindFloorResult* const CurrentFloor = CharacterMovement ? &CharacterMovement->CurrentFloor : nullptr;
+	const float GroundWorldZ = ResolveObservationGroundWorldZ(
+		bHasStaticGroundTrace,
+		StaticGroundHit.ImpactPoint.Z,
+		CurrentFloor && CurrentFloor->IsWalkableFloor(),
+		CurrentFloor && CurrentFloor->HitResult.IsValidBlockingHit(),
+		CurrentFloor ? CurrentFloor->HitResult.ImpactPoint.Z : 0.0f,
+		CapsuleComponent ? CapsuleComponent->GetComponentLocation().Z : 0.0f,
+		CapsuleComponent ? CapsuleComponent->GetScaledCapsuleHalfHeight() : 0.0f,
+		CurrentFloor ? CurrentFloor->GetDistanceToFloor() : 0.0f,
 		0.0f);
 
-	return ResolveSelfObservationSyntheticGroundHeight(
+	const float SyntheticGroundHeight = ResolveSelfObservationSyntheticGroundHeight(
 		CurrentBodySamples[0].Position.Z,
 		RootWorldLocation.Z,
 		GroundWorldZ);
+#if WITH_DEV_AUTOMATION_TESTS
+	if (OutGroundReferenceValues)
+	{
+		OutGroundReferenceValues->BodyRootProtoZM = CurrentBodySamples[0].Position.Z;
+		OutGroundReferenceValues->RootBoneWorldZCm = RootWorldLocation.Z;
+		OutGroundReferenceValues->bStaticTraceAttempted = bStaticGroundTraceAttempted;
+		OutGroundReferenceValues->bStaticTraceSucceeded = bHasStaticGroundTrace;
+		OutGroundReferenceValues->StaticTraceImpactZCm = StaticGroundHit.ImpactPoint.Z;
+		OutGroundReferenceValues->bHasWalkableFloor = CurrentFloor && CurrentFloor->IsWalkableFloor();
+		OutGroundReferenceValues->bHasBlockingFloorHit = CurrentFloor && CurrentFloor->HitResult.IsValidBlockingHit();
+		OutGroundReferenceValues->FloorImpactZCm = CurrentFloor ? CurrentFloor->HitResult.ImpactPoint.Z : 0.0;
+		OutGroundReferenceValues->bCapsuleAvailable = CapsuleComponent != nullptr;
+		OutGroundReferenceValues->CapsuleCenterZCm = CapsuleComponent ? CapsuleComponent->GetComponentLocation().Z : 0.0;
+		OutGroundReferenceValues->CapsuleHalfHeightCm = CapsuleComponent ? CapsuleComponent->GetScaledCapsuleHalfHeight() : 0.0;
+		OutGroundReferenceValues->FloorDistanceCm = CurrentFloor ? CurrentFloor->GetDistanceToFloor() : 0.0;
+		OutGroundReferenceValues->FallbackGroundWorldZCm = 0.0;
+		OutGroundReferenceValues->GroundWorldZCm = GroundWorldZ;
+		OutGroundReferenceValues->SyntheticGroundHeightM = SyntheticGroundHeight;
+		OutGroundReferenceValues->FinalRootHeightM = static_cast<float>(
+			CurrentBodySamples[0].Position.Z - static_cast<double>(SyntheticGroundHeight));
+	}
+#endif
+	return SyntheticGroundHeight;
 }
 
 
 bool UPhysAnimComponent::BuildTerrainObservation(
 	const TArray<FPhysAnimBodySample>& CurrentBodySamples,
 	TArray<float>& OutTerrain,
-	FString& OutError) const
+	FString& OutError,
+	TArray<float>* OutGroundHeightsForDiagnostics,
+	FTransform* OutRootWorldTransformForDiagnostics) const
 {
 	if (!CurrentBodySamples.IsValidIndex(0))
 	{
@@ -103,16 +373,31 @@ bool UPhysAnimComponent::BuildTerrainObservation(
 
 	const FPhysAnimBodySample& RootSample = CurrentBodySamples[0];
 	const float GroundHeight = ResolveSelfObservationGroundHeight(CurrentBodySamples);
+	const USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	if (!Mesh)
+	{
+		OutError = TEXT("Cannot build terrain observation without a skeletal mesh component.");
+		return false;
+	}
+	const FTransform RootWorldTransform = Mesh->GetSocketTransform(PhysAnimBridge::GetRootBoneName(), RTS_World);
+	if (OutRootWorldTransformForDiagnostics)
+	{
+		*OutRootWorldTransformForDiagnostics = RootWorldTransform;
+	}
 
 	TArray<float> SampleGroundHeights;
 	if (!SampleTerrainGroundHeights(
-		RootSample.Position,
-		RootSample.Rotation,
+		RootWorldTransform.GetLocation(),
+		RootWorldTransform.GetRotation(),
 		GroundHeight,
 		SampleGroundHeights,
 		OutError))
 	{
 		return false;
+	}
+	if (OutGroundHeightsForDiagnostics)
+	{
+		*OutGroundHeightsForDiagnostics = SampleGroundHeights;
 	}
 
 	return PhysAnimBridge::BuildTerrainObservation(
@@ -156,12 +441,12 @@ bool UPhysAnimComponent::SampleTerrainGroundHeights(
 	}
 
 	const FCollisionObjectQueryParams ObjectQueryParams(FCollisionObjectQueryParams::InitType::AllStaticObjects);
-	const FQuat RootYawRotation = FRotator(0.0f, RootRotation.Rotator().Yaw, 0.0f).Quaternion();
-
 	for (int32 SampleIndex = 0; SampleIndex < TerrainSampleOffsets.Num(); ++SampleIndex)
 	{
-		const FVector LocalOffset(TerrainSampleOffsets[SampleIndex].X, TerrainSampleOffsets[SampleIndex].Y, 0.0f);
-		const FVector SampleLocation = RootLocation + RootYawRotation.RotateVector(LocalOffset);
+		const FVector SampleLocation = PhysAnimBridge::BuildTerrainSampleWorldLocation(
+			RootLocation,
+			RootRotation,
+			TerrainSampleOffsets[SampleIndex]);
 		const FVector TraceStart(SampleLocation.X, SampleLocation.Y, RootLocation.Z + PhysAnimComponentInternal::TerrainTraceStartAboveRootCm);
 		const FVector TraceEnd(SampleLocation.X, SampleLocation.Y, RootLocation.Z - PhysAnimComponentInternal::TerrainTraceEndBelowRootCm);
 

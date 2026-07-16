@@ -1,0 +1,44 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "rigid-body-position-observation-e29",
+  "recorded_utc": "2026-07-15T19:35:00Z",
+  "authority": "DEVELOPMENT_CAUSAL_EVIDENCE",
+  "product_success": false,
+  "hypothesis": "ProtoMotions observes one coherent rigid-body state, but UE mixes bone-origin positions with physics-body rotations and velocities. Using each Physics BodyInstance world transform for observation position will improve policy response and reduce recovery AUC.",
+  "authoritative_evidence": {
+    "protomotions_commit":"4a905b998101333a2fb91f2de8e2cab4bd0db68e",
+    "source":"protomotions/simulator/isaaclab/simulator.py::_get_simulator_bodies_state",
+    "fields":["body_pos_w","body_quat_w","body_lin_vel_w","body_ang_vel_w"],
+    "ue_current_mismatch":"BoneWorldTransform.GetLocation() is combined with BodyInstance transform rotation and physics velocities."
+  },
+  "arms": [
+    {"name":"control_bone_positions", "variant":"Normal", "action_family":"LowerOnly", "physics_body_positions":false},
+    {"name":"experimental_body_positions", "variant":"Normal", "action_family":"LowerOnly", "physics_body_positions":true},
+    {"name":"zero_body_position_guard", "variant":"ZeroActions", "action_family":"LowerOnly", "physics_body_positions":true}
+  ],
+  "single_changed_variable": "Observation Position source: skeletal bone world origin versus FBodyInstance world transform origin. Rotation and velocity sources, action conditioning, mask, mapping, control plant, timing, perturbation, and evaluator remain unchanged.",
+  "locked_configuration": {
+    "same_binary":true,
+    "test":"PhysAnim.Product.CausalStanding",
+    "protocol":"locked causal-standing v1",
+    "action_axis":"mesh-component parent-bind axis from first policy",
+    "neutral_source":"captured stable standing neutral",
+    "retained_actions":"Proto joints 0-7",
+    "range_mapping_and_projection":"enabled",
+    "actuation":"current 8 Hz acceleration-mode plant",
+    "fixed_timestep_seconds":0.016666666666666666,
+    "perturbation_delta_v_cm_per_sec":15.0,
+    "capture_window_seconds":10.0,
+    "renderer":"RenderOffscreen"
+  },
+  "validity_gates": [
+    "Control and experimental use the same binary and differ only by the observation-position source flag.",
+    "A trace records bone-to-body position deltas and the selected source for all 24 observation bodies.",
+    "Raw ONNX output remains unmodified and target readback is 1.0.",
+    "ZeroActions remains exactly zero and physically valid."
+  ],
+  "support": "Experimental Normal passes every absolute criterion and recovery AUC is <= 32.913436978267704.",
+  "partial_support": "Experimental AUC materially improves but misses threshold; use per-body delta evidence to determine whether root-only or all-body provenance is appropriate.",
+  "falsification": "Body positions do not improve AUC, lose standing, or make the observation contract less coherent.",
+  "next": "If supported, test all actions and then run the full product bundle. If partial, split root position provenance from non-root body positions without changing velocity or rotation."
+}

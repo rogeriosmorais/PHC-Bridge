@@ -1,0 +1,28 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "deterministic-distal-hands-restoration-e44",
+  "preregistered_utc": "2026-07-15T22:38:00Z",
+  "production_controller_commit": "3bbcfc54225293a185b23c8d211f25b853cb91f6",
+  "distal_hands_candidate_commit": "54ce5b188dd5934818fba8f5330f315084f05c01",
+  "deterministic_execution_evidence_commit": "217b66376606e32df39779272af4d2009bf6d6d1",
+  "hypothesis": "The E41 DistalHands candidate is causally valid and exactly repeatable when evaluated under the supported -onethread causal-standing configuration.",
+  "single_behavior_variable": "Restore Proto joints 16-17 and 21-22 in addition to production joints 0-7 and 9-10.",
+  "locked_execution_arguments": ["-onethread","-PhysAnimExperimentalCausalStandingUpperBody=DistalHands"],
+  "locked_bundle": ["Normal x3","ZeroActions x3","DropControlDispatch x1","ForcedSupportLoss x1"],
+  "acceptance": {
+    "bundle_status": "PASS",
+    "normal_to_zero_recovery_auc_ratio_max": 0.8,
+    "normal_repetitions_byte_deterministic": true,
+    "zero_actions_repetitions_byte_deterministic": true,
+    "normal_mask": "joints 0-7,9-10,16-17,21-22 only",
+    "zero_actions_all_conditioned_scalars_exact_zero": true,
+    "destructive_controls_fail_only_intended_criteria": true,
+    "runner_has_only_DistalHands_PhysAnimExperimental_argument": true,
+    "runner_contains_onethread": true
+  },
+  "decision_rule": {
+    "supported": "Preregister and execute a separate production promotion making DistalHands part of the default mask.",
+    "falsified": "Keep E40 production and localize left versus right distal pairs under -onethread.",
+    "invalid": "Repeat only for a violated source/model/protocol/mask/command-line validity condition."
+  }
+}

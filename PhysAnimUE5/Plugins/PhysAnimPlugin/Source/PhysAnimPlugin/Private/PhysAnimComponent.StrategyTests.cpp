@@ -83,6 +83,371 @@ namespace
 #endif
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMandatoryPathFirstSliceContractTest,
+		"PhysAnim.Component.MandatoryPath.FirstSliceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimMandatoryPathFirstSliceContractTest::RunTest(const FString& Parameters)
+	{
+		const FQuat ParentWorldRotation(FVector::UpVector, FMath::DegreesToRadians(70.0f));
+		const FQuat ExpectedParentRelativeRotation(FVector::RightVector, FMath::DegreesToRadians(25.0f));
+		const FQuat ChildWorldRotation = (ParentWorldRotation * ExpectedParentRelativeRotation).GetNormalized();
+		const FPhysAnimControlTargetSeed CapturedSeed = UPhysAnimComponent::BuildCurrentPoseControlTargetSeed(
+			ParentWorldRotation,
+			ChildWorldRotation);
+		TestTrue(
+			TEXT("The captured parent world rotation remains distinct from the published target"),
+			CapturedSeed.ParentWorldRotation.AngularDistance(ParentWorldRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("The captured child world rotation remains distinct from the published target"),
+			CapturedSeed.ChildWorldRotation.AngularDistance(ChildWorldRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("A current-pose seed initially uses its physical parent as the action-axis reference"),
+			CapturedSeed.ParentActionAxisReferenceRotation.AngularDistance(ParentWorldRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Current-pose targets are published in Physics Control parent-relative space"),
+			CapturedSeed.ParentRelativeTargetRotation.AngularDistance(ExpectedParentRelativeRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Parent-relative targets are not the child world rotation"),
+			CapturedSeed.ParentRelativeTargetRotation.AngularDistance(ChildWorldRotation) > FMath::DegreesToRadians(1.0f));
+		TestFalse(
+			TEXT("Standing policy targets remain explicit parent-relative targets when policy influence is active"),
+			UPhysAnimComponent::ShouldUseSkeletalAnimationTargetRepresentation(false, true));
+		TestFalse(
+			TEXT("The legacy skeletal-animation target flag cannot override the standing target contract"),
+			UPhysAnimComponent::ShouldUseSkeletalAnimationTargetRepresentation(true, true));
+		TestFalse(
+			TEXT("The first policy frame does not reset the captured parent-relative seed to zero"),
+			UPhysAnimComponent::ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(true, true));
+		TestEqual(
+			TEXT("ProtoMotions position-only PD does not synthesize angular velocity for a changing proximal target"),
+			UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(
+				TEXT("calf_l"),
+				false,
+				false,
+				false,
+				1.0f / 30.0f),
+			0.0f);
+		TestEqual(
+			TEXT("ProtoMotions position-only PD remains velocity-free on the first policy frame"),
+			UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(
+				TEXT("spine_01"),
+				true,
+				true,
+				false,
+				1.0f / 30.0f),
+			0.0f);
+		const FQuat PolicyRotation(FVector::ForwardVector, FMath::DegreesToRadians(35.0f));
+		const FQuat LiveHandoverRotation(FVector::RightVector, FMath::DegreesToRadians(-15.0f));
+		const FQuat ExpectedBindCalibratedPolicyRotation =
+			(ParentWorldRotation.Inverse() *
+			 PolicyRotation *
+			 ParentWorldRotation *
+			 ExpectedParentRelativeRotation).GetNormalized();
+		TestTrue(
+			TEXT("Zero policy influence exactly preserves the live handover seed"),
+			UPhysAnimComponent::BlendPolicyTargetRotation(
+				LiveHandoverRotation,
+				ExpectedBindCalibratedPolicyRotation,
+				0.0f).AngularDistance(LiveHandoverRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Identity Proto policy rotation exactly reproduces Manny's T-pose bind target"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetInMannyBindFrame(
+				CapturedSeed,
+				FQuat::Identity).AngularDistance(ExpectedParentRelativeRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Proto policy rotations are conjugated into Manny's parent bind frame before the bind neutral"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetInMannyBindFrame(
+				CapturedSeed,
+				PolicyRotation).AngularDistance(ExpectedBindCalibratedPolicyRotation) <= KINDA_SMALL_NUMBER);
+		const FQuat ExpectedStableNeutralPolicyRotation =
+			(ParentWorldRotation.Inverse() *
+			 PolicyRotation *
+			 ParentWorldRotation *
+			 LiveHandoverRotation).GetNormalized();
+		TestTrue(
+			TEXT("Identity Proto policy rotation exactly reproduces the captured stable Manny neutral"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
+				CapturedSeed,
+				LiveHandoverRotation,
+				FQuat::Identity).AngularDistance(LiveHandoverRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Nonzero Proto policy rotations compose in bind axes around the same stable Manny neutral"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
+				CapturedSeed,
+				LiveHandoverRotation,
+				PolicyRotation).AngularDistance(ExpectedStableNeutralPolicyRotation) <= KINDA_SMALL_NUMBER);
+		FPhysAnimControlTargetSeed AxisCalibratedSeed = CapturedSeed;
+		AxisCalibratedSeed.ParentActionAxisReferenceRotation =
+			FQuat(FVector::UpVector, FMath::DegreesToRadians(-20.0f));
+		const FQuat ExpectedAxisCalibratedPolicyRotation =
+			(AxisCalibratedSeed.ParentActionAxisReferenceRotation.Inverse() *
+			 PolicyRotation *
+			 AxisCalibratedSeed.ParentActionAxisReferenceRotation *
+			 LiveHandoverRotation).GetNormalized();
+		TestTrue(
+			TEXT("A T-pose bone-axis calibration can be distinct from the physical neutral seed"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
+				AxisCalibratedSeed,
+				LiveHandoverRotation,
+				PolicyRotation).AngularDistance(ExpectedAxisCalibratedPolicyRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Bind-frame target composition is distinct from the legacy live-neutral right composition"),
+			ExpectedBindCalibratedPolicyRotation.AngularDistance(
+				(LiveHandoverRotation * PolicyRotation).GetNormalized()) > FMath::DegreesToRadians(1.0f));
+		TestTrue(
+			TEXT("Full policy influence reaches the absolute bind-calibrated target"),
+			UPhysAnimComponent::BlendPolicyTargetRotation(
+				LiveHandoverRotation,
+				ExpectedBindCalibratedPolicyRotation,
+				1.0f).AngularDistance(ExpectedBindCalibratedPolicyRotation) <= KINDA_SMALL_NUMBER);
+
+		const FQuat NeutralPelvisActorRelativeRotation =
+			(FQuat(FVector::ForwardVector, FMath::DegreesToRadians(90.0f)) *
+			 FQuat(FVector::UpVector, FMath::DegreesToRadians(15.0f))).GetNormalized();
+		const FQuat ActorWorldRotation(FVector::UpVector, FMath::DegreesToRadians(40.0f));
+		const FQuat NeutralPelvisWorldRotation =
+			(ActorWorldRotation * NeutralPelvisActorRelativeRotation).GetNormalized();
+		TestTrue(
+			TEXT("Manny's captured neutral pelvis orientation reports zero tilt"),
+			FMath::IsNearlyZero(UPhysAnimComponent::CalculateNeutralCalibratedPelvisTiltDegrees(
+				NeutralPelvisWorldRotation,
+				NeutralPelvisActorRelativeRotation,
+				ActorWorldRotation), 0.01f));
+		const FQuat TiltedPelvisWorldRotation =
+			(FQuat(FVector::RightVector, FMath::DegreesToRadians(30.0f)) * NeutralPelvisWorldRotation).GetNormalized();
+		TestTrue(
+			TEXT("Neutral-calibrated pelvis tilt measures physical pitch rather than Manny local Z"),
+			FMath::IsNearlyEqual(UPhysAnimComponent::CalculateNeutralCalibratedPelvisTiltDegrees(
+				TiltedPelvisWorldRotation,
+				NeutralPelvisActorRelativeRotation,
+				ActorWorldRotation), 30.0f, 0.05f));
+
+		TestEqual(
+			TEXT("A Chaos static-world trace grounds self observation when CharacterMovement has no floor"),
+			UPhysAnimComponent::ResolveObservationGroundWorldZ(
+				true, 210.0f,
+				false, false, 0.0f,
+				300.0f, 90.0f, 0.0f,
+				0.0f),
+			210.0f);
+		TestEqual(
+			TEXT("The current Chaos trace is authoritative over stale CharacterMovement floor data"),
+			UPhysAnimComponent::ResolveObservationGroundWorldZ(
+				true, 210.0f,
+				true, true, 100.0f,
+				300.0f, 90.0f, 0.0f,
+				0.0f),
+			210.0f);
+		TestEqual(
+			TEXT("CharacterMovement floor data remains the fallback when the static-world trace misses"),
+			UPhysAnimComponent::ResolveObservationGroundWorldZ(
+				false, 0.0f,
+				true, true, 205.0f,
+				300.0f, 90.0f, 0.0f,
+				0.0f),
+			205.0f);
+
+		const FQuat WorldRootRotation(FVector::UpVector, FMath::DegreesToRadians(90.0f));
+		const FQuat DataRootRotation(FVector::UpVector, FMath::DegreesToRadians(-20.0f));
+		const FTransform SelectedWorldRoot(WorldRootRotation, FVector(10.0, 20.0, 3.0));
+		const FTransform SelectedDataRoot(DataRootRotation, FVector(1.0, 2.0, 0.9));
+		const FVector BodyPositionInRootFrame(0.4, -0.2, 0.7);
+		const FQuat BodyRotationInRootFrame(FVector::RightVector, FMath::DegreesToRadians(15.0f));
+		const FVector LinearVelocityInRootFrame(1.0, 2.0, 3.0);
+		const FVector AngularVelocityInRootFrame(-0.5, 0.25, 0.75);
+		TArray<FPhysAnimBodySample> WorldFrameSamples;
+		WorldFrameSamples.Add(FPhysAnimBodySample{
+			SelectedWorldRoot.GetLocation(),
+			SelectedWorldRoot.GetRotation(),
+			WorldRootRotation.RotateVector(LinearVelocityInRootFrame),
+			WorldRootRotation.RotateVector(AngularVelocityInRootFrame)});
+		WorldFrameSamples.Add(FPhysAnimBodySample{
+			SelectedWorldRoot.GetLocation() + WorldRootRotation.RotateVector(BodyPositionInRootFrame),
+			(WorldRootRotation * BodyRotationInRootFrame).GetNormalized(),
+			WorldRootRotation.RotateVector(LinearVelocityInRootFrame),
+			WorldRootRotation.RotateVector(AngularVelocityInRootFrame)});
+		TArray<FPhysAnimBodySample> DataFrameSamples;
+		UPhysAnimComponent::MakeMimicTargetDataFrameBodySamples(
+			WorldFrameSamples,
+			SelectedWorldRoot,
+			SelectedDataRoot,
+			DataFrameSamples);
+		TestEqual(TEXT("Mimic frame conversion preserves every body sample"), DataFrameSamples.Num(), WorldFrameSamples.Num());
+		TestTrue(
+			TEXT("The selected runtime root maps exactly onto the selected motion-data root"),
+			DataFrameSamples[0].Position.Equals(SelectedDataRoot.GetLocation(), KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("The selected runtime root rotation maps exactly onto the motion-data root rotation"),
+			DataFrameSamples[0].Rotation.AngularDistance(SelectedDataRoot.GetRotation()) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Manny body positions are rotated and translated into the ProtoMotions data frame"),
+			DataFrameSamples[1].Position.Equals(
+				SelectedDataRoot.GetLocation() + DataRootRotation.RotateVector(BodyPositionInRootFrame),
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Manny body rotations are expressed in the same frame as future motion targets"),
+			DataFrameSamples[1].Rotation.AngularDistance(
+				(DataRootRotation * BodyRotationInRootFrame).GetNormalized()) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Linear velocity follows the same world-to-data frame rotation"),
+			DataFrameSamples[1].LinearVelocity.Equals(
+				DataRootRotation.RotateVector(LinearVelocityInRootFrame),
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Angular velocity follows the same world-to-data frame rotation"),
+			DataFrameSamples[1].AngularVelocity.Equals(
+				DataRootRotation.RotateVector(AngularVelocityInRootFrame),
+				KINDA_SMALL_NUMBER));
+
+		TestTrue(
+			TEXT("Prepare suppresses policy dispatch independently of evidence collection"),
+			UPhysAnimComponent::ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState::BalanceEntry_Prepare));
+		TestTrue(
+			TEXT("LateValidate suppresses policy dispatch independently of evidence collection"),
+			UPhysAnimComponent::ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState::BalanceEntry_LateValidate));
+		TestFalse(
+			TEXT("Standing does not suppress policy dispatch"),
+			UPhysAnimComponent::ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState::BalanceActive_Standing));
+
+		TestFalse(
+			TEXT("Kinematic animation velocity alone is not an upper-body physical-state violation"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, false, false, false, false));
+		TestTrue(
+			TEXT("Modifier movement-type mismatch is observed"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(true, false, false, false, false));
+		TestTrue(
+			TEXT("Raw simulation mismatch is observed"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, true, false, false, false));
+		TestTrue(
+			TEXT("Pending cached reset is observed"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, false, true, false, false));
+		TestTrue(
+			TEXT("Parent-relative pose mismatch is observed"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, false, false, true, false));
+		TestTrue(
+			TEXT("Physics Control target readback mismatch is observed"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, false, false, false, true));
+
+		float ViolationDurationSeconds = 0.0f;
+		TestFalse(
+			TEXT("A first transient violation remains inside the sustained grace period"),
+			FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(true, 0.04f, 0.10f, ViolationDurationSeconds));
+		TestFalse(
+			TEXT("A second transient violation remains inside the sustained grace period"),
+			FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(true, 0.04f, 0.10f, ViolationDurationSeconds));
+		TestTrue(
+			TEXT("A sustained violation trips after the configured grace period"),
+			FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(true, 0.04f, 0.10f, ViolationDurationSeconds));
+		TestFalse(
+			TEXT("A clean frame resets sustained violation state"),
+			FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(false, 0.04f, 0.10f, ViolationDurationSeconds));
+		TestTrue(TEXT("The clean frame clears the accumulated violation duration"), FMath::IsNearlyZero(ViolationDurationSeconds));
+
+		TestFalse(
+			TEXT("A fully observed simulated body is an authoritative topology observation"),
+			FPhysAnimBalanceReadyTransition::IsPhase1TopologyObservationMismatch(
+				true,
+				true,
+				true,
+				false,
+				true,
+				true));
+		TestTrue(
+			TEXT("A failed simulated modifier command is recorded as a topology mismatch"),
+			FPhysAnimBalanceReadyTransition::IsPhase1TopologyObservationMismatch(
+				true,
+				true,
+				false,
+				true,
+				true,
+				false));
+		TestTrue(
+			TEXT("Modifier and raw-body disagreement is recorded as a topology mismatch"),
+			FPhysAnimBalanceReadyTransition::IsPhase1TopologyObservationMismatch(
+				true,
+				true,
+				true,
+				false,
+				true,
+				false));
+		TestTrue(
+			TEXT("Missing live topology records cannot be authoritative"),
+			FPhysAnimBalanceReadyTransition::IsPhase1TopologyObservationMismatch(
+				false,
+				false,
+				false,
+				false,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("Elapsed release timers cannot bypass a dirty current upper-body observation"),
+			FPhysAnimBalanceReadyTransition::CanReleaseLateValidationUpperBody(true, false, 0.04f));
+		TestFalse(
+			TEXT("Elapsed release timers cannot bypass an outstanding sub-grace violation"),
+			FPhysAnimBalanceReadyTransition::CanReleaseLateValidationUpperBody(true, true, 0.04f));
+		TestTrue(
+			TEXT("Upper-body release requires elapsed timers, a clean observation, and no outstanding violation"),
+			FPhysAnimBalanceReadyTransition::CanReleaseLateValidationUpperBody(true, true, 0.0f));
+
+		TestTrue(
+			TEXT("No policy writes is observed policy suppression"),
+			FPhysAnimBalanceReadyTransition::WasPolicySuppressedInObservedFrame(0));
+		TestFalse(
+			TEXT("A policy write invalidates certified policy suppression"),
+			FPhysAnimBalanceReadyTransition::WasPolicySuppressedInObservedFrame(1));
+		TestTrue(
+			TEXT("No pending or written reset request is observed reset suppression"),
+			FPhysAnimBalanceReadyTransition::WereResetsSuppressedInObservedFrame(0, 0));
+		TestFalse(
+			TEXT("A pending reset invalidates certified reset suppression"),
+			FPhysAnimBalanceReadyTransition::WereResetsSuppressedInObservedFrame(1, 0));
+		TestFalse(
+			TEXT("A consumed reset request still invalidates certified reset suppression"),
+			FPhysAnimBalanceReadyTransition::WereResetsSuppressedInObservedFrame(0, 1));
+
+		FPhysAnimCertifiedHandoffSnapshot SuppressionSnapshot;
+		SuppressionSnapshot.ProximalSimCount = 5;
+		SuppressionSnapshot.UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
+		SuppressionSnapshot.bControlAuthoritySettled = true;
+		SuppressionSnapshot.bPolicySuppressed = false;
+		SuppressionSnapshot.bResetsSuppressed = true;
+		FPhysAnimLateValidationResult SuppressionResult;
+		SuppressionResult.Outcome = EBalanceLateValidationOutcome::Outcome_Pending;
+		FPhysAnimStabilizationSettings SuppressionSettings;
+		FString SuppressionFailureReason;
+		TestFalse(
+			TEXT("A policy write prevents the observed baseline from being certified"),
+			FPhysAnimBalanceReadyTransition::ValidateLateValidationBaselineSnapshot(
+				SuppressionSnapshot,
+				SuppressionResult,
+				SuppressionSettings,
+				SuppressionFailureReason));
+		TestEqual(
+			TEXT("Policy-write certification failure is explicit"),
+			SuppressionFailureReason,
+			FString(TEXT("phase1_late_validate_baseline_policy_write_observed")));
+
+		SuppressionSnapshot.bPolicySuppressed = true;
+		SuppressionSnapshot.bResetsSuppressed = false;
+		SuppressionFailureReason.Reset();
+		TestFalse(
+			TEXT("A reset request prevents the observed baseline from being certified"),
+			FPhysAnimBalanceReadyTransition::ValidateLateValidationBaselineSnapshot(
+				SuppressionSnapshot,
+				SuppressionResult,
+				SuppressionSettings,
+				SuppressionFailureReason));
+		TestEqual(
+			TEXT("Reset certification failure is explicit"),
+			SuppressionFailureReason,
+			FString(TEXT("phase1_late_validate_baseline_reset_observed")));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimBalanceModeSmokeOutcomeTest,
 		"PhysAnim.Component.BalanceModeSmokeOutcome",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -97,13 +462,7 @@ namespace
 				EPhysAnimRuntimeState::BalanceActive_Standing,
 				true,
 				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
+				OutcomeError));
 		TestTrue(TEXT("Successful active-balance outcome emits no error"), OutcomeError.IsEmpty());
 
 		OutcomeError.Reset();
@@ -113,110 +472,38 @@ namespace
 				EPhysAnimRuntimeState::BalanceActive_Standing,
 				false,
 				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
+				OutcomeError));
 		TestTrue(TEXT("Physical continuity failure reports physical continuity"), OutcomeError.Contains(TEXT("physical continuity")));
 
 		OutcomeError.Reset();
 		TestFalse(
-			TEXT("Balance recovery is not a passing standing benchmark outcome"),
+			TEXT("Policy blend is not a completed standing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
-				EPhysAnimRuntimeState::BalanceActive_Recovery,
+				EPhysAnimRuntimeState::Standing_PolicyBlend,
 				true,
 				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("Recovery failure reports the standing requirement"), OutcomeError.Contains(TEXT("BalanceActive_Standing")));
+				OutcomeError));
+		TestTrue(TEXT("Incomplete activation reports the activation state"), OutcomeError.Contains(TEXT("Standing_PolicyBlend")));
 
 		OutcomeError.Reset();
 		TestFalse(
-			TEXT("Explicit safe deny is not a passing benchmark outcome when the reason is truthful"),
-			EvaluateBalanceModeSmokeOutcome(
-				EPhysAnimRuntimeState::BalanceSafeDeny,
-				true,
-				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				true,
-				TEXT("phase2_root_on_spike"),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("Safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
-
-		OutcomeError.Reset();
-		TestFalse(
-			TEXT("Phase 3 shell maintenance safe deny is not a passing standing benchmark outcome"),
-			EvaluateBalanceModeSmokeOutcome(
-				EPhysAnimRuntimeState::BalanceSafeDeny,
-				true,
-				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				true,
-				TEXT("phase3_material_shell_correction"),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("Phase 3 safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
-
-		OutcomeError.Reset();
-		TestFalse(
-			TEXT("Generic fail-stop precursor is not a truthful safe-deny smoke outcome"),
-			EvaluateBalanceModeSmokeOutcome(
-				EPhysAnimRuntimeState::BalanceSafeDeny,
-				true,
-				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				true,
-				TEXT("phase2_fail_stop_precursor"),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("Generic safe deny failure reports the non-truthful reason"), OutcomeError.Contains(TEXT("phase2_fail_stop_precursor")));
-
-		OutcomeError.Reset();
-		TestTrue(
-			TEXT("Canonical terminal failure is a truthful smoke diagnostic outcome"),
+			TEXT("Canonical terminal failure remains a failing smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::FailStopped,
 				false,
 				EPhysAnimTerminalReason::ActivationContinuousSimulationLost,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("Canonical terminal outcome emits no benchmark error"), OutcomeError.IsEmpty());
+				OutcomeError));
+		TestTrue(TEXT("Canonical terminal outcome reports diagnostic-only failure"), OutcomeError.Contains(TEXT("terminal failure")));
 
 		OutcomeError.Reset();
-		TestTrue(
-			TEXT("BridgeActive with canonical terminal evidence is a truthful smoke diagnostic outcome"),
+		TestFalse(
+			TEXT("BridgeActive with canonical terminal evidence remains a failing smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
 				EPhysAnimTerminalReason::ActivationContinuousSimulationLost,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("BridgeActive terminal diagnostic emits no benchmark error"), OutcomeError.IsEmpty());
+				OutcomeError));
+		TestTrue(TEXT("BridgeActive terminal outcome reports diagnostic-only failure"), OutcomeError.Contains(TEXT("terminal failure")));
 
 		OutcomeError.Reset();
 		TestFalse(
@@ -225,13 +512,7 @@ namespace
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
 				EPhysAnimTerminalReason::ActivationAuthorityConflict,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
+				OutcomeError));
 
 		OutcomeError.Reset();
 		TestFalse(
@@ -240,14 +521,8 @@ namespace
 				EPhysAnimRuntimeState::FailStopped,
 				false,
 				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("Unsafe fail-stop reports unsafe failure"), OutcomeError.Contains(TEXT("Unsafe failure path")));
+				OutcomeError));
+		TestTrue(TEXT("Explicit fail-stop reports its state"), OutcomeError.Contains(TEXT("fail-stop")));
 
 		OutcomeError.Reset();
 		TestFalse(
@@ -256,30 +531,8 @@ namespace
 				EPhysAnimRuntimeState::BridgeActive,
 				true,
 				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
+				OutcomeError));
 		TestTrue(TEXT("BridgeActive failure reports the runtime state"), OutcomeError.Contains(TEXT("BridgeActive")));
-
-		OutcomeError.Reset();
-		TestFalse(
-			TEXT("BridgeActive with a published transition failure remains an unsafe smoke outcome"),
-			EvaluateBalanceModeSmokeOutcome(
-				EPhysAnimRuntimeState::BridgeActive,
-				true,
-				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				true,
-				false,
-				TEXT(""),
-				TEXT("phase3_material_shell_correction"),
-				false, OutcomeError));
-		TestTrue(TEXT("Published transition failure reports the truthful blocker"), OutcomeError.Contains(TEXT("phase3_material_shell_correction")));
 		return true;
 	}
 
@@ -1975,6 +2228,9 @@ namespace
 		FPhysAnimStabilizationSettings Settings;
 		FPhysAnimStabilizationSettings OverrideSettings = Settings;
 		TestFalse(TEXT("Force-zero actions defaults to disabled"), Settings.bForceZeroActions);
+		TestTrue(TEXT("Proto-to-Manny constraint adaptation defaults to enabled"), Settings.bEnableProtoMannyConstraintAdapter);
+		OverrideSettings.bEnableProtoMannyConstraintAdapter = false;
+		TestTrue(TEXT("Constraint-adapter enablement participates in settings equality"), Settings != OverrideSettings);
 		TestEqual(TEXT("Policy control rate defaults to the ProtoMotions-trained cadence"), Settings.PolicyControlRateHz, 30.0f);
 		TestEqual(TEXT("Phase 2 RootOn root linear spike budget stays at the documented POC threshold"), Settings.BalancePhase2AbortRootLinearSpeed, 1200.0f);
 		TestEqual(TEXT("Phase 2 RootOn root angular spike budget stays at the documented POC threshold"), Settings.BalancePhase2AbortRootAngularSpeed, 4000.0f);
@@ -2662,7 +2918,7 @@ namespace
 			return false;
 		}
 
-		Component->bEnableLiveRuntimeEvidenceProof = true;
+		TestFalse(TEXT("Legacy evidence proof defaults off"), Component->bEnableLiveRuntimeEvidenceProof);
 
 		const bool bFirstQueryResult = false;
 		Component->TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(bFirstQueryResult);
@@ -2673,7 +2929,7 @@ namespace
 		TestTrue(TEXT("Caller PoseSearch result remains true after recording"), bSecondQueryResult);
 
 		const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
-		TestEqual(TEXT("PoseSearch query count increments across recordings"), Metrics.PoseSearchQueryCount, 2);
+		TestEqual(TEXT("PoseSearch query count is observational even when legacy evidence proof is off"), Metrics.PoseSearchQueryCount, 2);
 		TestEqual(TEXT("PoseSearch valid result count only increments for true results"), Metrics.PoseSearchValidResultCount, 1);
 
 		Component->TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(false);
@@ -4173,11 +4429,11 @@ bool FPhysAnimPhase3SettlementGraceProofTest::RunTest(const FString& Parameters)
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FPhysAnimFailStopShortCircuitTest,
-	"PhysAnim.Component.FailStopShortCircuit",
+	FPhysAnimSteadyActionConditioningTest,
+	"PhysAnim.Component.SteadyActionConditioning",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FPhysAnimFailStopShortCircuitTest::RunTest(const FString& Parameters)
+bool FPhysAnimSteadyActionConditioningTest::RunTest(const FString& Parameters)
 {
 	UWorld* World = GEditor->GetEditorWorldContext().World();
 	if (!World)
@@ -4192,7 +4448,7 @@ bool FPhysAnimFailStopShortCircuitTest::RunTest(const FString& Parameters)
 	// Initialize ActionOutputBuffer size to match expectations (NumActionFloats is 57)
 	Component->ActionOutputBuffer.Init(1.0f, PhysAnimBridge::NumActionFloats);
 
-	// ConditionModelActions frozen actions fail-stop check
+	// A deterministic policy may converge to a steady nonzero action in a steady state.
 	Component->RecentActionMagnitudeHistory.Empty();
 	Component->RecentActionMagnitudeHistory.Init(1.0f, 10);
 	Component->RuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
@@ -4200,11 +4456,9 @@ bool FPhysAnimFailStopShortCircuitTest::RunTest(const FString& Parameters)
 	FPhysAnimStabilizationSettings Settings;
 	FString Error;
 
-	AddExpectedError(TEXT("ACTION_FROZEN"), EAutomationExpectedErrorFlags::Contains);
-	AddExpectedError(TEXT("Fail-stop: Model action output is frozen"), EAutomationExpectedErrorFlags::Contains);
-
 	bool bConditionResult = Component->ConditionModelActions(Settings, Error);
-	TestFalse(TEXT("ConditionModelActions returns false when action magnitude is frozen"), bConditionResult);
+	TestTrue(TEXT("Steady finite actions remain valid for an unchanging observation"), bConditionResult);
+	TestEqual(TEXT("Steady action variance remains observational"), Component->ActivatedStandingStabilityMetrics.ActionMagnitudeVariance, 0.0);
 
 	Actor->Destroy();
 	return true;

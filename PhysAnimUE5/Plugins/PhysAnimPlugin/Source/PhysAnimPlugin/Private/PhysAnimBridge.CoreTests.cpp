@@ -1,5 +1,6 @@
 #include "PhysAnimBridge.h"
 #include "PhysAnimComponent.h"
+#include "PhysAnimStandingActivation.h"
 #include "Misc/AutomationTest.h"
 
 #include <limits>
@@ -24,9 +25,9 @@ namespace
 			ResolveFutureTargetTimeSeconds(0.5f, 0.2f, 2.0f),
 			0.2f);
 		TestEqual(
-			TEXT("Clamped future target time shrinks at animation end"),
+			TEXT("The policy future horizon remains fixed when animation sampling reaches the clip end"),
 			ResolveFutureTargetTimeSeconds(1.9f, 0.4f, 2.0f),
-			0.1f);
+			0.4f);
 		return true;
 	}
 
@@ -224,6 +225,61 @@ namespace
 		const FQuat SmplRotation = ExpMapToQuaternion(FVector(0.2, -0.1, 0.3));
 		const FQuat RoundTrip = UeQuaternionToSmpl(SmplQuaternionToUe(SmplRotation));
 		TestTrue(TEXT("Quaternion roundtrip should stay close"), RoundTrip.Equals(SmplRotation, 1.0e-3f));
+
+		const FQuat ProtoJointXRotation = ExpMapToQuaternion(FVector(0.5 * PI, 0.0, 0.0));
+		const FQuat ExpectedUeJointXRotation(FVector::ForwardVector, -0.5 * PI);
+		TestTrue(
+			TEXT("ProtoMotions joint-local X rotation includes the Isaac-to-UE handedness change"),
+			ProtoJointQuaternionToUe(ProtoJointXRotation).Equals(ExpectedUeJointXRotation, 1.0e-3f));
+
+		const FQuat ProtoJointYRotation = ExpMapToQuaternion(FVector(0.0, 0.5 * PI, 0.0));
+		const FQuat ExpectedUeJointYRotation(FVector::RightVector, 0.5 * PI);
+		TestTrue(
+			TEXT("ProtoMotions joint-local Y rotation preserves the lateral axis sign"),
+			ProtoJointQuaternionToUe(ProtoJointYRotation).Equals(ExpectedUeJointYRotation, 1.0e-3f));
+
+		const FQuat ProtoJointZRotation = ExpMapToQuaternion(FVector(0.0, 0.0, 0.5 * PI));
+		const FQuat ExpectedUeJointZRotation(FVector::UpVector, -0.5 * PI);
+		TestTrue(
+			TEXT("ProtoMotions joint-local Z rotation includes the Isaac-to-UE handedness change"),
+			ProtoJointQuaternionToUe(ProtoJointZRotation).Equals(ExpectedUeJointZRotation, 1.0e-3f));
+
+		TestTrue(
+			TEXT("UE angular velocity about X converts as an axial vector"),
+			UeWorldRotationVectorToProtoRuntime(FVector::ForwardVector).Equals(
+				-FVector::ForwardVector,
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("UE angular velocity about Y preserves the lateral axial component"),
+			UeWorldRotationVectorToProtoRuntime(FVector::RightVector).Equals(
+				FVector::RightVector,
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("UE angular velocity about Z converts as an axial vector"),
+			UeWorldRotationVectorToProtoRuntime(FVector::UpVector).Equals(
+				-FVector::UpVector,
+				KINDA_SMALL_NUMBER));
+
+		const double SmallWorldRotation = 1.0e-3;
+		const FVector UeAngularAxes[] =
+		{
+			FVector::ForwardVector,
+			FVector::RightVector,
+			FVector::UpVector,
+		};
+		for (int32 AxisIndex = 0; AxisIndex < UE_ARRAY_COUNT(UeAngularAxes); ++AxisIndex)
+		{
+			const FVector& UeAxis = UeAngularAxes[AxisIndex];
+			const FQuat ConvertedIntegratedRotation = UeWorldQuaternionToProtoRuntime(
+				FQuat(UeAxis, SmallWorldRotation));
+			const FQuat IntegratedConvertedAngularVelocity = ExpMapToQuaternion(
+				UeWorldRotationVectorToProtoRuntime(UeAxis) * SmallWorldRotation);
+			TestTrue(
+				*FString::Printf(
+					TEXT("World angular-velocity conversion matches converted quaternion integration for UE axis %d"),
+					AxisIndex),
+				ConvertedIntegratedRotation.Equals(IntegratedConvertedAngularVelocity, 1.0e-5));
+		}
 		return true;
 	}
 
@@ -234,6 +290,24 @@ namespace
 
 	bool FPhysAnimActionConditioningContractTest::RunTest(const FString& Parameters)
 	{
+		const FPhysAnimStabilizationSettings RuntimeDefaults;
+		TestEqual(TEXT("ProtoMotions action scale defaults to full authority"), RuntimeDefaults.ActionScale, 1.0f);
+		TestEqual(TEXT("ProtoMotions action clamp defaults to the trained range"), RuntimeDefaults.ActionClampAbs, 1.0f);
+		TestEqual(TEXT("ProtoMotions actions are not temporally smoothed by default"), RuntimeDefaults.ActionSmoothingAlpha, 1.0f);
+		TestFalse(
+			TEXT("Lower-limb policy targets are not range-reduced by default"),
+			RuntimeDefaults.bApplyTrainingAlignedLowerLimbTargetRangePolicy);
+		TestFalse(
+			TEXT("Distal locomotion policy targets are not range-reduced by default"),
+			RuntimeDefaults.bApplyTrainingAlignedDistalLocomotionTargetPolicy);
+		TestFalse(
+			TEXT("Distal target-write composition is not altered by default"),
+			RuntimeDefaults.bApplyTrainingAlignedDistalLocomotionCompositionPolicy);
+		TestEqual(
+			TEXT("Policy target slew limiting is disabled by default"),
+			RuntimeDefaults.MaxAngularStepDegreesPerSecond,
+			0.0f);
+
 		TArray<float> RawActions;
 		RawActions.Init(2.0f, NumActionFloats);
 
@@ -277,6 +351,253 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimActionSemanticTraceContractTest,
+		"PhysAnim.Bridge.ActionSemanticTraceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimActionSemanticTraceContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<float> RawActions;
+		RawActions.Init(0.0f, NumActionFloats);
+		TArray<float> ConditionedActions;
+		ConditionedActions.Init(0.0f, NumActionFloats);
+		RawActions[0] = 0.25f;
+		ConditionedActions[0] = 0.125f;
+
+		TArray<FPhysAnimActionJointSemanticTrace> JointTrace;
+		FString Error;
+		TestTrue(
+			TEXT("Finite action buffers build an ordered semantic trace"),
+			BuildActionJointSemanticTrace(RawActions, ConditionedActions, JointTrace, Error));
+		TestEqual(TEXT("Trace contains every Proto action joint"), JointTrace.Num(), NumActionJoints);
+
+		static const TArray<FName> ExpectedProtoJointNames = {
+			TEXT("L_Hip"), TEXT("L_Knee"), TEXT("L_Ankle"), TEXT("L_Toe"),
+			TEXT("R_Hip"), TEXT("R_Knee"), TEXT("R_Ankle"), TEXT("R_Toe"),
+			TEXT("Torso"), TEXT("Spine"), TEXT("Chest"), TEXT("Neck"), TEXT("Head"),
+			TEXT("L_Thorax"), TEXT("L_Shoulder"), TEXT("L_Elbow"), TEXT("L_Wrist"), TEXT("L_Hand"),
+			TEXT("R_Thorax"), TEXT("R_Shoulder"), TEXT("R_Elbow"), TEXT("R_Wrist"), TEXT("R_Hand") };
+		static const TArray<FName> ExpectedMannyBoneNames = {
+			TEXT("thigh_l"), TEXT("calf_l"), TEXT("foot_l"), TEXT("ball_l"),
+			TEXT("thigh_r"), TEXT("calf_r"), TEXT("foot_r"), TEXT("ball_r"),
+			TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03"), TEXT("neck_01"), TEXT("head"),
+			TEXT("clavicle_l"), TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"), TEXT("hand_l"),
+			TEXT("clavicle_r"), TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r"), TEXT("hand_r") };
+		for (int32 JointIndex = 0; JointIndex < JointTrace.Num(); ++JointIndex)
+		{
+			const FPhysAnimActionJointSemanticTrace& Entry = JointTrace[JointIndex];
+			TestEqual(TEXT("Trace preserves the Proto joint index"), Entry.ProtoJointIndex, JointIndex);
+			TestEqual(TEXT("Trace preserves the Proto DFS joint name"), Entry.ProtoJointName, ExpectedProtoJointNames[JointIndex]);
+			TestEqual(TEXT("Trace preserves the mapped Manny bone"), Entry.MannyBoneName, ExpectedMannyBoneNames[JointIndex]);
+			TestTrue(TEXT("Raw decoded action is normalized"), Entry.RawDecodedRotationUe.IsNormalized());
+			TestTrue(TEXT("Conditioned decoded action is normalized"), Entry.ConditionedDecodedRotationUe.IsNormalized());
+		}
+		TestTrue(TEXT("Left wrist reports its collapsed control"), JointTrace[16].bSharesMappedControl);
+		TestTrue(TEXT("Left hand reports its collapsed control"), JointTrace[17].bSharesMappedControl);
+		TestFalse(TEXT("Left elbow owns a unique control"), JointTrace[15].bSharesMappedControl);
+		TestTrue(
+			TEXT("Conditioned trace uses the checkpoint's pi-scaled Proto action contract"),
+			JointTrace[0].ConditionedDecodedRotationUe.Equals(
+				ProtoJointQuaternionToUe(ExpMapToQuaternion(FVector(0.125 * PI, 0.0, 0.0))),
+				1.0e-4f));
+
+		FPhysAnimActionSemanticTrace CompleteTrace;
+		CompleteTrace.bCaptured = true;
+		CompleteTrace.CaptureScope = TEXT("first_active_standing_target_write");
+		CompleteTrace.ActionJoints = JointTrace;
+		for (const FName BoneName : GetControlledBoneNames())
+		{
+			FPhysAnimControlTargetSemanticTrace& ControlEntry = CompleteTrace.ControlTargets.AddDefaulted_GetRef();
+			ControlEntry.MannyBoneName = BoneName;
+			ControlEntry.ControlName = MakeControlName(BoneName);
+			ControlEntry.bTargetWritten = true;
+			ControlEntry.bReadbackSucceeded = true;
+			for (const FPhysAnimActionJointSemanticTrace& JointEntry : JointTrace)
+			{
+				if (JointEntry.MannyBoneName == BoneName)
+				{
+					ControlEntry.SourceProtoJointIndices.Add(JointEntry.ProtoJointIndex);
+				}
+			}
+		}
+		TestTrue(
+			TEXT("A complete finite trace satisfies the publication contract"),
+			ValidateActionSemanticTrace(CompleteTrace, Error));
+		FPhysAnimActionSemanticTrace InvalidTrace = CompleteTrace;
+		InvalidTrace.ControlTargets[0].PublishedRotation = FQuat(0.0, 0.0, 0.0, 0.0);
+		TestFalse(
+			TEXT("Trace rejects a non-normalized publication stage"),
+			ValidateActionSemanticTrace(InvalidTrace, Error));
+		InvalidTrace = CompleteTrace;
+		InvalidTrace.ControlTargets.Pop();
+		TestFalse(
+			TEXT("Trace rejects an incomplete control target set"),
+			ValidateActionSemanticTrace(InvalidTrace, Error));
+
+		TArray<float> MalformedActions = RawActions;
+		MalformedActions.Pop();
+		TestFalse(
+			TEXT("Trace rejects malformed action width"),
+			BuildActionJointSemanticTrace(MalformedActions, ConditionedActions, JointTrace, Error));
+		RawActions[0] = std::numeric_limits<float>::quiet_NaN();
+		TestFalse(
+			TEXT("Trace rejects non-finite actions"),
+			BuildActionJointSemanticTrace(RawActions, ConditionedActions, JointTrace, Error));
+		return true;
+	}
+
+#if WITH_DEV_AUTOMATION_TESTS
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMannyLocalFrameRoundtripTraceContractTest,
+		"PhysAnim.Bridge.MannyLocalFrameRoundtripTraceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimMannyLocalFrameRoundtripTraceContractTest::RunTest(const FString& Parameters)
+	{
+		static const int32 CanonicalSmplParentIndices[NumSmplBodies] = {
+			-1, 0, 1, 2, 3, 0, 5, 6, 7, 0, 9, 10,
+			11, 12, 11, 14, 15, 16, 17, 11, 19, 20, 21, 22
+		};
+		static const TArray<FName> CaseLabels = {
+			TEXT("identity"),
+			TEXT("actual_decoded"),
+			TEXT("positive_x_10_deg"),
+			TEXT("negative_x_10_deg"),
+			TEXT("positive_y_10_deg"),
+			TEXT("negative_y_10_deg"),
+			TEXT("positive_z_10_deg"),
+			TEXT("negative_z_10_deg")
+		};
+
+		FPhysAnimMannyLocalFrameRoundtripTrace Trace;
+		Trace.bCaptured = true;
+		Trace.CaptureScope = TEXT("first_active_standing_pre_range_target");
+		Trace.ConfiguredActionAxisMode = MannyLocalFrameRoundtripWorldAxisMode;
+		Trace.EffectiveActionAxisMode = MannyLocalFrameRoundtripWorldAxisMode;
+		const TArray<FName>& ObservationBodyNames = GetSmplObservationBoneNames();
+		const TArray<FPhysAnimProtoActionJointDescriptor>& Descriptors = GetProtoActionJointDescriptors();
+		for (int32 ControlIndex = 0; ControlIndex < GetControlledBoneNames().Num(); ++ControlIndex)
+		{
+			const FName MannyBoneName = GetControlledBoneNames()[ControlIndex];
+			FPhysAnimMannyLocalFrameRoundtripControl& Entry = Trace.Controls.AddDefaulted_GetRef();
+			Entry.ControlIndex = ControlIndex;
+			Entry.MannyBoneName = MannyBoneName;
+			Entry.ControlName = MakeControlName(MannyBoneName);
+			Entry.InitialControlChildBoneName = MannyBoneName;
+			Entry.EffectiveActionAxisMode = MannyLocalFrameRoundtripWorldAxisMode;
+			for (const FPhysAnimProtoActionJointDescriptor& Descriptor : Descriptors)
+			{
+				if (Descriptor.MannyBoneName == MannyBoneName)
+				{
+					const int32 ObservationBodyIndex = Descriptor.ProtoJointIndex + 1;
+					Entry.SourceProtoJointIndices.Add(Descriptor.ProtoJointIndex);
+					Entry.SourceProtoJointNames.Add(Descriptor.ProtoJointName);
+					Entry.ObservationBodyIndices.Add(ObservationBodyIndex);
+					Entry.ObservationBodyNames.Add(ObservationBodyNames[ObservationBodyIndex]);
+				}
+			}
+
+			Entry.RoundtripObservationBodyIndex = Entry.ObservationBodyIndices[0];
+			Entry.RoundtripObservationBodyName = Entry.ObservationBodyNames[0];
+			Entry.ObservationParentBodyIndex =
+				CanonicalSmplParentIndices[Entry.RoundtripObservationBodyIndex];
+			Entry.ObservationParentBodyName = ObservationBodyNames[Entry.ObservationParentBodyIndex];
+			Entry.InitialControlParentBoneName = Entry.ObservationParentBodyName;
+			Entry.bDecisiveOneToOne = Entry.SourceProtoJointIndices.Num() == 1;
+			Entry.bOwnershipComplete = true;
+			for (const FName Label : CaseLabels)
+			{
+				FPhysAnimMannyLocalFrameRoundtripCase& Case = Entry.RoundtripCases.AddDefaulted_GetRef();
+				Case.Label = Label;
+			}
+		}
+
+		FString Error;
+		TestTrue(
+			TEXT("Complete normalized trace satisfies ownership and frame contracts"),
+			ValidateMannyLocalFrameRoundtripTrace(Trace, Error));
+		TestEqual(
+			TEXT("Exactly 19 controls are decisive one-to-one mappings"),
+			Trace.Controls.FilterByPredicate(
+				[](const FPhysAnimMannyLocalFrameRoundtripControl& Entry)
+				{
+					return Entry.bDecisiveOneToOne;
+				}).Num(),
+			19);
+
+		const FPhysAnimControlTargetSeed Seed{
+			FQuat(FVector::UpVector, FMath::DegreesToRadians(90.0)),
+			FQuat::Identity,
+			FQuat(FVector::RightVector, FMath::DegreesToRadians(12.0)),
+			FQuat(FVector::UpVector, FMath::DegreesToRadians(90.0))
+		};
+		const FQuat Neutral = FQuat(FVector::RightVector, FMath::DegreesToRadians(7.0));
+		const FQuat Canonical = FQuat(FVector::ForwardVector, FMath::DegreesToRadians(10.0));
+		TestTrue(
+			TEXT("Explicit cached-world axis composition is pre-intervention equivalent"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+				Seed.ParentActionAxisReferenceRotation,
+				Neutral,
+				Canonical).Equals(
+					UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
+						Seed,
+						Neutral,
+						Canonical),
+					1.0e-6));
+		TestTrue(
+			TEXT("Identity input is invariant to the selected action axis"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+				FQuat::Identity,
+				Neutral,
+				FQuat::Identity).Equals(
+					UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+						Seed.ParentActionAxisReferenceRotation,
+						Neutral,
+						FQuat::Identity),
+					1.0e-6));
+		const FQuat ComponentWorld =
+			FQuat(FVector::UpVector, FMath::DegreesToRadians(90.0));
+		const FQuat ParentAxisInComponent =
+			FQuat(FVector::ForwardVector, FMath::DegreesToRadians(23.0));
+		const FQuat CachedParentWorldAxis =
+			(ComponentWorld * ParentAxisInComponent).GetNormalized();
+		TestTrue(
+			TEXT("World-captured action axis converts into the same mesh-component parent axis"),
+			UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
+				ComponentWorld,
+				CachedParentWorldAxis).Equals(ParentAxisInComponent, 1.0e-6));
+		TestFalse(
+			TEXT("Non-identity input distinguishes cached-world and component-corrected axes"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+				CachedParentWorldAxis,
+				Neutral,
+				Canonical).Equals(
+					UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+						ParentAxisInComponent,
+						Neutral,
+						Canonical),
+					1.0e-4));
+
+		FPhysAnimMannyLocalFrameRoundtripTrace InvalidTrace = Trace;
+		InvalidTrace.Controls[0].CachedActionAxisReferenceRotation = FQuat(0.0, 0.0, 0.0, 2.0);
+		TestFalse(
+			TEXT("Trace rejects a non-normalized runtime frame"),
+			ValidateMannyLocalFrameRoundtripTrace(InvalidTrace, Error));
+		InvalidTrace = Trace;
+		InvalidTrace.Controls.Pop();
+		TestFalse(
+			TEXT("Trace rejects an incomplete control set"),
+			ValidateMannyLocalFrameRoundtripTrace(InvalidTrace, Error));
+		InvalidTrace = Trace;
+		InvalidTrace.Controls[0].bOwnershipComplete = false;
+		TestFalse(
+			TEXT("Trace rejects incomplete initial-control ownership"),
+			ValidateMannyLocalFrameRoundtripTrace(InvalidTrace, Error));
+		return true;
+	}
+#endif
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimActionToBoneMappingContractTest,
 		"PhysAnim.Bridge.ActionToBoneMappingContract",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -286,8 +607,8 @@ namespace
 		TArray<float> Actions;
 		Actions.Init(0.0f, NumActionFloats);
 		
-		// Joint 0 in Smpl is L_Hip -> thigh_l
-		Actions[0] = 0.5f; // X axis in Smpl
+		// Joint 0 in ProtoMotions runtime order is L_Hip -> thigh_l.
+		Actions[0] = 0.5f; // +90 degrees about the Isaac joint-local X axis.
 		
 		TMap<FName, FQuat> ControlRotations;
 		FString Error;
@@ -311,6 +632,10 @@ namespace
 		{
 			const FQuat ThighRot = ControlRotations[TEXT("thigh_l")];
 			TestFalse(TEXT("thigh_l rotation is non-identity"), ThighRot.IsIdentity());
+			const FQuat ExpectedThighRotation(FVector::ForwardVector, -0.5 * PI);
+			TestTrue(
+				TEXT("thigh_l action uses the ProtoMotions Isaac joint basis in UE"),
+				ThighRot.Equals(ExpectedThighRotation, 1.0e-3f));
 		}
 
 		// Distal Collapse Verification: Joint 16 (L_Wrist) and 17 (L_Hand)
@@ -396,8 +721,8 @@ namespace
 			BodySamples[i].AngularVelocity = FVector::ZeroVector;
 		}
 
-		// Root height test (Pelvis is at 100cm, Ground at 0cm)
-		BodySamples[0].Position = FVector(0, 0, 100);
+		// The pure builder receives runtime-converted policy-space positions in meters.
+		BodySamples[0].Position = FVector(0.0f, 0.0f, 1.0f);
 		
 		TArray<float> SelfObs;
 		FString Error;
@@ -405,15 +730,14 @@ namespace
 		TestEqual(TEXT("SelfObs size"), SelfObs.Num(), SelfObsSize);
 		
 		// Index 0 in self_obs is root height relative to ground (meters)
-		TestEqual(TEXT("Root height (100cm -> 1.0)"), SelfObs[0], 1.0f);
+		TestEqual(TEXT("Root height (meters)"), SelfObs[0], 1.0f);
 
 		// Thigh_l (Index 1) position relative to root
-		BodySamples[1].Position = FVector(0, 50, 100); // 50cm to the right
+		BodySamples[1].Position = FVector(0.5f, 0.0f, 1.0f);
 		SelfObs.Reset();
 		TestTrue(TEXT("Relative pos build succeed"), BuildSelfObservation(BodySamples, 0.0f, SelfObs, Error));
 		
-		// Relative positions start at index 1. Index 1: X, 2: Y, 3: Z in SMPL basis.
-		// Ue(0, 50, 0) -> Smpl(50, 0, 0) -> Meters(0.5, 0.0, 0.0)
+		// Relative positions start at index 1. Index 1: X, 2: Y, 3: Z in policy basis.
 		TestEqual(TEXT("Thigh_l relative X (meters)"), SelfObs[1], 0.5f);
 		return true;
 	}
@@ -439,16 +763,15 @@ namespace
 			FutureSamples.Add(Sample);
 		}
 
-		// Move future pelvis to verify delta packing (Frame 0 -> Frame 1)
-		FutureSamples[0].BodyTransforms[0].SetLocation(FVector(10, 0, 0)); // 10cm forward
+		// Future samples already use the policy basis and meters at this boundary.
+		FutureSamples[0].BodyTransforms[0].SetLocation(FVector(0.0f, 0.0f, 0.1f));
 
 		TArray<float> MimicObs;
 		FString Error;
 		TestTrue(TEXT("Mimic build succeed"), BuildMimicTargetPoses(CurrentSamples, FutureSamples, MimicObs, Error));
 		TestEqual(TEXT("Mimic size"), MimicObs.Num(), MimicTargetPosesSize);
 
-		// First block is relative positions to PREVIOUS frame. 
-		// Ue(10, 0, 0) -> Smpl(0, 0, 10) -> Meters(0.0, 0.0, 0.1)
+		// First block is relative positions to the previous frame in policy space.
 		// Index 0: X, 1: Y, 2: Z
 		TestEqual(TEXT("Future Pelvis relative Z (meters)"), MimicObs[2], 0.1f);
 		return true;
@@ -463,13 +786,800 @@ namespace
 	{
 		TArray<float> Heights;
 		Heights.Init(0.0f, TerrainSize);
-		Heights[0] = -50.0f; // 50cm below ground
+		Heights[0] = -0.5f;
 
 		TArray<float> Terrain;
 		FString Error;
-		// Character root at 100cm. Sample 0 is at -50cm. Delta is 150cm -> 1.5m
-		TestTrue(TEXT("Terrain build succeed"), BuildTerrainObservation(100.0f, Heights, Terrain, Error));
+		// Root and sampled ground heights are already expressed in meters.
+		TestTrue(TEXT("Terrain build succeed"), BuildTerrainObservation(1.0f, Heights, Terrain, Error));
 		TestEqual(TEXT("Sample 0 height (meters)"), Terrain[0], 1.5f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyInferenceSnapshotContractTest,
+		"PhysAnim.Bridge.PolicyInferenceSnapshotContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPolicyInferenceSnapshotContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<float> SelfObservation;
+		SelfObservation.Init(1.0f, SelfObsSize);
+		TArray<float> MimicTargetPoses;
+		MimicTargetPoses.Init(2.0f, MimicTargetPosesSize);
+		TArray<float> Terrain;
+		Terrain.Init(3.0f, TerrainSize);
+		TArray<float> Actions;
+		Actions.Init(4.0f, NumActionFloats);
+
+		FPhysAnimPolicyInferenceSnapshot Snapshot;
+		TestFalse(TEXT("New policy snapshot is uncaptured"), Snapshot.bCaptured);
+		TestFalse(
+			TEXT("A gated snapshot ignores inference outside its requested runtime state"),
+			Snapshot.CaptureFirstIf(false, SelfObservation, MimicTargetPoses, Terrain, Actions));
+		TestFalse(TEXT("A rejected gated capture leaves the snapshot uncaptured"), Snapshot.bCaptured);
+		TestTrue(TEXT("First successful inference is captured"), Snapshot.CaptureFirst(SelfObservation, MimicTargetPoses, Terrain, Actions));
+		TestTrue(TEXT("Captured policy snapshot is marked captured"), Snapshot.bCaptured);
+		TestEqual(TEXT("Captured self observation width"), Snapshot.SelfObservation.Num(), SelfObsSize);
+		TestEqual(TEXT("Captured mimic target width"), Snapshot.MimicTargetPoses.Num(), MimicTargetPosesSize);
+		TestEqual(TEXT("Captured terrain width"), Snapshot.Terrain.Num(), TerrainSize);
+		TestEqual(TEXT("Captured action width"), Snapshot.Actions.Num(), NumActionFloats);
+		TestEqual(TEXT("Captured self observation value"), Snapshot.SelfObservation[0], 1.0f);
+		TestEqual(TEXT("Captured mimic target value"), Snapshot.MimicTargetPoses[0], 2.0f);
+		TestEqual(TEXT("Captured terrain value"), Snapshot.Terrain[0], 3.0f);
+		TestEqual(TEXT("Captured action value"), Snapshot.Actions[0], 4.0f);
+
+		SelfObservation[0] = 10.0f;
+		MimicTargetPoses[0] = 20.0f;
+		Terrain[0] = 30.0f;
+		Actions[0] = 40.0f;
+		TestFalse(TEXT("Later inference does not overwrite the first snapshot"), Snapshot.CaptureFirst(SelfObservation, MimicTargetPoses, Terrain, Actions));
+		TestEqual(TEXT("First self observation remains latched"), Snapshot.SelfObservation[0], 1.0f);
+		TestEqual(TEXT("First mimic target remains latched"), Snapshot.MimicTargetPoses[0], 2.0f);
+		TestEqual(TEXT("First terrain remains latched"), Snapshot.Terrain[0], 3.0f);
+		TestEqual(TEXT("First action remains latched"), Snapshot.Actions[0], 4.0f);
+
+		Snapshot.Reset();
+		TestFalse(TEXT("Reset clears the captured flag"), Snapshot.bCaptured);
+		TestEqual(TEXT("Reset clears self observation"), Snapshot.SelfObservation.Num(), 0);
+		TestEqual(TEXT("Reset clears mimic target poses"), Snapshot.MimicTargetPoses.Num(), 0);
+		TestEqual(TEXT("Reset clears terrain"), Snapshot.Terrain.Num(), 0);
+		TestEqual(TEXT("Reset clears actions"), Snapshot.Actions.Num(), 0);
+		TestTrue(
+			TEXT("A gated snapshot captures the first inference inside its requested runtime state"),
+			Snapshot.CaptureFirstIf(true, SelfObservation, MimicTargetPoses, Terrain, Actions));
+		return true;
+	}
+
+
+#if WITH_DEV_AUTOMATION_TESTS
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyInputProvenanceSnapshotContractTest,
+		"PhysAnim.Bridge.PolicyInputProvenanceSnapshotContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPolicyInputProvenanceSnapshotContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<FPhysAnimBodySample> MannyBodySamples;
+		TArray<FPhysAnimBodySample> CanonicalBodySamples;
+		TArray<FPhysAnimBodySample> MimicReferenceBodySamples;
+		MannyBodySamples.SetNum(NumSmplBodies);
+		CanonicalBodySamples.SetNum(NumSmplBodies);
+		MimicReferenceBodySamples.SetNum(NumSmplBodies);
+		for (int32 BodyIndex = 0; BodyIndex < NumSmplBodies; ++BodyIndex)
+		{
+			const FPhysAnimBodySample Sample(
+				FVector(BodyIndex, BodyIndex + 1.0, BodyIndex + 2.0),
+				FQuat::Identity,
+				FVector(0.1, 0.2, 0.3),
+				FVector(0.4, 0.5, 0.6));
+			MannyBodySamples[BodyIndex] = Sample;
+			CanonicalBodySamples[BodyIndex] = Sample;
+			MimicReferenceBodySamples[BodyIndex] = Sample;
+		}
+
+		TArray<FPhysAnimFuturePoseSample> MannyFutureSamples;
+		TArray<FPhysAnimFuturePoseSample> CanonicalFutureSamples;
+		MannyFutureSamples.SetNum(NumFutureSteps);
+		CanonicalFutureSamples.SetNum(NumFutureSteps);
+		for (int32 FutureIndex = 0; FutureIndex < NumFutureSteps; ++FutureIndex)
+		{
+			MannyFutureSamples[FutureIndex].FutureTimeSeconds = FutureIndex * 0.1f;
+			CanonicalFutureSamples[FutureIndex].FutureTimeSeconds = FutureIndex * 0.1f;
+			MannyFutureSamples[FutureIndex].BodyTransforms.Init(FTransform::Identity, NumSmplBodies);
+			CanonicalFutureSamples[FutureIndex].BodyTransforms.Init(FTransform::Identity, NumSmplBodies);
+		}
+
+		TArray<float> TerrainGroundHeights;
+		TerrainGroundHeights.Init(0.0f, TerrainSize);
+		TArray<float> PreviousActions;
+		PreviousActions.Init(0.0f, NumActionFloats);
+
+		FPhysAnimPolicyInputProvenanceSnapshot Snapshot;
+		TestFalse(TEXT("New provenance snapshot is uncaptured"), Snapshot.bCaptured);
+		TestFalse(
+			TEXT("Disabled provenance tracing does not capture"),
+			Snapshot.CaptureFirstIf(
+				false,
+				TEXT("Standing_Preparation"),
+				1.0,
+				1,
+				TEXT("Idle"),
+				0.25f,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				0.0f,
+				MannyBodySamples,
+				CanonicalBodySamples,
+				MimicReferenceBodySamples,
+				MannyFutureSamples,
+				CanonicalFutureSamples,
+				TerrainGroundHeights,
+				PreviousActions));
+		TestFalse(TEXT("Disabled capture leaves the provenance snapshot empty"), Snapshot.bCaptured);
+
+		TestTrue(
+			TEXT("Enabled provenance tracing captures the first complete source state"),
+			Snapshot.CaptureFirstIf(
+				true,
+				TEXT("Standing_Preparation"),
+				1.0,
+				1,
+				TEXT("Idle"),
+				0.25f,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				0.0f,
+				MannyBodySamples,
+				CanonicalBodySamples,
+				MimicReferenceBodySamples,
+				MannyFutureSamples,
+				CanonicalFutureSamples,
+				TerrainGroundHeights,
+				PreviousActions));
+		TestTrue(TEXT("Captured provenance is marked captured"), Snapshot.bCaptured);
+		TestEqual(TEXT("Canonical body count is exact"), Snapshot.CanonicalBodySamples.Num(), NumSmplBodies);
+		TestEqual(TEXT("Canonical future count is exact"), Snapshot.CanonicalFuturePoseSamples.Num(), NumFutureSteps);
+		TestEqual(TEXT("Terrain source count is exact"), Snapshot.TerrainGroundHeights.Num(), TerrainSize);
+		TestEqual(TEXT("Previous action count is exact"), Snapshot.PreviousActions.Num(), NumActionFloats);
+
+		FString ValidationError;
+		TestTrue(
+			TEXT("A complete finite provenance snapshot satisfies its contract"),
+			ValidatePolicyInputProvenanceSnapshot(Snapshot, ValidationError));
+		TestTrue(TEXT("Valid provenance has no validation error"), ValidationError.IsEmpty());
+
+		CanonicalBodySamples[0].Position.X = 100.0;
+		TestFalse(
+			TEXT("Later policy input construction does not overwrite the first provenance snapshot"),
+			Snapshot.CaptureFirstIf(
+				true,
+				TEXT("BalanceActive_Standing"),
+				2.0,
+				2,
+				TEXT("Other"),
+				0.5f,
+				true,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				1.0f,
+				MannyBodySamples,
+				CanonicalBodySamples,
+				MimicReferenceBodySamples,
+				MannyFutureSamples,
+				CanonicalFutureSamples,
+				TerrainGroundHeights,
+				PreviousActions));
+		TestEqual(TEXT("First canonical root remains latched"), Snapshot.CanonicalBodySamples[0].Position.X, 0.0);
+
+		FPhysAnimPolicyInputProvenanceSnapshot InvalidSnapshot = Snapshot;
+		InvalidSnapshot.CanonicalBodySamples.Pop();
+		TestFalse(
+			TEXT("An incomplete canonical body source is rejected"),
+			ValidatePolicyInputProvenanceSnapshot(InvalidSnapshot, ValidationError));
+		InvalidSnapshot = Snapshot;
+		InvalidSnapshot.PreviousActions[0] = std::numeric_limits<float>::quiet_NaN();
+		TestFalse(
+			TEXT("A non-finite previous action is rejected"),
+			ValidatePolicyInputProvenanceSnapshot(InvalidSnapshot, ValidationError));
+
+		Snapshot.Reset();
+		TestFalse(TEXT("Reset clears the provenance captured flag"), Snapshot.bCaptured);
+		TestEqual(TEXT("Reset clears canonical bodies"), Snapshot.CanonicalBodySamples.Num(), 0);
+		TestEqual(TEXT("Reset clears canonical future poses"), Snapshot.CanonicalFuturePoseSamples.Num(), 0);
+		TestEqual(TEXT("Reset clears terrain sources"), Snapshot.TerrainGroundHeights.Num(), 0);
+		TestEqual(TEXT("Reset clears previous actions"), Snapshot.PreviousActions.Num(), 0);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimStartupChronologyTraceContractTest,
+		"PhysAnim.Bridge.StartupChronologyTraceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimStartupChronologyTraceContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<FPhysAnimBodySample> BodySamples;
+		BodySamples.SetNum(NumSmplBodies);
+		for (int32 BodyIndex = 0; BodyIndex < BodySamples.Num(); ++BodyIndex)
+		{
+			BodySamples[BodyIndex] = FPhysAnimBodySample(
+				FVector(BodyIndex, BodyIndex + 1.0, BodyIndex + 2.0),
+				FQuat::Identity,
+				FVector(0.1, 0.2, 0.3),
+				FVector(0.4, 0.5, 0.6));
+		}
+
+		FPhysAnimStartupChronologyTrace Trace;
+		TestFalse(TEXT("A new startup chronology trace is incomplete"), Trace.bComplete);
+		TestEqual(TEXT("A new startup chronology trace has no samples"), Trace.Samples.Num(), 0);
+		TestFalse(
+			TEXT("A disabled startup chronology trace does not capture"),
+			Trace.CaptureIf(
+				false,
+				TEXT("pre_state_machine"),
+				1.0,
+				TEXT("BridgeActive"),
+				-1.0f,
+				0,
+				0,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples));
+
+		auto CaptureCycle = [&](const double WorldTimeSeconds, const int32 PolicyControlTicks)
+		{
+			const bool bPreCaptured = Trace.CaptureIf(
+				true,
+				TEXT("pre_state_machine"),
+				WorldTimeSeconds,
+				TEXT("Standing_Preparation"),
+				0.0f,
+				0,
+				PolicyControlTicks,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples);
+			const bool bPostStateCaptured = Trace.CaptureIf(
+				true,
+				TEXT("post_state_machine"),
+				WorldTimeSeconds,
+				TEXT("Standing_FullSimulationActivation"),
+				0.0f,
+				0,
+				PolicyControlTicks,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples);
+			const bool bPostPolicyCaptured = Trace.CaptureIf(
+				true,
+				TEXT("post_policy"),
+				WorldTimeSeconds,
+				TEXT("Standing_FullSimulationActivation"),
+				0.0f,
+				PolicyControlTicks > 0 ? 1 : 0,
+				PolicyControlTicks,
+				PolicyControlTicks > 0,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples);
+			return bPreCaptured && bPostStateCaptured && bPostPolicyCaptured;
+		};
+
+		TestTrue(TEXT("The first startup tick captures an ordered chronology triplet"), CaptureCycle(1.0, 0));
+		TestFalse(TEXT("A chronology without a policy update remains open"), Trace.bComplete);
+		TestTrue(TEXT("The first policy tick captures a second chronology triplet"), CaptureCycle(1.0 + 1.0 / 60.0, 1));
+		TestTrue(TEXT("The first completed policy tick closes the chronology"), Trace.bComplete);
+		TestEqual(TEXT("Two startup ticks publish six chronology samples"), Trace.Samples.Num(), 6);
+
+		FString ValidationError;
+		TestTrue(
+			TEXT("A complete ordered finite startup chronology satisfies its contract"),
+			ValidateStartupChronologyTrace(Trace, ValidationError));
+		TestTrue(TEXT("A valid startup chronology has no validation error"), ValidationError.IsEmpty());
+		TestFalse(
+			TEXT("A completed startup chronology cannot append more samples"),
+			Trace.CaptureIf(
+				true,
+				TEXT("pre_state_machine"),
+				2.0,
+				TEXT("Standing_PolicyBlend"),
+				0.0f,
+				0,
+				1,
+				true,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples));
+
+		FPhysAnimStartupChronologyTrace InvalidTrace = Trace;
+		InvalidTrace.Samples[1].Stage = TEXT("post_policy");
+		TestFalse(
+			TEXT("An out-of-order chronology stage is rejected"),
+			ValidateStartupChronologyTrace(InvalidTrace, ValidationError));
+		InvalidTrace = Trace;
+		InvalidTrace.Samples[0].BodySamples[0].LinearVelocity.X =
+			std::numeric_limits<double>::quiet_NaN();
+		TestFalse(
+			TEXT("A non-finite live body value is rejected"),
+			ValidateStartupChronologyTrace(InvalidTrace, ValidationError));
+
+		FPhysAnimStartupChronologyTrace BoundedTrace;
+		for (int32 SampleIndex = 0; SampleIndex < MaxStartupChronologySamples; ++SampleIndex)
+		{
+			const TCHAR* Stage = SampleIndex % 3 == 0
+				? TEXT("pre_state_machine")
+				: (SampleIndex % 3 == 1 ? TEXT("post_state_machine") : TEXT("post_policy"));
+			TestTrue(
+				FString::Printf(TEXT("Bounded chronology accepts sample %d"), SampleIndex),
+				BoundedTrace.CaptureIf(
+					true,
+					Stage,
+					1.0 + (SampleIndex / 3) / 60.0,
+					TEXT("Standing_Preparation"),
+					0.0f,
+					0,
+					0,
+					false,
+					FTransform::Identity,
+					FTransform::Identity,
+					FTransform::Identity,
+					BodySamples));
+		}
+		TestFalse(
+			TEXT("The chronology refuses samples beyond its fixed diagnostic bound"),
+			BoundedTrace.CaptureIf(
+				true,
+				TEXT("pre_state_machine"),
+				2.0,
+				TEXT("Standing_Preparation"),
+				0.0f,
+				0,
+				0,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples));
+
+		Trace.Reset();
+		TestFalse(TEXT("Reset clears chronology completion"), Trace.bComplete);
+		TestEqual(TEXT("Reset clears chronology samples"), Trace.Samples.Num(), 0);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimFirstPolicyBodySourceTraceContractTest,
+		"PhysAnim.Bridge.FirstPolicyBodySourceTraceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimFirstPolicyBodySourceTraceContractTest::RunTest(const FString& Parameters)
+	{
+		auto MakeBodySamples = [](const double Seed)
+		{
+			TArray<FPhysAnimBodySample> Samples;
+			Samples.Reserve(NumSmplBodies);
+			for (int32 BodyIndex = 0; BodyIndex < NumSmplBodies; ++BodyIndex)
+			{
+				const double Value = Seed + static_cast<double>(BodyIndex);
+				Samples.Add(FPhysAnimBodySample(
+					FVector(Value, Value + 0.1, Value + 0.2),
+					FQuat(0.001 * Value, 0.002 * Value, 0.003 * Value, 1.0).GetNormalized(),
+					FVector(Value + 0.3, Value + 0.4, Value + 0.5),
+					FVector(Value + 0.6, Value + 0.7, Value + 0.8)));
+			}
+			return Samples;
+		};
+		auto SamplesEqual = [](TConstArrayView<FPhysAnimBodySample> A, TConstArrayView<FPhysAnimBodySample> B)
+		{
+			if (A.Num() != B.Num())
+			{
+				return false;
+			}
+			for (int32 BodyIndex = 0; BodyIndex < A.Num(); ++BodyIndex)
+			{
+				if (A[BodyIndex].Position != B[BodyIndex].Position ||
+					A[BodyIndex].Rotation != B[BodyIndex].Rotation ||
+					A[BodyIndex].LinearVelocity != B[BodyIndex].LinearVelocity ||
+					A[BodyIndex].AngularVelocity != B[BodyIndex].AngularVelocity)
+				{
+					return false;
+				}
+			}
+			return true;
+		};
+
+		const TArray<FPhysAnimBodySample> PriorSamples = MakeBodySamples(1.0);
+		const TArray<FPhysAnimBodySample> LiveSamples = MakeBodySamples(101.0);
+		FString Error;
+
+		FPhysAnimFirstPolicyBodySourceTrace DisabledTrace;
+		TArray<FPhysAnimBodySample> DisabledEffective = LiveSamples;
+		TestFalse(
+			TEXT("A disabled prior-source capture does not retain body data"),
+			DisabledTrace.CapturePriorIf(
+				false,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorSamples));
+		TestTrue(
+			TEXT("A disabled first-policy recording is a behavior-neutral no-op"),
+			DisabledTrace.RecordFirstPolicySourceIf(
+				false,
+				TEXT("first_policy_pre_adapter"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				DisabledEffective,
+				Error));
+		TestFalse(TEXT("Disabled tracing does not record a prior source"), DisabledTrace.Prior.bRecorded);
+		TestFalse(TEXT("Disabled tracing does not record first inference"), DisabledTrace.bFirstInferenceRecorded);
+		TestTrue(TEXT("Disabled tracing leaves the live source untouched"), SamplesEqual(DisabledEffective, LiveSamples));
+
+		FPhysAnimFirstPolicyBodySourceTrace LiveTrace;
+		TestTrue(
+			TEXT("The exact WaitingForPoseSearch pre-state-machine source is captured once"),
+			LiveTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorSamples));
+		TestFalse(
+			TEXT("A captured prior source cannot be replaced"),
+			LiveTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.5 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				LiveSamples));
+		TestTrue(TEXT("The prior cache owns an exact sample copy"), SamplesEqual(LiveTrace.Prior.BodySamples, PriorSamples));
+		TestEqual(TEXT("The prior cache records the fixed body count"), LiveTrace.Prior.BodySampleCount, NumSmplBodies);
+		TestEqual(
+			TEXT("The prior cache declares its deterministic fingerprint contract"),
+			LiveTrace.Prior.FingerprintAlgorithm,
+			FString(FirstPolicyBodySourceFingerprintAlgorithm));
+
+		FString MutatedFingerprint;
+		TArray<FPhysAnimBodySample> MutatedPrior = PriorSamples;
+		MutatedPrior[7].Position.Z += 0.0001;
+		TestTrue(
+			TEXT("A finite fixed-width source can be fingerprinted"),
+			BuildFirstPolicyBodySourceFingerprint(MutatedPrior, MutatedFingerprint, Error));
+		TestNotEqual(
+			TEXT("The fingerprint changes when one source scalar changes"),
+			MutatedFingerprint,
+			LiveTrace.Prior.Fingerprint);
+
+		TArray<FPhysAnimBodySample> LiveEffective = LiveSamples;
+		TestTrue(
+			TEXT("The instrumentation-only path records the live source"),
+			LiveTrace.RecordFirstPolicySourceIf(
+				true,
+				TEXT("first_policy_pre_adapter"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				LiveEffective,
+				Error));
+		TestTrue(TEXT("The first-policy source recording is one-shot"), LiveTrace.bFirstInferenceRecorded);
+		TestTrue(TEXT("The live source is copied into the live record"), SamplesEqual(LiveTrace.Live.BodySamples, LiveSamples));
+		TestTrue(TEXT("The effective source remains exactly live"), SamplesEqual(LiveTrace.Effective.BodySamples, LiveSamples));
+		TestTrue(TEXT("Live selection does not mutate the caller's source"), SamplesEqual(LiveEffective, LiveSamples));
+		TestTrue(
+			TEXT("A complete live-source trace satisfies its invariant contract"),
+			ValidateFirstPolicyBodySourceTrace(LiveTrace, Error));
+		TestTrue(TEXT("A valid live-source trace has no validation error"), Error.IsEmpty());
+
+		TArray<FPhysAnimBodySample> SecondSelectionInput = MakeBodySamples(201.0);
+		const TArray<FPhysAnimBodySample> SecondSelectionBefore = SecondSelectionInput;
+		TestTrue(
+			TEXT("A repeated recording call is an accepted no-op"),
+			LiveTrace.RecordFirstPolicySourceIf(
+				true,
+				TEXT("first_policy_pre_adapter"),
+				3.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				2,
+				SecondSelectionInput,
+				Error));
+		TestTrue(TEXT("A repeated recording cannot mutate a later source"), SamplesEqual(SecondSelectionInput, SecondSelectionBefore));
+
+		FPhysAnimFirstPolicyBodySourceTrace InvalidCountTrace;
+		TArray<FPhysAnimBodySample> ShortSamples = PriorSamples;
+		ShortSamples.Pop();
+		TestFalse(
+			TEXT("A prior source with the wrong body count is rejected"),
+			InvalidCountTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				ShortSamples));
+		TestFalse(TEXT("Invalid body count produces explicit diagnostic evidence"), InvalidCountTrace.ValidationError.IsEmpty());
+
+		FPhysAnimFirstPolicyBodySourceTrace InvalidFiniteTrace;
+		TArray<FPhysAnimBodySample> NonFiniteSamples = PriorSamples;
+		NonFiniteSamples[3].LinearVelocity.Y = std::numeric_limits<double>::quiet_NaN();
+		TestFalse(
+			TEXT("A non-finite prior source is rejected"),
+			InvalidFiniteTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				NonFiniteSamples));
+		TestFalse(TEXT("Non-finite source rejection is explicit"), InvalidFiniteTrace.ValidationError.IsEmpty());
+
+		LiveTrace.Reset();
+		TestFalse(TEXT("Reset clears the prior cache"), LiveTrace.Prior.bRecorded);
+		TestFalse(TEXT("Reset clears the live source"), LiveTrace.Live.bRecorded);
+		TestFalse(TEXT("Reset clears the effective source"), LiveTrace.Effective.bRecorded);
+		TestFalse(TEXT("Reset clears one-shot recording state"), LiveTrace.bFirstInferenceRecorded);
+		TestTrue(TEXT("Reset clears validation evidence"), LiveTrace.ValidationError.IsEmpty());
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimFirstPolicyGroundReferenceTraceContractTest,
+		"PhysAnim.Bridge.FirstPolicyGroundReferenceTraceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimFirstPolicyGroundReferenceTraceContractTest::RunTest(const FString& Parameters)
+	{
+		auto MakeValues = [](
+			const double BodyRootProtoZM,
+			const double RootBoneWorldZCm,
+			const bool bStaticTraceSucceeded,
+			const double StaticTraceImpactZCm,
+			const bool bHasWalkableFloor,
+			const bool bHasBlockingFloorHit,
+			const double FloorImpactZCm)
+		{
+			FPhysAnimSelfObservationGroundReferenceValues Values;
+			Values.BodyRootProtoZM = BodyRootProtoZM;
+			Values.RootBoneWorldZCm = RootBoneWorldZCm;
+			Values.bStaticTraceAttempted = true;
+			Values.bStaticTraceSucceeded = bStaticTraceSucceeded;
+			Values.StaticTraceImpactZCm = StaticTraceImpactZCm;
+			Values.bHasWalkableFloor = bHasWalkableFloor;
+			Values.bHasBlockingFloorHit = bHasBlockingFloorHit;
+			Values.FloorImpactZCm = FloorImpactZCm;
+			Values.bCapsuleAvailable = true;
+			Values.CapsuleCenterZCm = 100.0;
+			Values.CapsuleHalfHeightCm = 50.0;
+			Values.FloorDistanceCm = 3.0;
+			Values.FallbackGroundWorldZCm = 0.0;
+
+			const float GroundWorldZCm = bStaticTraceSucceeded
+				? static_cast<float>(StaticTraceImpactZCm)
+				: (bHasWalkableFloor
+					? (bHasBlockingFloorHit
+						? static_cast<float>(FloorImpactZCm)
+						: static_cast<float>(Values.CapsuleCenterZCm) -
+							static_cast<float>(Values.CapsuleHalfHeightCm) -
+							FMath::Max(static_cast<float>(Values.FloorDistanceCm), 0.0f))
+					: static_cast<float>(Values.FallbackGroundWorldZCm));
+			const float DesiredRootHeightM =
+				(static_cast<float>(RootBoneWorldZCm) - GroundWorldZCm) * CmToMeters;
+			const volatile float ObservationFrameRootZM = static_cast<float>(BodyRootProtoZM);
+			const float SyntheticGroundHeightM =
+				ObservationFrameRootZM - DesiredRootHeightM;
+			Values.GroundWorldZCm = GroundWorldZCm;
+			Values.SyntheticGroundHeightM = SyntheticGroundHeightM;
+			Values.FinalRootHeightM = static_cast<float>(
+				BodyRootProtoZM - static_cast<double>(SyntheticGroundHeightM));
+			return Values;
+		};
+
+		const FPhysAnimSelfObservationGroundReferenceValues PriorValues = MakeValues(
+			1.0,
+			100.0,
+			true,
+			0.0,
+			false,
+			false,
+			0.0);
+		const FPhysAnimSelfObservationGroundReferenceValues LiveValues = MakeValues(
+			1.25,
+			127.0,
+			false,
+			0.0,
+			true,
+			true,
+			2.0);
+
+		FPhysAnimFirstPolicyGroundReferenceTrace DisabledTrace;
+		FString Error;
+		TestFalse(
+			TEXT("Disabled prior ground-reference capture retains no values"),
+			DisabledTrace.CapturePriorIf(
+				false,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorValues));
+		TestTrue(
+			TEXT("Disabled live ground-reference capture is an accepted no-op"),
+			DisabledTrace.RecordFirstPolicyIf(
+				false,
+				TEXT("first_policy_self_observation"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				LiveValues,
+				Error));
+		TestFalse(TEXT("Disabled ground-reference tracing remains incomplete"), DisabledTrace.bFirstPolicyRecorded);
+
+		FPhysAnimFirstPolicyGroundReferenceTrace Trace;
+		TestTrue(
+			TEXT("The prior ground reference is owned by the WaitingForPoseSearch pre-state-machine boundary"),
+			Trace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorValues));
+		TestFalse(
+			TEXT("The prior ground reference cannot be replaced"),
+			Trace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.5 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				LiveValues));
+		TestEqual(TEXT("The retained prior body-root value is exact"), Trace.Prior.Values.BodyRootProtoZM, PriorValues.BodyRootProtoZM);
+
+		TestTrue(
+			TEXT("The actual first-policy self-observation ground reference is captured once"),
+			Trace.RecordFirstPolicyIf(
+				true,
+				TEXT("first_policy_self_observation"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				LiveValues,
+				Error));
+		TestTrue(TEXT("The two-record trace is complete"), Trace.bFirstPolicyRecorded);
+		TestTrue(
+			TEXT("A complete trace preserves stage, tick, finite-value, and float-arithmetic invariants"),
+			ValidateFirstPolicyGroundReferenceTrace(Trace, Error));
+		TestTrue(TEXT("A valid ground-reference trace has no validation error"), Error.IsEmpty());
+
+		FPhysAnimFirstPolicyGroundReferenceTrace DecimalTrace;
+		TestTrue(
+			TEXT("Decimal arithmetic fixture prior is captured"),
+			DecimalTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorValues));
+		const FPhysAnimSelfObservationGroundReferenceValues DecimalLiveValues = MakeValues(
+			1.2,
+			120.0,
+			true,
+			0.0,
+			false,
+			false,
+			0.0);
+		TestTrue(
+			*FString::Printf(TEXT("Non-binary decimal inputs preserve exact float-path arithmetic: %s"), *Error),
+			DecimalTrace.RecordFirstPolicyIf(
+				true,
+				TEXT("first_policy_self_observation"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				DecimalLiveValues,
+				Error));
+
+		const double RetainedLiveRootWorldZ = Trace.Live.Values.RootBoneWorldZCm;
+		TestTrue(
+			TEXT("A repeated live capture is an accepted no-op"),
+			Trace.RecordFirstPolicyIf(
+				true,
+				TEXT("first_policy_self_observation"),
+				3.0 / 60.0,
+				TEXT("BalanceActive_Standing"),
+				2,
+				PriorValues,
+				Error));
+		TestEqual(TEXT("A repeated live capture cannot replace the first record"), Trace.Live.Values.RootBoneWorldZCm, RetainedLiveRootWorldZ);
+
+		FPhysAnimFirstPolicyGroundReferenceTrace ArithmeticTrace;
+		TestTrue(
+			TEXT("Arithmetic fixture prior is captured"),
+			ArithmeticTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorValues));
+		FPhysAnimSelfObservationGroundReferenceValues TamperedLive = LiveValues;
+		TamperedLive.FinalRootHeightM += 0.25;
+		TestFalse(
+			TEXT("A live record inconsistent with the exact float arithmetic is rejected"),
+			ArithmeticTrace.RecordFirstPolicyIf(
+				true,
+				TEXT("first_policy_self_observation"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				TamperedLive,
+				Error));
+		TestFalse(TEXT("Arithmetic rejection is explicit"), Error.IsEmpty());
+
+		FPhysAnimFirstPolicyGroundReferenceTrace NonFiniteTrace;
+		FPhysAnimSelfObservationGroundReferenceValues NonFinitePrior = PriorValues;
+		NonFinitePrior.FloorDistanceCm = std::numeric_limits<double>::quiet_NaN();
+		TestFalse(
+			TEXT("A non-finite prior ground-reference input is rejected"),
+			NonFiniteTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				NonFinitePrior));
+		TestFalse(TEXT("Non-finite rejection is explicit"), NonFiniteTrace.ValidationError.IsEmpty());
+
+		Trace.Reset();
+		TestFalse(TEXT("Reset clears the prior ground-reference record"), Trace.Prior.bRecorded);
+		TestFalse(TEXT("Reset clears the live ground-reference record"), Trace.Live.bRecorded);
+		TestFalse(TEXT("Reset clears first-policy completion"), Trace.bFirstPolicyRecorded);
+		TestTrue(TEXT("Reset clears validation evidence"), Trace.ValidationError.IsEmpty());
+		return true;
+	}
+#endif
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTerrainTraceFrameContractTest,
+		"PhysAnim.Bridge.TerrainTraceFrameContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTerrainTraceFrameContractTest::RunTest(const FString& Parameters)
+	{
+		const FVector RootWorldLocationCm(1234.0f, -567.0f, 250.0f);
+		const FQuat RootWorldRotation(FVector::UpVector, FMath::DegreesToRadians(90.0f));
+		const FVector SampleWorldLocationCm = BuildTerrainSampleWorldLocation(
+			RootWorldLocationCm,
+			RootWorldRotation,
+			FVector2D(1.0f, 0.0f));
+
+		TestTrue(
+			TEXT("A one-meter ProtoMotions terrain offset becomes 100 UE centimeters"),
+			SampleWorldLocationCm.Equals(FVector(1234.0f, -467.0f, 250.0f), KINDA_SMALL_NUMBER));
 		return true;
 	}
 
@@ -866,6 +1976,166 @@ namespace
 		TestEqual(TEXT("Transition snapshot restores distal mismatch counts"), ExportedSnapshot.DistalBoneMismatchTicks.FindRef(TEXT("foot_l")), 3);
 		TestTrue(TEXT("Transition snapshot restores audit flags"), ExportedSnapshot.Audit.bUsedRelaxedCertification);
 #endif
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimLocomotionFrameReplayCaptureGateTest,
+		"PhysAnim.Bridge.LocomotionFrameReplayCaptureGate",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimLocomotionFrameReplayCaptureGateTest::RunTest(const FString& Parameters)
+	{
+		const bool bNormalUsesPolicyInference =
+			FPhysAnimStandingActivationPlan::UsesPolicyInference(
+				EPhysAnimStandingVariant::Normal);
+		TestTrue(TEXT("The Normal product arm uses policy inference"), bNormalUsesPolicyInference);
+		TestTrue(
+			TEXT("The Normal product arm captures the first traced locomotion step"),
+			ShouldCaptureLocomotionFrameReplay(
+				true,
+				true,
+				bNormalUsesPolicyInference,
+				true,
+				false));
+		TestFalse(
+			TEXT("Replay capture remains disabled without explicit trace authority"),
+			ShouldCaptureLocomotionFrameReplay(false, true, true, true, false));
+		TestFalse(
+			TEXT("Replay capture remains disabled outside locomotion"),
+			ShouldCaptureLocomotionFrameReplay(true, true, true, false, false));
+		TestFalse(
+			TEXT("Replay capture remains first-step only"),
+			ShouldCaptureLocomotionFrameReplay(true, true, true, true, true));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimLocomotionFrameReplayContractTest,
+		"PhysAnim.Bridge.LocomotionFrameReplayContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimLocomotionFrameReplayContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<float> QueryTrajectorySampleTimesSeconds;
+		TArray<FTransform> QueryTrajectoryWorldTransformsCm;
+		QueryTrajectorySampleTimesSeconds.Reserve(NumFutureSteps + 1);
+		QueryTrajectoryWorldTransformsCm.Reserve(NumFutureSteps + 1);
+		QueryTrajectorySampleTimesSeconds.Add(0.0f);
+		QueryTrajectoryWorldTransformsCm.Add(FTransform(
+			FQuat::Identity,
+			FVector(0.0, 0.0, 90.0)));
+		for (int32 FutureIndex = 0; FutureIndex < NumFutureSteps; ++FutureIndex)
+		{
+			const float FutureTimeSeconds =
+				static_cast<float>(FutureIndex + 1) * FutureStepSeconds;
+			QueryTrajectorySampleTimesSeconds.Add(FutureTimeSeconds);
+			QueryTrajectoryWorldTransformsCm.Add(FTransform(
+				FQuat(FVector::UpVector, FMath::DegreesToRadians(2.0 * (FutureIndex + 1))),
+				FVector(160.0 * FutureTimeSeconds, 0.0, 90.0)));
+		}
+
+		TArray<FPhysAnimBodySample> LiveBodySamples;
+		TArray<FPhysAnimBodySample> PhysicalBodySamples;
+		TArray<FPhysAnimBodySample> CanonicalBodySamples;
+		LiveBodySamples.SetNum(NumSmplBodies);
+		PhysicalBodySamples.SetNum(NumSmplBodies);
+		CanonicalBodySamples.SetNum(NumSmplBodies);
+		for (int32 BodyIndex = 0; BodyIndex < NumSmplBodies; ++BodyIndex)
+		{
+			const FVector Position(0.01 * BodyIndex, 0.0, 0.9 + 0.01 * BodyIndex);
+			LiveBodySamples[BodyIndex] = FPhysAnimBodySample(Position, FQuat::Identity, FVector::ZeroVector, FVector::ZeroVector);
+			PhysicalBodySamples[BodyIndex] = LiveBodySamples[BodyIndex];
+			CanonicalBodySamples[BodyIndex] = LiveBodySamples[BodyIndex];
+		}
+
+		TArray<FPhysAnimFuturePoseSample> RawFutureSamples;
+		TArray<FPhysAnimFuturePoseSample> PlacedFutureSamples;
+		for (int32 FutureIndex = 0; FutureIndex < NumFutureSteps; ++FutureIndex)
+		{
+			FPhysAnimFuturePoseSample Raw;
+			Raw.FutureTimeSeconds = (FutureIndex + 1) * FutureStepSeconds;
+			FPhysAnimFuturePoseSample Placed;
+			Placed.FutureTimeSeconds = Raw.FutureTimeSeconds;
+			for (int32 BodyIndex = 0; BodyIndex < NumSmplBodies; ++BodyIndex)
+			{
+				Raw.BodyTransforms.Add(FTransform(FQuat::Identity, FVector(0.0, 0.03 * (FutureIndex + 1), 0.9)));
+				Placed.BodyTransforms.Add(FTransform(FQuat::Identity, FVector(0.16 * (FutureIndex + 1), 0.0, 0.9)));
+			}
+			RawFutureSamples.Add(MoveTemp(Raw));
+			PlacedFutureSamples.Add(MoveTemp(Placed));
+		}
+
+		TArray<float> SelfObservation;
+		TArray<float> MimicTarget;
+		TArray<float> Terrain;
+		TArray<float> ConditionedActions;
+		SelfObservation.Init(0.0f, SelfObsSize);
+		MimicTarget.Init(0.0f, MimicTargetPosesSize);
+		Terrain.Init(0.0f, TerrainSize);
+		ConditionedActions.Init(0.0f, NumActionFloats);
+		ConditionedActions[0] = 0.25f;
+
+		FPhysAnimLocomotionFrameReplaySnapshot Snapshot;
+		TestTrue(
+			TEXT("A complete E80 locomotion step is captured once"),
+			Snapshot.CaptureFirstIf(
+				true,
+				TEXT("LocomotionActiveShell"),
+				12.5,
+				42,
+				TEXT("MF_Unarmed_Walk_Fwd"),
+				0.4f,
+				false,
+				FTransform::Identity,
+				FTransform(FQuat(FVector::UpVector, -PI * 0.5), FVector::ZeroVector),
+				FTransform::Identity,
+				FTransform::Identity,
+				QueryTrajectorySampleTimesSeconds,
+				QueryTrajectoryWorldTransformsCm,
+				LiveBodySamples,
+				PhysicalBodySamples,
+				CanonicalBodySamples,
+				RawFutureSamples,
+				PlacedFutureSamples,
+				SelfObservation,
+				MimicTarget,
+				Terrain,
+				ConditionedActions));
+
+		FString Error;
+		TestTrue(
+			TEXT("The complete E80 replay satisfies its deterministic contract"),
+			ValidateLocomotionFrameReplaySnapshot(Snapshot, Error));
+		TestTrue(TEXT("A valid E80 replay has no validation error"), Error.IsEmpty());
+		TestEqual(TEXT("The replay records current plus fifteen query sample times"), Snapshot.QueryTrajectorySampleTimesSeconds.Num(), NumFutureSteps + 1);
+		TestEqual(TEXT("The replay records current plus fifteen future query roots"), Snapshot.QueryTrajectoryWorldTransformsCm.Num(), NumFutureSteps + 1);
+		TestEqual(TEXT("The current query sample time is exact zero"), Snapshot.QueryTrajectorySampleTimesSeconds[0], 0.0f);
+		TestEqual(TEXT("The last query sample uses the actual future schedule"), Snapshot.QueryTrajectorySampleTimesSeconds.Last(), RawFutureSamples.Last().FutureTimeSeconds);
+		TestEqual(TEXT("The replay records the final action width"), Snapshot.ConditionedActions.Num(), NumActionFloats);
+		TestTrue(TEXT("The replay records a nonzero action signature"), Snapshot.ConditionedActionCrc32 != 0u);
+
+		FPhysAnimLocomotionFrameReplaySnapshot MissingTrajectory = Snapshot;
+		MissingTrajectory.QueryTrajectorySampleTimesSeconds.Pop();
+		MissingTrajectory.QueryTrajectoryWorldTransformsCm.Pop();
+		TestFalse(
+			TEXT("A replay with a truncated query horizon is rejected"),
+			ValidateLocomotionFrameReplaySnapshot(MissingTrajectory, Error));
+		TestTrue(TEXT("The truncated query failure is explicit"), Error.Contains(TEXT("trajectory")));
+
+		FPhysAnimLocomotionFrameReplaySnapshot MismatchedQueryTime = Snapshot;
+		MismatchedQueryTime.QueryTrajectorySampleTimesSeconds[1] += 0.01f;
+		TestFalse(
+			TEXT("A replay whose query time differs from the future sample is rejected"),
+			ValidateLocomotionFrameReplaySnapshot(MismatchedQueryTime, Error));
+		TestTrue(TEXT("The query-time mismatch is explicit"), Error.Contains(TEXT("different times")));
+
+		FPhysAnimLocomotionFrameReplaySnapshot CorruptActionSignature = Snapshot;
+		++CorruptActionSignature.ConditionedActionCrc32;
+		TestFalse(
+			TEXT("A replay with an action-signature mismatch is rejected"),
+			ValidateLocomotionFrameReplaySnapshot(CorruptActionSignature, Error));
+		TestTrue(TEXT("The action-signature failure is explicit"), Error.Contains(TEXT("signature")));
 		return true;
 	}
 }

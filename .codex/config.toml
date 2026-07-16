@@ -1,7 +1,7 @@
 [mcp_servers.graph]
-command = "npx"
-args = ["-y", "@mcp-graph-workflow/mcp-graph"]
-cwd = "."
+command = "C:\\Users\\roger\\AppData\\Local\\Volta\\tools\\image\\node\\22.22.1\\node.exe"
+args = ["F:\\GlobalMCP2\\mcp-graph-workflow\\compat\\mcp-graph-13.27-gate\\dist\\proxy.js"]
+cwd = "F:\\NewEngine-AgentB"
 
 [mcp_servers.graph.tools.context]
 approval_mode = "approve"
@@ -20,3 +20,12 @@ approval_mode = "approve"
 
 [mcp_servers.graph.tools.update_status]
 approval_mode = "approve"
+
+[agents.implementation_medium]
+description = """
+Medium-effort implementation and testing worker.
+Use for coding, test construction, builds, experiment execution,
+artifact collection, and mechanical analysis.
+It must not make causal, architectural, or product-direction decisions.
+"""
+config_file = "agents/implementation-medium.toml"

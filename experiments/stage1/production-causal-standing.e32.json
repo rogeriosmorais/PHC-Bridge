@@ -1,0 +1,39 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "production-causal-standing-e32",
+  "recorded_utc": "2026-07-15T19:16:06Z",
+  "source_commit": "b82131b893ab23b87a037b862093a50057c7058b",
+  "status": "VALID",
+  "hypothesis_verdict": "FALSIFIED",
+  "product_candidate_success": false,
+  "production_success": false,
+  "bundle_status": "ABORTED_AFTER_DECISIVE_NORMAL_FAILURE",
+  "fixture_authority": "PRODUCT_RUN",
+  "protocol_sha256": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+  "completed_arms": [
+    {
+      "variant": "Normal",
+      "repetition": 1,
+      "status": "FAIL",
+      "recovery_auc": 145.47282397075423,
+      "failed_criteria": ["pelvis_height", "root_tilt", "support_gap", "recovery"],
+      "target_readback_match_ratio": 1.0
+    }
+  ],
+  "validity": {
+    "source_tree_dirty": false,
+    "experimental_command_line_flags": [],
+    "conditioned_lower_body_scalar_count": 24,
+    "conditioned_upper_body_scalars_exactly_zero": true,
+    "normal_strength_multiplier_at_time_zero": 1.0,
+    "normal_strength_multiplier_after_capture": 1.5,
+    "normal_target_readback_match_ratio": 1.0
+  },
+  "causal_findings": [
+    "The promoted lower-body action mask is active and zeros every conditioned scalar from index 24 through 68.",
+    "The promoted strength path transitions from 1.0 at capture to 1.5 at 0.0166667 seconds and target readback remains exact.",
+    "Removing every experimental flag also removes the E31 component-axis adapter, causing immediate high-energy instability despite correct actions and authority.",
+    "Because the first required Normal arm fails four absolute criteria, the locked eight-run bundle cannot pass and further E32 repetitions would not change the verdict."
+  ],
+  "next": "Preregister production promotion of the already validated component-axis action composition, implement it through red-green TDD, and rerun the complete no-flag bundle."
+}
