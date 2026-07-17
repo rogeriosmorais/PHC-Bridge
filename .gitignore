@@ -64,6 +64,7 @@ memory-bank/projectbrief.md
 memory-bank/systemPatterns.md
 memory-bank/techContext.md
 _tmp/
+/.tmp-*
 .codex-tmp/
 .aider*
 .playwright-mcp/*
@@ -86,6 +87,7 @@ test-results/action-semantic-trace/
 test-results/action-decode-contract-e14/
 test-results/manny-local-frame-roundtrip/
 test-results/action-axis-frame/
+test-results/scripted-locomotion/
 test-results/phase1-autocalib/
 test-results/**/*.receipt.json
 *.private.pem
