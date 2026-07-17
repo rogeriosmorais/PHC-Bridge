@@ -248,8 +248,6 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		if (bIdleToLocomotionTransition)
 		{
 			constexpr int32 RotationProbeFutureIndex = 2;
-			constexpr float MaxRelativePoseCostIncrease = 0.05f;
-			constexpr float MinimumMimicTargetImprovementL2 = 0.25f;
 			const FQuat CurrentRootRotation = CurrentBodySamples[0].Rotation.GetNormalized();
 			const FQuat CurrentLeftFootRelativeRotation =
 				(CurrentRootRotation.Inverse() * CurrentBodySamples[3].Rotation).GetNormalized();
@@ -328,10 +326,6 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 						OutCandidateError);
 				};
 
-			TArray<PhysAnimBridge::FPhysAnimLocomotionTransitionCandidateScore> CandidateScores;
-			TArray<int32> CandidateSourceIndices;
-			CandidateScores.Reserve(PoseSearchTopLocomotionCandidateResultsForDiagnostics.Num());
-			CandidateSourceIndices.Reserve(PoseSearchTopLocomotionCandidateResultsForDiagnostics.Num());
 #if WITH_DEV_AUTOMATION_TESTS
 			const bool bCaptureTransitionDiagnostics = bPolicyInputProvenanceTraceEnabledForTesting;
 			MimicFrameDiagnostics.bIdleToLocomotionCandidateScan = bCaptureTransitionDiagnostics;
@@ -409,10 +403,6 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 				const float MaxFootOrientationDeltaDegrees = FMath::Max(
 					LeftFootOrientationDeltaDegrees,
 					RightFootOrientationDeltaDegrees);
-				CandidateScores.Add({
-					PoseSearchTopLocomotionCandidateCostsForDiagnostics[CandidateIndex],
-					MimicTargetStepDeltaL2});
-				CandidateSourceIndices.Add(CandidateIndex);
 #if WITH_DEV_AUTOMATION_TESTS
 				if (bCaptureTransitionDiagnostics)
 				{
@@ -434,41 +424,27 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 				}
 #endif
 			}
+		}
 
-			const int32 SelectedScoreIndex =
-				PhysAnimBridge::SelectNearOptimalLocomotionTransitionCandidate(
-					CandidateScores,
-					MaxRelativePoseCostIncrease,
-					MinimumMimicTargetImprovementL2);
-			if (CandidateSourceIndices.IsValidIndex(SelectedScoreIndex))
-			{
-				const int32 SelectedCandidateIndex = CandidateSourceIndices[SelectedScoreIndex];
-				const FPoseSearchBlueprintResult& CompatibleResult =
-					PoseSearchTopLocomotionCandidateResultsForDiagnostics[SelectedCandidateIndex];
-				const bool bResultChanged =
-					CompatibleResult.SelectedAnim != SearchResult.SelectedAnim ||
-					!FMath::IsNearlyEqual(
-						CompatibleResult.SelectedTime,
-						SearchResult.SelectedTime,
-						1.0e-4f) ||
-					CompatibleResult.bIsMirrored != SearchResult.bIsMirrored;
-				if (bResultChanged)
-				{
-					PHYSANIM_LOG(
-						LogPhysAnimBridge,
-						Display,
-						TEXT("[PhysAnim] Locomotion transition reranked %s@%.3f to %s@%.3f (cost=%.6f mimicDeltaL2=%.3f)."),
-						*GetNameSafe(SearchResult.SelectedAnim),
-						SearchResult.SelectedTime,
-						*GetNameSafe(CompatibleResult.SelectedAnim),
-						CompatibleResult.SelectedTime,
-						CandidateScores[SelectedScoreIndex].PoseCost,
-						CandidateScores[SelectedScoreIndex].TransitionDiscontinuity);
-					SearchResult = CompatibleResult;
-					BridgePoseSearchLatchedWalkResult = SearchResult;
-					bHasBridgePoseSearchLatchedWalkResult = true;
-				}
-			}
+		if (bIdleToLocomotionTransition)
+		{
+			BridgeLocomotionMimicTransitionSource = MimicTargetPosesBuffer;
+			BridgeLocomotionMimicTransitionElapsedSeconds = 0.0f;
+			bBridgeLocomotionMimicTransitionActive =
+				BridgeLocomotionMimicTransitionSource.Num() == PhysAnimBridge::MimicTargetPosesSize;
+			PHYSANIM_LOG(
+				LogPhysAnimBridge,
+				Display,
+				TEXT("[PhysAnim] Started locomotion mimic transition ramp from %s to %s@%.3f."),
+				*GetNameSafe(PreviousPoseSearchResult.SelectedAnim),
+				*GetNameSafe(SearchResult.SelectedAnim),
+				SearchResult.SelectedTime);
+		}
+		else if (SearchResult.SelectedAnim && IsBridgePoseSearchIdleResult(SearchResult))
+		{
+			BridgeLocomotionMimicTransitionSource.Reset();
+			BridgeLocomotionMimicTransitionElapsedSeconds = 0.0f;
+			bBridgeLocomotionMimicTransitionActive = false;
 		}
 
 		if (bPoseSearchValid)
@@ -684,6 +660,46 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		if (!PhysAnimBridge::BuildMimicTargetPoses(MimicCurrentReferenceBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, OutError))
 		{
 			return;
+		}
+
+		if (bBridgeLocomotionMimicTransitionActive)
+		{
+			constexpr float LocomotionMimicTransitionDurationSeconds = 0.30f;
+			const float TransitionAdvanceSeconds =
+				FMath::Max(ElapsedPolicySteps, 1) * PolicyControlIntervalSeconds;
+			BridgeLocomotionMimicTransitionElapsedSeconds = FMath::Min(
+				BridgeLocomotionMimicTransitionElapsedSeconds + TransitionAdvanceSeconds,
+				LocomotionMimicTransitionDurationSeconds);
+			const float TransitionAlpha = FMath::Clamp(
+				BridgeLocomotionMimicTransitionElapsedSeconds /
+					LocomotionMimicTransitionDurationSeconds,
+				0.0f,
+				1.0f);
+			TArray<float> BlendedMimicTarget;
+			FString TransitionBlendError;
+			if (!PhysAnimBridge::BlendMimicTargetPosesForTransition(
+					BridgeLocomotionMimicTransitionSource,
+					MimicTargetPosesBuffer,
+					TransitionAlpha,
+					BlendedMimicTarget,
+					TransitionBlendError))
+			{
+				OutError = FString::Printf(
+					TEXT("Could not blend the locomotion mimic transition: %s"),
+					*TransitionBlendError);
+				return;
+			}
+			MimicTargetPosesBuffer = MoveTemp(BlendedMimicTarget);
+			if (TransitionAlpha >= 1.0f - KINDA_SMALL_NUMBER)
+			{
+				BridgeLocomotionMimicTransitionSource.Reset();
+				BridgeLocomotionMimicTransitionElapsedSeconds = 0.0f;
+				bBridgeLocomotionMimicTransitionActive = false;
+				PHYSANIM_LOG(
+					LogPhysAnimBridge,
+					Display,
+					TEXT("[PhysAnim] Completed locomotion mimic transition ramp."));
+			}
 		}
 
 #if WITH_DEV_AUTOMATION_TESTS
