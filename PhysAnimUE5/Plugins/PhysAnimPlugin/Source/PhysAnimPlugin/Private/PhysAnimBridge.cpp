@@ -841,6 +841,16 @@ namespace PhysAnimBridge
 		const FTransform& InMeshWorldTransform,
 		const FTransform& InSelectedAnimationWorldRootProtoMeters,
 		const FTransform& InSelectedAnimationDataRootProtoMeters,
+		float InIntentMagnitude,
+		const FVector& InDesiredVelocityCmPerSecond,
+		const FVector& InAcceptedVelocityCmPerSecond,
+		const FVector& InResolvedQueryVelocityCmPerSecond,
+		bool bInUseStabilizedWalkQuerySpeed,
+		float InWalkIntentThreshold,
+		float InStabilizedWalkSpeedCmPerSecond,
+		float InIdlePredictedSpeedCutoffCmPerSecond,
+		TConstArrayView<float> InRawQueryTrajectorySampleTimesSeconds,
+		TConstArrayView<FTransform> InRawQueryTrajectoryWorldTransformsCm,
 		TConstArrayView<float> InQueryTrajectorySampleTimesSeconds,
 		TConstArrayView<FTransform> InQueryTrajectoryWorldTransformsCm,
 		TConstArrayView<FPhysAnimBodySample> InLiveBodySamplesProtoWorldMeters,
@@ -870,6 +880,20 @@ namespace PhysAnimBridge
 		MeshWorldTransform = InMeshWorldTransform;
 		SelectedAnimationWorldRootProtoMeters = InSelectedAnimationWorldRootProtoMeters;
 		SelectedAnimationDataRootProtoMeters = InSelectedAnimationDataRootProtoMeters;
+		IntentMagnitude = InIntentMagnitude;
+		DesiredVelocityCmPerSecond = InDesiredVelocityCmPerSecond;
+		AcceptedVelocityCmPerSecond = InAcceptedVelocityCmPerSecond;
+		ResolvedQueryVelocityCmPerSecond = InResolvedQueryVelocityCmPerSecond;
+		bUseStabilizedWalkQuerySpeed = bInUseStabilizedWalkQuerySpeed;
+		WalkIntentThreshold = InWalkIntentThreshold;
+		StabilizedWalkSpeedCmPerSecond = InStabilizedWalkSpeedCmPerSecond;
+		IdlePredictedSpeedCutoffCmPerSecond = InIdlePredictedSpeedCutoffCmPerSecond;
+		RawQueryTrajectorySampleTimesSeconds.Append(
+			InRawQueryTrajectorySampleTimesSeconds.GetData(),
+			InRawQueryTrajectorySampleTimesSeconds.Num());
+		RawQueryTrajectoryWorldTransformsCm.Append(
+			InRawQueryTrajectoryWorldTransformsCm.GetData(),
+			InRawQueryTrajectoryWorldTransformsCm.Num());
 		QueryTrajectorySampleTimesSeconds.Append(
 			InQueryTrajectorySampleTimesSeconds.GetData(),
 			InQueryTrajectorySampleTimesSeconds.Num());
@@ -919,6 +943,16 @@ namespace PhysAnimBridge
 		MeshWorldTransform = FTransform::Identity;
 		SelectedAnimationWorldRootProtoMeters = FTransform::Identity;
 		SelectedAnimationDataRootProtoMeters = FTransform::Identity;
+		IntentMagnitude = 0.0f;
+		DesiredVelocityCmPerSecond = FVector::ZeroVector;
+		AcceptedVelocityCmPerSecond = FVector::ZeroVector;
+		ResolvedQueryVelocityCmPerSecond = FVector::ZeroVector;
+		bUseStabilizedWalkQuerySpeed = false;
+		WalkIntentThreshold = 0.0f;
+		StabilizedWalkSpeedCmPerSecond = 0.0f;
+		IdlePredictedSpeedCutoffCmPerSecond = 0.0f;
+		RawQueryTrajectorySampleTimesSeconds.Reset();
+		RawQueryTrajectoryWorldTransformsCm.Reset();
 		QueryTrajectorySampleTimesSeconds.Reset();
 		QueryTrajectoryWorldTransformsCm.Reset();
 		LiveBodySamplesProtoWorldMeters.Reset();
@@ -1065,6 +1099,38 @@ namespace PhysAnimBridge
 			OutError = TEXT("Locomotion frame replay contains an invalid frame transform.");
 			return false;
 		}
+		if (!FMath::IsFinite(Snapshot.IntentMagnitude) ||
+			Snapshot.IntentMagnitude < 0.0f ||
+			Snapshot.IntentMagnitude > 1.0f ||
+			!IsFiniteVector(Snapshot.DesiredVelocityCmPerSecond) ||
+			!IsFiniteVector(Snapshot.AcceptedVelocityCmPerSecond) ||
+			!IsFiniteVector(Snapshot.ResolvedQueryVelocityCmPerSecond) ||
+			!FMath::IsFinite(Snapshot.WalkIntentThreshold) ||
+			!FMath::IsFinite(Snapshot.StabilizedWalkSpeedCmPerSecond) ||
+			!FMath::IsFinite(Snapshot.IdlePredictedSpeedCutoffCmPerSecond))
+		{
+			OutError = TEXT("Locomotion frame replay query-state fields are invalid.");
+			return false;
+		}
+		if (Snapshot.RawQueryTrajectorySampleTimesSeconds.IsEmpty() ||
+			Snapshot.RawQueryTrajectorySampleTimesSeconds.Num() != Snapshot.RawQueryTrajectoryWorldTransformsCm.Num())
+		{
+			OutError = TEXT("Raw query trajectory replay is empty or mismatched.");
+			return false;
+		}
+		float PreviousRawQueryTimeSeconds = -TNumericLimits<float>::Max();
+		for (int32 SampleIndex = 0; SampleIndex < Snapshot.RawQueryTrajectoryWorldTransformsCm.Num(); ++SampleIndex)
+		{
+			const float QueryTimeSeconds = Snapshot.RawQueryTrajectorySampleTimesSeconds[SampleIndex];
+			if (!FMath::IsFinite(QueryTimeSeconds) ||
+				QueryTimeSeconds + UE_SMALL_NUMBER < PreviousRawQueryTimeSeconds ||
+				!IsFiniteTransform(Snapshot.RawQueryTrajectoryWorldTransformsCm[SampleIndex]))
+			{
+				OutError = FString::Printf(TEXT("Raw query trajectory sample %d has an invalid time or transform."), SampleIndex);
+				return false;
+			}
+			PreviousRawQueryTimeSeconds = QueryTimeSeconds;
+		}
 		if (Snapshot.QueryTrajectorySampleTimesSeconds.Num() != NumFutureSteps + 1 ||
 			Snapshot.QueryTrajectoryWorldTransformsCm.Num() != NumFutureSteps + 1)
 		{
@@ -1138,6 +1204,298 @@ namespace PhysAnimBridge
 		{
 			OutError = TEXT("Conditioned action signature does not match the captured action vector.");
 			return false;
+		}
+		return true;
+	}
+
+	int32 SelectNearOptimalLocomotionTransitionCandidate(
+		TConstArrayView<FPhysAnimLocomotionTransitionCandidateScore> Candidates,
+		float MaxRelativePoseCostIncrease,
+		float MinimumDiscontinuityImprovement)
+	{
+		if (Candidates.IsEmpty() ||
+			!FMath::IsFinite(MaxRelativePoseCostIncrease) ||
+			MaxRelativePoseCostIncrease < 0.0f ||
+			!FMath::IsFinite(MinimumDiscontinuityImprovement) ||
+			MinimumDiscontinuityImprovement < 0.0f)
+		{
+			return INDEX_NONE;
+		}
+
+		int32 BestPoseCostIndex = INDEX_NONE;
+		for (int32 CandidateIndex = 0; CandidateIndex < Candidates.Num(); ++CandidateIndex)
+		{
+			const FPhysAnimLocomotionTransitionCandidateScore& Candidate = Candidates[CandidateIndex];
+			if (!FMath::IsFinite(Candidate.PoseCost) ||
+				Candidate.PoseCost < 0.0f ||
+				!FMath::IsFinite(Candidate.TransitionDiscontinuity) ||
+				Candidate.TransitionDiscontinuity < 0.0f)
+			{
+				continue;
+			}
+			if (BestPoseCostIndex == INDEX_NONE ||
+				Candidate.PoseCost < Candidates[BestPoseCostIndex].PoseCost)
+			{
+				BestPoseCostIndex = CandidateIndex;
+			}
+		}
+		if (BestPoseCostIndex == INDEX_NONE)
+		{
+			return INDEX_NONE;
+		}
+
+		const float BestPoseCost = Candidates[BestPoseCostIndex].PoseCost;
+		const float PoseCostCeiling = BestPoseCost * (1.0f + MaxRelativePoseCostIncrease);
+		int32 BestCompatibleIndex = BestPoseCostIndex;
+		for (int32 CandidateIndex = 0; CandidateIndex < Candidates.Num(); ++CandidateIndex)
+		{
+			const FPhysAnimLocomotionTransitionCandidateScore& Candidate = Candidates[CandidateIndex];
+			if (!FMath::IsFinite(Candidate.PoseCost) ||
+				Candidate.PoseCost < 0.0f ||
+				Candidate.PoseCost > PoseCostCeiling ||
+				!FMath::IsFinite(Candidate.TransitionDiscontinuity) ||
+				Candidate.TransitionDiscontinuity < 0.0f)
+			{
+				continue;
+			}
+			const FPhysAnimLocomotionTransitionCandidateScore& BestCompatible =
+				Candidates[BestCompatibleIndex];
+			if (Candidate.TransitionDiscontinuity <
+					BestCompatible.TransitionDiscontinuity ||
+				(FMath::IsNearlyEqual(
+					Candidate.TransitionDiscontinuity,
+					BestCompatible.TransitionDiscontinuity) &&
+				 Candidate.PoseCost < BestCompatible.PoseCost))
+			{
+				BestCompatibleIndex = CandidateIndex;
+			}
+		}
+
+		const float DiscontinuityImprovement =
+			Candidates[BestPoseCostIndex].TransitionDiscontinuity -
+			Candidates[BestCompatibleIndex].TransitionDiscontinuity;
+		return DiscontinuityImprovement >= MinimumDiscontinuityImprovement
+			? BestCompatibleIndex
+			: BestPoseCostIndex;
+	}
+
+	bool BlendMimicTargetPosesForTransition(
+		TConstArrayView<float> SourceMimicTarget,
+		TConstArrayView<float> TargetMimicTarget,
+		float Alpha,
+		TArray<float>& OutBlendedMimicTarget,
+		FString& OutError)
+	{
+		OutBlendedMimicTarget.Reset();
+		OutError.Reset();
+		if (SourceMimicTarget.Num() != MimicTargetPosesSize ||
+			TargetMimicTarget.Num() != MimicTargetPosesSize)
+		{
+			OutError = FString::Printf(
+				TEXT("Mimic transition blend expected %d source/target floats but found %d/%d."),
+				MimicTargetPosesSize,
+				SourceMimicTarget.Num(),
+				TargetMimicTarget.Num());
+			return false;
+		}
+		if (!FMath::IsFinite(Alpha))
+		{
+			OutError = TEXT("Mimic transition blend alpha is non-finite.");
+			return false;
+		}
+		for (int32 ValueIndex = 0; ValueIndex < MimicTargetPosesSize; ++ValueIndex)
+		{
+			if (!FMath::IsFinite(SourceMimicTarget[ValueIndex]) ||
+				!FMath::IsFinite(TargetMimicTarget[ValueIndex]))
+			{
+				OutError = FString::Printf(
+					TEXT("Mimic transition blend value %d is non-finite."),
+					ValueIndex);
+				return false;
+			}
+		}
+
+		constexpr int32 FloatsPerFutureStep = MimicTargetPosesSize / NumFutureSteps;
+		constexpr int32 PositionFloatsPerFutureStep = NumSmplBodies * 3 * 2;
+		constexpr int32 RotationCountPerFutureStep = NumSmplBodies * 2;
+		constexpr int32 RotationFloats = 6;
+		static_assert(
+			FloatsPerFutureStep ==
+				PositionFloatsPerFutureStep + RotationCountPerFutureStep * RotationFloats + 1,
+			"Mimic transition layout must match BuildMimicTargetPoses.");
+
+		const float ClampedAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+		OutBlendedMimicTarget.Append(
+			TargetMimicTarget.GetData(),
+			TargetMimicTarget.Num());
+		for (int32 FutureIndex = 0; FutureIndex < NumFutureSteps; ++FutureIndex)
+		{
+			const int32 StepOffset = FutureIndex * FloatsPerFutureStep;
+			for (int32 PositionIndex = 0;
+				PositionIndex < PositionFloatsPerFutureStep;
+				++PositionIndex)
+			{
+				const int32 ValueIndex = StepOffset + PositionIndex;
+				OutBlendedMimicTarget[ValueIndex] = FMath::Lerp(
+					SourceMimicTarget[ValueIndex],
+					TargetMimicTarget[ValueIndex],
+					ClampedAlpha);
+			}
+
+			for (int32 RotationIndex = 0;
+				RotationIndex < RotationCountPerFutureStep;
+				++RotationIndex)
+			{
+				const int32 RotationOffset =
+					StepOffset + PositionFloatsPerFutureStep + RotationIndex * RotationFloats;
+				const FVector SourceTangent(
+					SourceMimicTarget[RotationOffset + 0],
+					SourceMimicTarget[RotationOffset + 1],
+					SourceMimicTarget[RotationOffset + 2]);
+				const FVector SourceNormal(
+					SourceMimicTarget[RotationOffset + 3],
+					SourceMimicTarget[RotationOffset + 4],
+					SourceMimicTarget[RotationOffset + 5]);
+				const FVector TargetTangent(
+					TargetMimicTarget[RotationOffset + 0],
+					TargetMimicTarget[RotationOffset + 1],
+					TargetMimicTarget[RotationOffset + 2]);
+				const FVector TargetNormal(
+					TargetMimicTarget[RotationOffset + 3],
+					TargetMimicTarget[RotationOffset + 4],
+					TargetMimicTarget[RotationOffset + 5]);
+
+				auto BuildRotation =
+					[&](const FVector& Tangent, const FVector& Normal, FQuat& OutRotation) -> bool
+					{
+						const FVector XAxis = Tangent.GetSafeNormal();
+						const FVector ZAxis =
+							(Normal - XAxis * FVector::DotProduct(Normal, XAxis)).GetSafeNormal();
+						if (XAxis.IsNearlyZero() || ZAxis.IsNearlyZero())
+						{
+							return false;
+						}
+						OutRotation = MakeQuaternionFromBasis(XAxis, ZAxis);
+						return true;
+					};
+
+				FQuat SourceRotation = FQuat::Identity;
+				FQuat TargetRotation = FQuat::Identity;
+				if (!BuildRotation(SourceTangent, SourceNormal, SourceRotation) ||
+					!BuildRotation(TargetTangent, TargetNormal, TargetRotation))
+				{
+					OutBlendedMimicTarget.Reset();
+					OutError = FString::Printf(
+						TEXT("Mimic transition rotation %d at future step %d is degenerate."),
+						RotationIndex,
+						FutureIndex);
+					return false;
+				}
+				const FQuat BlendedRotation =
+					FQuat::Slerp(SourceRotation, TargetRotation, ClampedAlpha).GetNormalized();
+				float BlendedTanNorm[RotationFloats];
+				QuaternionToTanNorm(BlendedRotation, BlendedTanNorm);
+				for (int32 ComponentIndex = 0; ComponentIndex < RotationFloats; ++ComponentIndex)
+				{
+					OutBlendedMimicTarget[RotationOffset + ComponentIndex] =
+						BlendedTanNorm[ComponentIndex];
+				}
+			}
+			// The target schedule is authoritative; future-time channels are never blended.
+			OutBlendedMimicTarget[StepOffset + FloatsPerFutureStep - 1] =
+				TargetMimicTarget[StepOffset + FloatsPerFutureStep - 1];
+		}
+		return true;
+	}
+
+	bool CalculatePoseSearchChannelCosts(
+		TConstArrayView<float> PoseValues,
+		TConstArrayView<float> QueryValues,
+		TConstArrayView<float> WeightsSqrt,
+		TConstArrayView<FPhysAnimPoseSearchChannelSlice> ChannelSlices,
+		TArray<FPhysAnimPoseSearchChannelCost>& OutChannelCosts,
+		float& OutTotalCost,
+		FString& OutError)
+	{
+		OutChannelCosts.Reset();
+		OutTotalCost = 0.0f;
+		OutError.Reset();
+
+		if (PoseValues.IsEmpty() ||
+			PoseValues.Num() != QueryValues.Num() ||
+			PoseValues.Num() != WeightsSqrt.Num())
+		{
+			OutError = TEXT("Pose Search channel cost vectors are empty or mismatched.");
+			return false;
+		}
+		if (ChannelSlices.IsEmpty())
+		{
+			OutError = TEXT("Pose Search channel cost slices are empty.");
+			return false;
+		}
+
+		TArray<uint8> ClaimedDimensions;
+		ClaimedDimensions.Init(0u, PoseValues.Num());
+		OutChannelCosts.Reserve(ChannelSlices.Num());
+		for (const FPhysAnimPoseSearchChannelSlice& Slice : ChannelSlices)
+		{
+			if (Slice.Label.IsEmpty() ||
+				Slice.DataOffset < 0 ||
+				Slice.Cardinality <= 0 ||
+				Slice.DataOffset + Slice.Cardinality > PoseValues.Num())
+			{
+				OutError = FString::Printf(
+					TEXT("Pose Search channel slice '%s' has an invalid range [%d, %d)."),
+					*Slice.Label,
+					Slice.DataOffset,
+					Slice.DataOffset + Slice.Cardinality);
+				return false;
+			}
+
+			FPhysAnimPoseSearchChannelCost& ChannelCost = OutChannelCosts.AddDefaulted_GetRef();
+			ChannelCost.Label = Slice.Label;
+			ChannelCost.DataOffset = Slice.DataOffset;
+			ChannelCost.Cardinality = Slice.Cardinality;
+			for (int32 DimensionIndex = Slice.DataOffset;
+				DimensionIndex < Slice.DataOffset + Slice.Cardinality;
+				++DimensionIndex)
+			{
+				if (ClaimedDimensions[DimensionIndex] != 0u)
+				{
+					OutError = FString::Printf(
+						TEXT("Pose Search channel slices overlap at dimension %d."),
+						DimensionIndex);
+					return false;
+				}
+				const float PoseValue = PoseValues[DimensionIndex];
+				const float QueryValue = QueryValues[DimensionIndex];
+				const float WeightSqrt = WeightsSqrt[DimensionIndex];
+				if (!FMath::IsFinite(PoseValue) ||
+					!FMath::IsFinite(QueryValue) ||
+					!FMath::IsFinite(WeightSqrt))
+				{
+					OutError = FString::Printf(
+						TEXT("Pose Search channel cost dimension %d is non-finite."),
+						DimensionIndex);
+					return false;
+				}
+				const float WeightedDifference = (PoseValue - QueryValue) * WeightSqrt;
+				const float DimensionCost = WeightedDifference * WeightedDifference;
+				ChannelCost.Cost += DimensionCost;
+				OutTotalCost += DimensionCost;
+				ClaimedDimensions[DimensionIndex] = 1u;
+			}
+		}
+
+		for (int32 DimensionIndex = 0; DimensionIndex < ClaimedDimensions.Num(); ++DimensionIndex)
+		{
+			if (ClaimedDimensions[DimensionIndex] == 0u)
+			{
+				OutError = FString::Printf(
+					TEXT("Pose Search channel slices do not cover dimension %d."),
+					DimensionIndex);
+				return false;
+			}
 		}
 		return true;
 	}

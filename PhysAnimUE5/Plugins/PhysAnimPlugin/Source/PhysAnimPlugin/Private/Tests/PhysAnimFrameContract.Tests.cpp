@@ -418,4 +418,103 @@ bool FPhysAnimProtoFutureTrajectoryPlacementTest::RunTest(const FString& Paramet
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimProtoFutureTrajectoryCumulativeRootRebaseTest,
+	"PhysAnim.Frames.ProtoFutureTrajectoryCumulativeRootRebase",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimProtoFutureTrajectoryCumulativeRootRebaseTest::RunTest(const FString& Parameters)
+{
+	using namespace PhysAnimFrameContract;
+
+	const FWorldTransformCm CurrentQueryRoot(FTransform(
+		FQuat(FVector::UpVector, FMath::DegreesToRadians(25.0)),
+		FVector(120.0, -80.0, 90.0)));
+	const FTransform CurrentQueryProto(
+		PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CurrentQueryRoot.Get().GetRotation()),
+		PhysAnimBridge::UeWorldPositionToProtoRuntime(CurrentQueryRoot.Get().GetLocation()));
+	const FTransform StableCurrentDataRoot(
+		FQuat::Identity,
+		FVector(0.02, 0.01, 0.94));
+	const FVector CumulativeClipRootOffset(0.0, -4.0, 0.0);
+	const FTransform CurrentSelectedDataTransform(
+		StableCurrentDataRoot.GetRotation(),
+		StableCurrentDataRoot.GetLocation() + CumulativeClipRootOffset);
+	const FQuat DataToWorldRotation = (
+		CurrentQueryProto.GetRotation() *
+		StableCurrentDataRoot.GetRotation().Inverse()).GetNormalized();
+	const FTransform CurrentSelectedWorldTransform(
+		(CurrentQueryProto.GetRotation() * CurrentSelectedDataTransform.GetRotation()).GetNormalized(),
+		CurrentQueryProto.GetLocation() + DataToWorldRotation.RotateVector(CumulativeClipRootOffset));
+	const FProtoWorldCanonicalTransformMeters CurrentSelectedWorld(CurrentSelectedWorldTransform);
+	const FProtoAnimationDataCanonicalTransformMeters CurrentSelectedData(CurrentSelectedDataTransform);
+
+	TArray<FPhysAnimFuturePoseSample> RawFuturePoses;
+	RawFuturePoses.Reserve(PhysAnimBridge::NumFutureSteps);
+	for (int32 FutureIndex = 0; FutureIndex < PhysAnimBridge::NumFutureSteps; ++FutureIndex)
+	{
+		FPhysAnimFuturePoseSample& RawFuture = RawFuturePoses.AddDefaulted_GetRef();
+		RawFuture.FutureTimeSeconds =
+			static_cast<float>(FutureIndex + 1) * PhysAnimBridge::FutureStepSeconds;
+		const FTransform RawRoot(
+			FQuat::Identity,
+			CurrentSelectedDataTransform.GetLocation() + FVector(0.0, -0.1 * (FutureIndex + 1), 0.0));
+		RawFuture.BodyTransforms.Reserve(PhysAnimBridge::NumSmplBodies);
+		for (int32 BodyIndex = 0; BodyIndex < PhysAnimBridge::NumSmplBodies; ++BodyIndex)
+		{
+			RawFuture.BodyTransforms.Add(FTransform(
+				FQuat::Identity,
+				RawRoot.GetLocation() + FVector(0.01 * BodyIndex, 0.02 * BodyIndex, 0.005 * BodyIndex)));
+		}
+	}
+
+	TArray<FWorldTransformCm> StationaryQueryRoots;
+	StationaryQueryRoots.Init(CurrentQueryRoot, PhysAnimBridge::NumFutureSteps);
+	TArray<FPhysAnimFuturePoseSample> PlacedFuturePoses;
+	FString Error;
+	TestTrue(
+		TEXT("E80 cumulative-root fixture placement succeeds"),
+		PlaceProtoFuturePosesOnWorldTrajectory(
+			RawFuturePoses,
+			CurrentQueryRoot,
+			StationaryQueryRoots,
+			CurrentSelectedWorld,
+			CurrentSelectedData,
+			PlacedFuturePoses,
+			Error));
+	TestTrue(TEXT("E80 cumulative-root fixture error is empty"), Error.IsEmpty());
+	TestEqual(
+		TEXT("E80 cumulative-root fixture preserves the locked future width"),
+		PlacedFuturePoses.Num(),
+		PhysAnimBridge::NumFutureSteps);
+	if (PlacedFuturePoses.Num() != PhysAnimBridge::NumFutureSteps)
+	{
+		return false;
+	}
+
+	for (int32 FutureIndex = 0; FutureIndex < PlacedFuturePoses.Num(); ++FutureIndex)
+	{
+		TestTrue(
+			*FString::Printf(TEXT("E80 step %d removes cumulative clip root translation"), FutureIndex),
+			PlacedFuturePoses[FutureIndex].BodyTransforms[0].GetLocation().Equals(
+				StableCurrentDataRoot.GetLocation(),
+				1.0e-5));
+		TestTrue(
+			*FString::Printf(TEXT("E80 step %d maps the query rotation into the stable data root"), FutureIndex),
+			PlacedFuturePoses[FutureIndex].BodyTransforms[0].GetRotation().AngularDistance(
+				StableCurrentDataRoot.GetRotation()) <= 1.0e-5);
+	}
+
+	const FTransform RawLeftFootRelative =
+		RawFuturePoses[0].BodyTransforms[3].GetRelativeTransform(
+			RawFuturePoses[0].BodyTransforms[0]);
+	const FTransform PlacedLeftFootRelative =
+		PlacedFuturePoses[0].BodyTransforms[3].GetRelativeTransform(
+			PlacedFuturePoses[0].BodyTransforms[0]);
+	TestTrue(
+		TEXT("E80 cumulative-root rebase preserves the left-foot pose relative to the root"),
+		PlacedLeftFootRelative.GetLocation().Equals(RawLeftFootRelative.GetLocation(), 1.0e-5));
+	return true;
+}
+
 #endif

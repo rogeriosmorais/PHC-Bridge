@@ -2017,6 +2017,14 @@ namespace
 
 	bool FPhysAnimLocomotionFrameReplayContractTest::RunTest(const FString& Parameters)
 	{
+		TArray<float> RawQueryTrajectorySampleTimesSeconds;
+		TArray<FTransform> RawQueryTrajectoryWorldTransformsCm;
+		RawQueryTrajectorySampleTimesSeconds = {-0.04f, 1.0f / 60.0f, 0.2f + 1.0f / 60.0f};
+		RawQueryTrajectoryWorldTransformsCm = {
+			FTransform(FQuat::Identity, FVector(-6.4, 0.0, 90.0)),
+			FTransform(FQuat::Identity, FVector(0.0, 0.0, 90.0)),
+			FTransform(FQuat::Identity, FVector(32.0, 0.0, 90.0))};
+
 		TArray<float> QueryTrajectorySampleTimesSeconds;
 		TArray<FTransform> QueryTrajectoryWorldTransformsCm;
 		QueryTrajectorySampleTimesSeconds.Reserve(NumFutureSteps + 1);
@@ -2091,6 +2099,16 @@ namespace
 				FTransform(FQuat(FVector::UpVector, -PI * 0.5), FVector::ZeroVector),
 				FTransform::Identity,
 				FTransform::Identity,
+				0.75f,
+				FVector(120.0, 0.0, 0.0),
+				FVector(96.0, 0.0, 0.0),
+				FVector(160.0, 0.0, 0.0),
+				true,
+				0.35f,
+				160.0f,
+				70.0f,
+				RawQueryTrajectorySampleTimesSeconds,
+				RawQueryTrajectoryWorldTransformsCm,
 				QueryTrajectorySampleTimesSeconds,
 				QueryTrajectoryWorldTransformsCm,
 				LiveBodySamples,
@@ -2108,12 +2126,23 @@ namespace
 			TEXT("The complete E80 replay satisfies its deterministic contract"),
 			ValidateLocomotionFrameReplaySnapshot(Snapshot, Error));
 		TestTrue(TEXT("A valid E80 replay has no validation error"), Error.IsEmpty());
+		TestEqual(TEXT("The replay records each raw Unreal trajectory sample time"), Snapshot.RawQueryTrajectorySampleTimesSeconds.Num(), RawQueryTrajectorySampleTimesSeconds.Num());
+		TestEqual(TEXT("The replay records each raw Unreal trajectory transform"), Snapshot.RawQueryTrajectoryWorldTransformsCm.Num(), RawQueryTrajectoryWorldTransformsCm.Num());
+		TestEqual(TEXT("The replay records the resolved query speed"), Snapshot.ResolvedQueryVelocityCmPerSecond.Size2D(), 160.0);
 		TestEqual(TEXT("The replay records current plus fifteen query sample times"), Snapshot.QueryTrajectorySampleTimesSeconds.Num(), NumFutureSteps + 1);
 		TestEqual(TEXT("The replay records current plus fifteen future query roots"), Snapshot.QueryTrajectoryWorldTransformsCm.Num(), NumFutureSteps + 1);
 		TestEqual(TEXT("The current query sample time is exact zero"), Snapshot.QueryTrajectorySampleTimesSeconds[0], 0.0f);
 		TestEqual(TEXT("The last query sample uses the actual future schedule"), Snapshot.QueryTrajectorySampleTimesSeconds.Last(), RawFutureSamples.Last().FutureTimeSeconds);
 		TestEqual(TEXT("The replay records the final action width"), Snapshot.ConditionedActions.Num(), NumActionFloats);
 		TestTrue(TEXT("The replay records a nonzero action signature"), Snapshot.ConditionedActionCrc32 != 0u);
+
+		FPhysAnimLocomotionFrameReplaySnapshot MissingRawTrajectory = Snapshot;
+		MissingRawTrajectory.RawQueryTrajectorySampleTimesSeconds.Reset();
+		MissingRawTrajectory.RawQueryTrajectoryWorldTransformsCm.Reset();
+		TestFalse(
+			TEXT("A replay without raw Unreal trajectory samples is rejected"),
+			ValidateLocomotionFrameReplaySnapshot(MissingRawTrajectory, Error));
+		TestTrue(TEXT("The missing raw trajectory failure is explicit"), Error.Contains(TEXT("Raw query trajectory")));
 
 		FPhysAnimLocomotionFrameReplaySnapshot MissingTrajectory = Snapshot;
 		MissingTrajectory.QueryTrajectorySampleTimesSeconds.Pop();
@@ -2136,6 +2165,191 @@ namespace
 			TEXT("A replay with an action-signature mismatch is rejected"),
 			ValidateLocomotionFrameReplaySnapshot(CorruptActionSignature, Error));
 		TestTrue(TEXT("The action-signature failure is explicit"), Error.Contains(TEXT("signature")));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimLocomotionTransitionCandidateSelectionTest,
+		"PhysAnim.Bridge.LocomotionTransitionCandidateSelection",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimLocomotionTransitionCandidateSelectionTest::RunTest(const FString& Parameters)
+	{
+		const TArray<FPhysAnimLocomotionTransitionCandidateScore> CapturedFrontier = {
+			{0.0716245f, 75.3259f},
+			{0.0718500f, 68.5663f},
+			{0.0726658f, 70.6697f},
+			{0.0736541f, 20.9563f},
+			{0.0739735f, 17.0597f},
+			{0.0740302f, 63.9198f}};
+		TestEqual(
+			TEXT("A near-optimal walk pose with a much smaller target discontinuity wins"),
+			SelectNearOptimalLocomotionTransitionCandidate(
+				CapturedFrontier,
+				0.05f,
+				15.0f),
+			4);
+
+		const TArray<FPhysAnimLocomotionTransitionCandidateScore> CostlySmoothPose = {
+			{1.0f, 70.0f},
+			{1.08f, 5.0f}};
+		TestEqual(
+			TEXT("A smoother but materially costlier pose cannot override Pose Search"),
+			SelectNearOptimalLocomotionTransitionCandidate(
+				CostlySmoothPose,
+				0.05f,
+				15.0f),
+			0);
+
+		const TArray<FPhysAnimLocomotionTransitionCandidateScore> NegligibleImprovement = {
+			{1.0f, 30.0f},
+			{1.01f, 25.0f}};
+		TestEqual(
+			TEXT("A negligible discontinuity improvement preserves the original best pose"),
+			SelectNearOptimalLocomotionTransitionCandidate(
+				NegligibleImprovement,
+				0.05f,
+				15.0f),
+			0);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMimicTargetTransitionBlendTest,
+		"PhysAnim.Bridge.MimicTargetTransitionBlend",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimMimicTargetTransitionBlendTest::RunTest(const FString& Parameters)
+	{
+		constexpr int32 FloatsPerFutureStep = MimicTargetPosesSize / NumFutureSteps;
+		constexpr int32 PositionFloatsPerFutureStep = NumSmplBodies * 3 * 2;
+		constexpr int32 RotationCountPerFutureStep = NumSmplBodies * 2;
+		TArray<float> Source;
+		TArray<float> Target;
+		Source.Init(0.0f, MimicTargetPosesSize);
+		Target.Init(0.0f, MimicTargetPosesSize);
+		const FQuat TargetRotation(FVector::UpVector, 0.5 * PI);
+		for (int32 FutureIndex = 0; FutureIndex < NumFutureSteps; ++FutureIndex)
+		{
+			const int32 StepOffset = FutureIndex * FloatsPerFutureStep;
+			for (int32 PositionIndex = 0;
+				PositionIndex < PositionFloatsPerFutureStep;
+				++PositionIndex)
+			{
+				Target[StepOffset + PositionIndex] = 10.0f;
+			}
+			for (int32 RotationIndex = 0;
+				RotationIndex < RotationCountPerFutureStep;
+				++RotationIndex)
+			{
+				const int32 RotationOffset =
+					StepOffset + PositionFloatsPerFutureStep + RotationIndex * 6;
+				float SourceTanNorm[6];
+				float TargetTanNorm[6];
+				QuaternionToTanNorm(FQuat::Identity, SourceTanNorm);
+				QuaternionToTanNorm(TargetRotation, TargetTanNorm);
+				for (int32 ComponentIndex = 0; ComponentIndex < 6; ++ComponentIndex)
+				{
+					Source[RotationOffset + ComponentIndex] = SourceTanNorm[ComponentIndex];
+					Target[RotationOffset + ComponentIndex] = TargetTanNorm[ComponentIndex];
+				}
+			}
+			Source[StepOffset + FloatsPerFutureStep - 1] = 0.01f;
+			Target[StepOffset + FloatsPerFutureStep - 1] =
+				static_cast<float>(FutureIndex + 1) * FutureStepSeconds;
+		}
+
+		TArray<float> Blended;
+		FString Error;
+		TestTrue(
+			TEXT("A complete mimic target transition can be blended"),
+			BlendMimicTargetPosesForTransition(
+				Source,
+				Target,
+				0.5f,
+				Blended,
+				Error));
+		TestTrue(TEXT("Mimic transition blend reports no error"), Error.IsEmpty());
+		TestEqual(TEXT("Mimic transition blend preserves width"), Blended.Num(), MimicTargetPosesSize);
+		TestTrue(
+			TEXT("Position channels are linearly interpolated"),
+			FMath::IsNearlyEqual(Blended[0], 5.0f, 1.0e-5f));
+		const int32 FirstRotationOffset = PositionFloatsPerFutureStep;
+		const float HalfSqrtTwo = FMath::Sqrt(0.5f);
+		TestTrue(
+			TEXT("Rotation tangent is slerped to forty-five degrees"),
+			FMath::IsNearlyEqual(Blended[FirstRotationOffset + 0], HalfSqrtTwo, 1.0e-5f) &&
+			FMath::IsNearlyEqual(Blended[FirstRotationOffset + 1], HalfSqrtTwo, 1.0e-5f));
+		TestTrue(
+			TEXT("Rotation normal remains unit up"),
+			FMath::IsNearlyEqual(Blended[FirstRotationOffset + 3], 0.0f, 1.0e-5f) &&
+			FMath::IsNearlyEqual(Blended[FirstRotationOffset + 4], 0.0f, 1.0e-5f) &&
+			FMath::IsNearlyEqual(Blended[FirstRotationOffset + 5], 1.0f, 1.0e-5f));
+		TestTrue(
+			TEXT("Future-time channels always come from the new target"),
+			FMath::IsNearlyEqual(
+				Blended[FloatsPerFutureStep - 1],
+				Target[FloatsPerFutureStep - 1],
+				1.0e-6f));
+
+		TArray<float> InvalidSource;
+		TestFalse(
+			TEXT("An incomplete transition source is rejected"),
+			BlendMimicTargetPosesForTransition(
+				InvalidSource,
+				Target,
+				0.5f,
+				Blended,
+				Error));
+		TestTrue(TEXT("The incomplete source rejection is explicit"), Error.Contains(TEXT("expected")));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPoseSearchChannelCostTest,
+		"PhysAnim.Bridge.PoseSearchChannelCosts",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPoseSearchChannelCostTest::RunTest(const FString& Parameters)
+	{
+		const TArray<float> PoseValues = {1.0f, 4.0f, 2.0f, 8.0f};
+		const TArray<float> QueryValues = {0.0f, 2.0f, 2.0f, 4.0f};
+		const TArray<float> WeightsSqrt = {2.0f, 0.5f, 3.0f, 1.0f};
+		const TArray<FPhysAnimPoseSearchChannelSlice> Slices = {
+			{TEXT("Trajectory"), 0, 2},
+			{TEXT("Pose"), 2, 2}};
+		TArray<FPhysAnimPoseSearchChannelCost> Costs;
+		float TotalCost = 0.0f;
+		FString Error;
+		TestTrue(
+			TEXT("A complete non-overlapping channel partition is accepted"),
+			CalculatePoseSearchChannelCosts(
+				PoseValues,
+				QueryValues,
+				WeightsSqrt,
+				Slices,
+				Costs,
+				TotalCost,
+				Error));
+		TestEqual(TEXT("The helper returns both channel costs"), Costs.Num(), 2);
+		TestEqual(TEXT("Trajectory cost is the weighted squared sum"), Costs[0].Cost, 5.0f);
+		TestEqual(TEXT("Pose cost is the weighted squared sum"), Costs[1].Cost, 16.0f);
+		TestEqual(TEXT("Channel costs partition the full dissimilarity"), TotalCost, 21.0f);
+
+		const TArray<FPhysAnimPoseSearchChannelSlice> OverlappingSlices = {
+			{TEXT("First"), 0, 3},
+			{TEXT("Second"), 2, 2}};
+		TestFalse(
+			TEXT("Overlapping channel slices are rejected"),
+			CalculatePoseSearchChannelCosts(
+				PoseValues,
+				QueryValues,
+				WeightsSqrt,
+				OverlappingSlices,
+				Costs,
+				TotalCost,
+				Error));
+		TestTrue(TEXT("The overlap failure is explicit"), Error.Contains(TEXT("overlap")));
 		return true;
 	}
 }

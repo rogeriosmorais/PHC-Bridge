@@ -175,17 +175,13 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		++PolicyControlTicksExecuted;
 		PolicyControlTicksSkipped += FMath::Max(ElapsedPolicySteps - 1, 0);
 
+		const FPoseSearchBlueprintResult PreviousPoseSearchResult = LastValidPoseSearchResult;
 		FPoseSearchBlueprintResult SearchResult;
 		const double PoseSearchStartSeconds = FPlatformTime::Seconds();
 		const bool bPoseSearchValid = QueryPoseSearch(SearchResult, OutError);
 		RecordLiveRuntimeEvidencePoseSearchQueryResult(bPoseSearchValid, SearchResult.SelectedAnim ? SearchResult.SelectedAnim->GetName() : TEXT(""));
 
-		if (bPoseSearchValid)
-		{
-			LastValidPoseSearchResult = SearchResult;
-			ConsecutiveInvalidPoseSearchFrames = 0;
-		}
-		else
+		if (!bPoseSearchValid)
 		{
 			++ConsecutiveInvalidPoseSearchFrames;
 			if (ConsecutiveInvalidPoseSearchFrames > 1 || LastValidPoseSearchResult.SelectedAnim == nullptr)
@@ -234,8 +230,265 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			return;
 		}
 
+#if WITH_DEV_AUTOMATION_TESTS
+		MimicFrameDiagnostics.Reset();
+#endif
+		const bool bIdleToLocomotionTransition =
+			bPoseSearchValid &&
+			PreviousPoseSearchResult.SelectedAnim != nullptr &&
+			IsBridgePoseSearchIdleResult(PreviousPoseSearchResult) &&
+			SearchResult.SelectedAnim != nullptr &&
+			!IsBridgePoseSearchIdleResult(SearchResult) &&
+			PoseSearchTopLocomotionCandidateResultsForDiagnostics.Num() ==
+				PoseSearchTopLocomotionCandidateCostsForDiagnostics.Num() &&
+			MimicTargetPosesBuffer.Num() == PhysAnimBridge::MimicTargetPosesSize &&
+			CurrentBodySamples.IsValidIndex(0) &&
+			CurrentBodySamples.IsValidIndex(3) &&
+			CurrentBodySamples.IsValidIndex(7);
+		if (bIdleToLocomotionTransition)
+		{
+			constexpr int32 RotationProbeFutureIndex = 2;
+			constexpr float MaxRelativePoseCostIncrease = 0.05f;
+			constexpr float MinimumMimicTargetImprovementL2 = 0.25f;
+			const FQuat CurrentRootRotation = CurrentBodySamples[0].Rotation.GetNormalized();
+			const FQuat CurrentLeftFootRelativeRotation =
+				(CurrentRootRotation.Inverse() * CurrentBodySamples[3].Rotation).GetNormalized();
+			const FQuat CurrentRightFootRelativeRotation =
+				(CurrentRootRotation.Inverse() * CurrentBodySamples[7].Rotation).GetNormalized();
+
+			auto BuildCandidateMimicTarget =
+				[&](
+					const FPoseSearchBlueprintResult& CandidateResult,
+					TArray<FPhysAnimFuturePoseSample> CandidateFuturePoses,
+					TArray<float>& OutCandidateMimicTarget,
+					FString& OutCandidateError) -> bool
+				{
+					FTransform CandidateReferenceWorldRoot = FTransform::Identity;
+					FTransform CandidateReferenceDataRoot = FTransform::Identity;
+					if (!ResolveMimicTargetReferenceDataFrame(
+							CandidateResult,
+							CandidateReferenceWorldRoot,
+							CandidateReferenceDataRoot,
+							OutCandidateError))
+					{
+						return false;
+					}
+
+					if (ShouldUseBridgeTrajectoryPoseSearchState(RuntimeState))
+					{
+						if (!bBridgePoseSearchTrajectoryInitialized)
+						{
+							OutCandidateError =
+								TEXT("Transition candidate placement requires an initialized Pose Search trajectory.");
+							return false;
+						}
+						const FTransformTrajectorySample CurrentTrajectorySample =
+							BridgePoseSearchTrajectory.GetSampleAtTime(0.0f, true);
+						const PhysAnimFrameContract::FWorldTransformCm CurrentQueryWorldRoot(
+							CurrentTrajectorySample.GetTransform());
+						TArray<PhysAnimFrameContract::FWorldTransformCm> FutureQueryWorldRoots;
+						FutureQueryWorldRoots.Reserve(CandidateFuturePoses.Num());
+						for (const FPhysAnimFuturePoseSample& CandidateFuturePose : CandidateFuturePoses)
+						{
+							const FTransformTrajectorySample FutureTrajectorySample =
+								BridgePoseSearchTrajectory.GetSampleAtTime(
+									CandidateFuturePose.FutureTimeSeconds,
+									true);
+							FutureQueryWorldRoots.Add(
+								PhysAnimFrameContract::FWorldTransformCm(
+									FutureTrajectorySample.GetTransform()));
+						}
+						TArray<FPhysAnimFuturePoseSample> PlacedCandidateFuturePoses;
+						if (!PhysAnimFrameContract::PlaceProtoFuturePosesOnWorldTrajectory(
+								CandidateFuturePoses,
+								CurrentQueryWorldRoot,
+								FutureQueryWorldRoots,
+								PhysAnimFrameContract::FProtoWorldCanonicalTransformMeters(
+									CandidateReferenceWorldRoot),
+								PhysAnimFrameContract::FProtoAnimationDataCanonicalTransformMeters(
+									CandidateReferenceDataRoot),
+								PlacedCandidateFuturePoses,
+								OutCandidateError))
+						{
+							return false;
+						}
+						CandidateFuturePoses = MoveTemp(PlacedCandidateFuturePoses);
+					}
+
+					TArray<FPhysAnimBodySample> CandidateCurrentReferenceBodySamples;
+					MakeMimicTargetDataFrameBodySamples(
+						CurrentBodySamples,
+						CandidateReferenceWorldRoot,
+						CandidateReferenceDataRoot,
+						CandidateCurrentReferenceBodySamples);
+					return PhysAnimBridge::BuildMimicTargetPoses(
+						CandidateCurrentReferenceBodySamples,
+						CandidateFuturePoses,
+						OutCandidateMimicTarget,
+						OutCandidateError);
+				};
+
+			TArray<PhysAnimBridge::FPhysAnimLocomotionTransitionCandidateScore> CandidateScores;
+			TArray<int32> CandidateSourceIndices;
+			CandidateScores.Reserve(PoseSearchTopLocomotionCandidateResultsForDiagnostics.Num());
+			CandidateSourceIndices.Reserve(PoseSearchTopLocomotionCandidateResultsForDiagnostics.Num());
+#if WITH_DEV_AUTOMATION_TESTS
+			const bool bCaptureTransitionDiagnostics = bPolicyInputProvenanceTraceEnabledForTesting;
+			MimicFrameDiagnostics.bIdleToLocomotionCandidateScan = bCaptureTransitionDiagnostics;
+#endif
+			for (int32 CandidateIndex = 0;
+				CandidateIndex < PoseSearchTopLocomotionCandidateResultsForDiagnostics.Num();
+				++CandidateIndex)
+			{
+				const FPoseSearchBlueprintResult& CandidateResult =
+					PoseSearchTopLocomotionCandidateResultsForDiagnostics[CandidateIndex];
+				if (!CandidateResult.SelectedAnim)
+				{
+					continue;
+				}
+				TArray<FPhysAnimFuturePoseSample> CandidateMannyFuturePoses;
+				FString CandidateError;
+				if (!SampleFuturePoses(
+						CandidateResult,
+						CandidateMannyFuturePoses,
+						CandidateError,
+						nullptr))
+				{
+					continue;
+				}
+				TArray<FPhysAnimFuturePoseSample> CandidateCanonicalFuturePoses;
+				if (!PhysAnimProtoMannyAdapter::AdaptFuturePoseSamplesToCanonicalSmpl(
+						CandidateMannyFuturePoses,
+						CandidateCanonicalFuturePoses,
+						CandidateError) ||
+					!CandidateCanonicalFuturePoses.IsValidIndex(RotationProbeFutureIndex) ||
+					!CandidateCanonicalFuturePoses[RotationProbeFutureIndex].BodyTransforms.IsValidIndex(0) ||
+					!CandidateCanonicalFuturePoses[RotationProbeFutureIndex].BodyTransforms.IsValidIndex(3) ||
+					!CandidateCanonicalFuturePoses[RotationProbeFutureIndex].BodyTransforms.IsValidIndex(7))
+				{
+					continue;
+				}
+
+				TArray<float> CandidateMimicTarget;
+				if (!BuildCandidateMimicTarget(
+						CandidateResult,
+						CandidateCanonicalFuturePoses,
+						CandidateMimicTarget,
+						CandidateError) ||
+					CandidateMimicTarget.Num() != MimicTargetPosesBuffer.Num())
+				{
+					continue;
+				}
+				double MimicTargetStepDeltaSquared = 0.0;
+				for (int32 ValueIndex = 0; ValueIndex < CandidateMimicTarget.Num(); ++ValueIndex)
+				{
+					const double Delta =
+						static_cast<double>(CandidateMimicTarget[ValueIndex]) -
+						static_cast<double>(MimicTargetPosesBuffer[ValueIndex]);
+					MimicTargetStepDeltaSquared += Delta * Delta;
+				}
+				const float MimicTargetStepDeltaL2 =
+					static_cast<float>(FMath::Sqrt(MimicTargetStepDeltaSquared));
+
+				const TArray<FTransform>& CandidateBodyTransforms =
+					CandidateCanonicalFuturePoses[RotationProbeFutureIndex].BodyTransforms;
+				const FQuat CandidateRootRotation =
+					CandidateBodyTransforms[0].GetRotation().GetNormalized();
+				const FQuat CandidateLeftFootRelativeRotation =
+					(CandidateRootRotation.Inverse() *
+						CandidateBodyTransforms[3].GetRotation()).GetNormalized();
+				const FQuat CandidateRightFootRelativeRotation =
+					(CandidateRootRotation.Inverse() *
+						CandidateBodyTransforms[7].GetRotation()).GetNormalized();
+				const float LeftFootOrientationDeltaDegrees = FMath::RadiansToDegrees(
+					CurrentLeftFootRelativeRotation.AngularDistance(
+						CandidateLeftFootRelativeRotation));
+				const float RightFootOrientationDeltaDegrees = FMath::RadiansToDegrees(
+					CurrentRightFootRelativeRotation.AngularDistance(
+						CandidateRightFootRelativeRotation));
+				const float MaxFootOrientationDeltaDegrees = FMath::Max(
+					LeftFootOrientationDeltaDegrees,
+					RightFootOrientationDeltaDegrees);
+				CandidateScores.Add({
+					PoseSearchTopLocomotionCandidateCostsForDiagnostics[CandidateIndex],
+					MimicTargetStepDeltaL2});
+				CandidateSourceIndices.Add(CandidateIndex);
+#if WITH_DEV_AUTOMATION_TESTS
+				if (bCaptureTransitionDiagnostics)
+				{
+					PhysAnimBridge::FPhysAnimPoseSearchTransitionCandidateDiagnostics& CandidateDiagnostics =
+						MimicFrameDiagnostics.LocomotionTransitionCandidates.AddDefaulted_GetRef();
+					CandidateDiagnostics.Animation = GetNameSafe(CandidateResult.SelectedAnim);
+					CandidateDiagnostics.SelectedTimeSeconds = CandidateResult.SelectedTime;
+					CandidateDiagnostics.bMirrored = CandidateResult.bIsMirrored;
+					CandidateDiagnostics.PoseCost =
+						PoseSearchTopLocomotionCandidateCostsForDiagnostics[CandidateIndex];
+					CandidateDiagnostics.LeftFootOrientationDeltaDegrees =
+						LeftFootOrientationDeltaDegrees;
+					CandidateDiagnostics.RightFootOrientationDeltaDegrees =
+						RightFootOrientationDeltaDegrees;
+					CandidateDiagnostics.MaxFootOrientationDeltaDegrees =
+						MaxFootOrientationDeltaDegrees;
+					CandidateDiagnostics.MimicTargetStepDeltaL2 =
+						MimicTargetStepDeltaL2;
+				}
+#endif
+			}
+
+			const int32 SelectedScoreIndex =
+				PhysAnimBridge::SelectNearOptimalLocomotionTransitionCandidate(
+					CandidateScores,
+					MaxRelativePoseCostIncrease,
+					MinimumMimicTargetImprovementL2);
+			if (CandidateSourceIndices.IsValidIndex(SelectedScoreIndex))
+			{
+				const int32 SelectedCandidateIndex = CandidateSourceIndices[SelectedScoreIndex];
+				const FPoseSearchBlueprintResult& CompatibleResult =
+					PoseSearchTopLocomotionCandidateResultsForDiagnostics[SelectedCandidateIndex];
+				const bool bResultChanged =
+					CompatibleResult.SelectedAnim != SearchResult.SelectedAnim ||
+					!FMath::IsNearlyEqual(
+						CompatibleResult.SelectedTime,
+						SearchResult.SelectedTime,
+						1.0e-4f) ||
+					CompatibleResult.bIsMirrored != SearchResult.bIsMirrored;
+				if (bResultChanged)
+				{
+					PHYSANIM_LOG(
+						LogPhysAnimBridge,
+						Display,
+						TEXT("[PhysAnim] Locomotion transition reranked %s@%.3f to %s@%.3f (cost=%.6f mimicDeltaL2=%.3f)."),
+						*GetNameSafe(SearchResult.SelectedAnim),
+						SearchResult.SelectedTime,
+						*GetNameSafe(CompatibleResult.SelectedAnim),
+						CompatibleResult.SelectedTime,
+						CandidateScores[SelectedScoreIndex].PoseCost,
+						CandidateScores[SelectedScoreIndex].TransitionDiscontinuity);
+					SearchResult = CompatibleResult;
+					BridgePoseSearchLatchedWalkResult = SearchResult;
+					bHasBridgePoseSearchLatchedWalkResult = true;
+				}
+			}
+		}
+
+		if (bPoseSearchValid)
+		{
+			LastValidPoseSearchResult = SearchResult;
+			ConsecutiveInvalidPoseSearchFrames = 0;
+		}
+
 		TArray<FPhysAnimFuturePoseSample> MannyFuturePoseSamples;
-		if (!SampleFuturePoses(SearchResult, MannyFuturePoseSamples, OutError))
+#if WITH_DEV_AUTOMATION_TESTS
+		PhysAnimBridge::FPhysAnimMimicFrameDiagnostics* const MimicFrameDiagnosticsForSampling =
+			bPolicyInputProvenanceTraceEnabledForTesting ? &MimicFrameDiagnostics : nullptr;
+#else
+		PhysAnimBridge::FPhysAnimMimicFrameDiagnostics* const MimicFrameDiagnosticsForSampling = nullptr;
+#endif
+		if (!SampleFuturePoses(
+				SearchResult,
+				MannyFuturePoseSamples,
+				OutError,
+				MimicFrameDiagnosticsForSampling))
 		{
 			return;
 		}
@@ -249,6 +502,8 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		}
 #if WITH_DEV_AUTOMATION_TESTS
 		const TArray<FPhysAnimFuturePoseSample> RawCanonicalFuturePoseSamplesForReplay = FuturePoseSamples;
+		TArray<float> RawQueryTrajectorySampleTimesSecondsForReplay;
+		TArray<FTransform> RawQueryTrajectoryWorldTransformsCmForReplay;
 		TArray<float> QueryTrajectorySampleTimesSecondsForReplay;
 		TArray<FTransform> QueryTrajectoryWorldTransformsCmForReplay;
 #endif
@@ -271,6 +526,15 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 				OutError = TEXT("E80 locomotion mimic placement requires an initialized Pose Search trajectory.");
 				return;
 			}
+#if WITH_DEV_AUTOMATION_TESTS
+			RawQueryTrajectorySampleTimesSecondsForReplay.Reserve(BridgePoseSearchTrajectory.Samples.Num());
+			RawQueryTrajectoryWorldTransformsCmForReplay.Reserve(BridgePoseSearchTrajectory.Samples.Num());
+			for (const FTransformTrajectorySample& RawTrajectorySample : BridgePoseSearchTrajectory.Samples)
+			{
+				RawQueryTrajectorySampleTimesSecondsForReplay.Add(RawTrajectorySample.TimeInSeconds);
+				RawQueryTrajectoryWorldTransformsCmForReplay.Add(RawTrajectorySample.GetTransform());
+			}
+#endif
 			const FTransformTrajectorySample CurrentTrajectorySample =
 				BridgePoseSearchTrajectory.GetSampleAtTime(0.0f, true);
 			const PhysAnimFrameContract::FWorldTransformCm CurrentQueryWorldRoot(
@@ -316,6 +580,59 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		}
 
 #if WITH_DEV_AUTOMATION_TESTS
+		constexpr int32 CanonicalRootBodyIndex = 0;
+		constexpr int32 CanonicalLeftFootBodyIndex = 3;
+		if (bPolicyInputProvenanceTraceEnabledForTesting &&
+			CurrentBodySamples.IsValidIndex(CanonicalRootBodyIndex) &&
+			CurrentBodySamples.IsValidIndex(CanonicalLeftFootBodyIndex) &&
+			RawCanonicalFuturePoseSamplesForReplay.IsValidIndex(0) &&
+			FuturePoseSamples.IsValidIndex(0) &&
+			RawCanonicalFuturePoseSamplesForReplay[0].BodyTransforms.IsValidIndex(CanonicalRootBodyIndex) &&
+			RawCanonicalFuturePoseSamplesForReplay[0].BodyTransforms.IsValidIndex(CanonicalLeftFootBodyIndex) &&
+			FuturePoseSamples[0].BodyTransforms.IsValidIndex(CanonicalRootBodyIndex) &&
+			FuturePoseSamples[0].BodyTransforms.IsValidIndex(CanonicalLeftFootBodyIndex))
+		{
+			MimicFrameDiagnostics.bValid = true;
+			MimicFrameDiagnostics.SelectedAnimation = GetNameSafe(SearchResult.SelectedAnim);
+			MimicFrameDiagnostics.SelectedTimeSeconds = SearchResult.SelectedTime;
+			MimicFrameDiagnostics.bMirrored = SearchResult.bIsMirrored;
+			MimicFrameDiagnostics.FirstFutureTimeSeconds = FuturePoseSamples[0].FutureTimeSeconds;
+			MimicFrameDiagnostics.ReferenceWorldRootProtoMeters = MimicTargetReferenceWorldRoot;
+			MimicFrameDiagnostics.ReferenceDataRootProtoMeters = MimicTargetReferenceDataRoot;
+			MimicFrameDiagnostics.CurrentRootProtoMeters = CurrentBodySamples[CanonicalRootBodyIndex].Position;
+			MimicFrameDiagnostics.CurrentLeftFootProtoMeters = CurrentBodySamples[CanonicalLeftFootBodyIndex].Position;
+			MimicFrameDiagnostics.RawFirstFutureRootProtoMeters =
+				RawCanonicalFuturePoseSamplesForReplay[0].BodyTransforms[CanonicalRootBodyIndex].GetLocation();
+			MimicFrameDiagnostics.RawFirstFutureLeftFootProtoMeters =
+				RawCanonicalFuturePoseSamplesForReplay[0].BodyTransforms[CanonicalLeftFootBodyIndex].GetLocation();
+			MimicFrameDiagnostics.PlacedFirstFutureRootProtoMeters =
+				FuturePoseSamples[0].BodyTransforms[CanonicalRootBodyIndex].GetLocation();
+			MimicFrameDiagnostics.PlacedFirstFutureLeftFootProtoMeters =
+				FuturePoseSamples[0].BodyTransforms[CanonicalLeftFootBodyIndex].GetLocation();
+
+			constexpr int32 RotationProbeFutureIndex = 2;
+			constexpr int32 CanonicalRightFootBodyIndex = 7;
+			if (RawCanonicalFuturePoseSamplesForReplay.IsValidIndex(RotationProbeFutureIndex) &&
+				FuturePoseSamples.IsValidIndex(RotationProbeFutureIndex) &&
+				RawCanonicalFuturePoseSamplesForReplay[RotationProbeFutureIndex].BodyTransforms.IsValidIndex(CanonicalRootBodyIndex) &&
+				RawCanonicalFuturePoseSamplesForReplay[RotationProbeFutureIndex].BodyTransforms.IsValidIndex(CanonicalRightFootBodyIndex) &&
+				FuturePoseSamples[RotationProbeFutureIndex].BodyTransforms.IsValidIndex(CanonicalRootBodyIndex) &&
+				FuturePoseSamples[RotationProbeFutureIndex].BodyTransforms.IsValidIndex(CanonicalRightFootBodyIndex))
+			{
+				MimicFrameDiagnostics.RotationProbeFutureIndex = RotationProbeFutureIndex;
+				MimicFrameDiagnostics.RotationProbeFutureTimeSeconds =
+					FuturePoseSamples[RotationProbeFutureIndex].FutureTimeSeconds;
+				MimicFrameDiagnostics.RawProbeFutureRootRotation =
+					RawCanonicalFuturePoseSamplesForReplay[RotationProbeFutureIndex].BodyTransforms[CanonicalRootBodyIndex].GetRotation();
+				MimicFrameDiagnostics.RawProbeFutureRightFootRotation =
+					RawCanonicalFuturePoseSamplesForReplay[RotationProbeFutureIndex].BodyTransforms[CanonicalRightFootBodyIndex].GetRotation();
+				MimicFrameDiagnostics.PlacedProbeFutureRootRotation =
+					FuturePoseSamples[RotationProbeFutureIndex].BodyTransforms[CanonicalRootBodyIndex].GetRotation();
+				MimicFrameDiagnostics.PlacedProbeFutureRightFootRotation =
+					FuturePoseSamples[RotationProbeFutureIndex].BodyTransforms[CanonicalRightFootBodyIndex].GetRotation();
+			}
+		}
+
 		const bool bRecordFirstPolicyGroundReference =
 			bStartupChronologyTraceEnabledForTesting &&
 			StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
@@ -352,6 +669,17 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			MimicTargetReferenceWorldRoot,
 			MimicTargetReferenceDataRoot,
 			MimicCurrentReferenceBodySamples);
+#if WITH_DEV_AUTOMATION_TESTS
+		if (MimicFrameDiagnostics.bValid &&
+			MimicCurrentReferenceBodySamples.IsValidIndex(0) &&
+			MimicCurrentReferenceBodySamples.IsValidIndex(7))
+		{
+			MimicFrameDiagnostics.CurrentDataRootRotation =
+				MimicCurrentReferenceBodySamples[0].Rotation;
+			MimicFrameDiagnostics.CurrentDataRightFootRotation =
+				MimicCurrentReferenceBodySamples[7].Rotation;
+		}
+#endif
 
 		if (!PhysAnimBridge::BuildMimicTargetPoses(MimicCurrentReferenceBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, OutError))
 		{
@@ -470,6 +798,16 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 				SkeletalMesh ? SkeletalMesh->GetComponentTransform() : FTransform::Identity,
 				MimicTargetReferenceWorldRoot,
 				MimicTargetReferenceDataRoot,
+				BridgeIntentState.IntentMagnitude,
+				BridgeTrajectoryState.DesiredVelocityCmPerSecond,
+				BridgeTrajectoryState.AcceptedVelocityCmPerSecond,
+				BridgeTrajectoryState.QueryVelocityCmPerSecond,
+				EffectiveSettings.bBridgePoseSearchUseStabilizedWalkQuerySpeed,
+				EffectiveSettings.BridgePoseSearchWalkIntentThreshold,
+				EffectiveSettings.BridgePoseSearchStabilizedWalkSpeedCmPerSecond,
+				EffectiveSettings.BridgePoseSearchIdlePredictedSpeedCutoffCmPerSecond,
+				RawQueryTrajectorySampleTimesSecondsForReplay,
+				RawQueryTrajectoryWorldTransformsCmForReplay,
 				QueryTrajectorySampleTimesSecondsForReplay,
 				QueryTrajectoryWorldTransformsCmForReplay,
 				MannyCurrentBodySamples,

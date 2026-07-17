@@ -425,12 +425,8 @@ namespace PhysAnimFrameContract
 			return false;
 		}
 
-		const FTransform& CurrentQuery = CurrentQueryWorldRoot.Get();
 		const FTransform& CurrentSelectedWorld = CurrentSelectedWorldRoot.Get();
 		const FTransform& CurrentSelectedData = CurrentSelectedDataRoot.Get();
-		const FQuat WorldToDataRotation = (
-			CurrentSelectedData.GetRotation() *
-			CurrentSelectedWorld.GetRotation().Inverse()).GetNormalized();
 
 		OutPlacedFuturePoses.Reserve(RawFuturePoses.Num());
 		for (int32 FutureIndex = 0; FutureIndex < RawFuturePoses.Num(); ++FutureIndex)
@@ -464,28 +460,14 @@ namespace PhysAnimFrameContract
 			}
 
 			const FTransform& FutureQuery = FutureQueryRoot.Get();
-			const FVector UeWorldDeltaCm =
-				FutureQuery.GetLocation() - CurrentQuery.GetLocation();
-			const FQuat UeWorldDeltaRotation = (
-				FutureQuery.GetRotation() * CurrentQuery.GetRotation().Inverse()).GetNormalized();
-			const FVector ProtoWorldDeltaMeters =
-				PhysAnimBridge::UeWorldPositionToProtoRuntime(UeWorldDeltaCm);
-			const FQuat ProtoWorldDeltaRotation =
-				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(UeWorldDeltaRotation);
-
-			const FVector DesiredWorldRootPosition =
-				CurrentSelectedWorld.GetLocation() + ProtoWorldDeltaMeters;
-			const FQuat DesiredWorldRootRotation = (
-				ProtoWorldDeltaRotation * CurrentSelectedWorld.GetRotation()).GetNormalized();
-			const FVector DesiredDataRootPosition =
-				CurrentSelectedData.GetLocation() +
-				WorldToDataRotation.RotateVector(
-					DesiredWorldRootPosition - CurrentSelectedWorld.GetLocation());
-			const FQuat DesiredDataRootRotation = (
-				WorldToDataRotation * DesiredWorldRootRotation).GetNormalized();
-			const FTransform DesiredDataRoot(
-				DesiredDataRootRotation,
-				DesiredDataRootPosition);
+			const FTransform FutureQueryProtoWorld(
+				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(FutureQuery.GetRotation()),
+				PhysAnimBridge::UeWorldPositionToProtoRuntime(FutureQuery.GetLocation()),
+				FutureQuery.GetScale3D());
+			const FTransform DesiredDataRoot = TransformWorldToData(
+				FutureQueryProtoWorld,
+				CurrentSelectedWorld,
+				CurrentSelectedData);
 
 			const FTransform& RawRoot = RawFuture.BodyTransforms[0];
 			const FQuat AlignmentRotation = (

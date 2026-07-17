@@ -479,6 +479,16 @@ namespace PhysAnimBridge
 			const FTransform& InMeshWorldTransform,
 			const FTransform& InSelectedAnimationWorldRootProtoMeters,
 			const FTransform& InSelectedAnimationDataRootProtoMeters,
+			float InIntentMagnitude,
+			const FVector& InDesiredVelocityCmPerSecond,
+			const FVector& InAcceptedVelocityCmPerSecond,
+			const FVector& InResolvedQueryVelocityCmPerSecond,
+			bool bInUseStabilizedWalkQuerySpeed,
+			float InWalkIntentThreshold,
+			float InStabilizedWalkSpeedCmPerSecond,
+			float InIdlePredictedSpeedCutoffCmPerSecond,
+			TConstArrayView<float> InRawQueryTrajectorySampleTimesSeconds,
+			TConstArrayView<FTransform> InRawQueryTrajectoryWorldTransformsCm,
 			TConstArrayView<float> InQueryTrajectorySampleTimesSeconds,
 			TConstArrayView<FTransform> InQueryTrajectoryWorldTransformsCm,
 			TConstArrayView<FPhysAnimBodySample> InLiveBodySamplesProtoWorldMeters,
@@ -505,6 +515,16 @@ namespace PhysAnimBridge
 		FTransform MeshWorldTransform = FTransform::Identity;
 		FTransform SelectedAnimationWorldRootProtoMeters = FTransform::Identity;
 		FTransform SelectedAnimationDataRootProtoMeters = FTransform::Identity;
+		float IntentMagnitude = 0.0f;
+		FVector DesiredVelocityCmPerSecond = FVector::ZeroVector;
+		FVector AcceptedVelocityCmPerSecond = FVector::ZeroVector;
+		FVector ResolvedQueryVelocityCmPerSecond = FVector::ZeroVector;
+		bool bUseStabilizedWalkQuerySpeed = false;
+		float WalkIntentThreshold = 0.0f;
+		float StabilizedWalkSpeedCmPerSecond = 0.0f;
+		float IdlePredictedSpeedCutoffCmPerSecond = 0.0f;
+		TArray<float> RawQueryTrajectorySampleTimesSeconds;
+		TArray<FTransform> RawQueryTrajectoryWorldTransformsCm;
 		TArray<float> QueryTrajectorySampleTimesSeconds;
 		TArray<FTransform> QueryTrajectoryWorldTransformsCm;
 		TArray<FPhysAnimBodySample> LiveBodySamplesProtoWorldMeters;
@@ -529,6 +549,96 @@ namespace PhysAnimBridge
 
 	PHYSANIMPLUGIN_API bool ValidateLocomotionFrameReplaySnapshot(
 		const FPhysAnimLocomotionFrameReplaySnapshot& Snapshot,
+		FString& OutError);
+
+	struct PHYSANIMPLUGIN_API FPhysAnimLocomotionTransitionCandidateScore
+	{
+		float PoseCost = 0.0f;
+		float TransitionDiscontinuity = 0.0f;
+	};
+
+	PHYSANIMPLUGIN_API int32 SelectNearOptimalLocomotionTransitionCandidate(
+		TConstArrayView<FPhysAnimLocomotionTransitionCandidateScore> Candidates,
+		float MaxRelativePoseCostIncrease,
+		float MinimumDiscontinuityImprovement);
+
+	PHYSANIMPLUGIN_API bool BlendMimicTargetPosesForTransition(
+		TConstArrayView<float> SourceMimicTarget,
+		TConstArrayView<float> TargetMimicTarget,
+		float Alpha,
+		TArray<float>& OutBlendedMimicTarget,
+		FString& OutError);
+
+	struct PHYSANIMPLUGIN_API FPhysAnimPoseSearchTransitionCandidateDiagnostics
+	{
+		FString Animation;
+		float SelectedTimeSeconds = 0.0f;
+		bool bMirrored = false;
+		float PoseCost = 0.0f;
+		float LeftFootOrientationDeltaDegrees = 0.0f;
+		float RightFootOrientationDeltaDegrees = 0.0f;
+		float MaxFootOrientationDeltaDegrees = 0.0f;
+		float MimicTargetStepDeltaL2 = 0.0f;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimMimicFrameDiagnostics
+	{
+		bool bValid = false;
+		FString SelectedAnimation;
+		float SelectedTimeSeconds = 0.0f;
+		bool bMirrored = false;
+		float FirstFutureTimeSeconds = 0.0f;
+		int32 RotationProbeFutureIndex = INDEX_NONE;
+		float RotationProbeFutureTimeSeconds = 0.0f;
+		FTransform ReferenceWorldRootProtoMeters = FTransform::Identity;
+		FTransform ReferenceDataRootProtoMeters = FTransform::Identity;
+		FVector CurrentRootProtoMeters = FVector::ZeroVector;
+		FVector CurrentLeftFootProtoMeters = FVector::ZeroVector;
+		FVector RawFirstFutureRootProtoMeters = FVector::ZeroVector;
+		FVector RawFirstFutureLeftFootProtoMeters = FVector::ZeroVector;
+		FVector PlacedFirstFutureRootProtoMeters = FVector::ZeroVector;
+		FVector PlacedFirstFutureLeftFootProtoMeters = FVector::ZeroVector;
+		FQuat RawMannyProbeFutureRootRotation = FQuat::Identity;
+		FQuat RawMannyProbeFutureRightFootRotation = FQuat::Identity;
+		FQuat CorrectedMannyProbeFutureRootRotation = FQuat::Identity;
+		FQuat CorrectedMannyProbeFutureRightFootRotation = FQuat::Identity;
+		FQuat CurrentDataRootRotation = FQuat::Identity;
+		FQuat CurrentDataRightFootRotation = FQuat::Identity;
+		FQuat RawProbeFutureRootRotation = FQuat::Identity;
+		FQuat RawProbeFutureRightFootRotation = FQuat::Identity;
+		FQuat PlacedProbeFutureRootRotation = FQuat::Identity;
+		FQuat PlacedProbeFutureRightFootRotation = FQuat::Identity;
+		bool bIdleToLocomotionCandidateScan = false;
+		TArray<FPhysAnimPoseSearchTransitionCandidateDiagnostics> LocomotionTransitionCandidates;
+
+		void Reset()
+		{
+			*this = FPhysAnimMimicFrameDiagnostics();
+		}
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimPoseSearchChannelSlice
+	{
+		FString Label;
+		int32 DataOffset = INDEX_NONE;
+		int32 Cardinality = 0;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimPoseSearchChannelCost
+	{
+		FString Label;
+		int32 DataOffset = INDEX_NONE;
+		int32 Cardinality = 0;
+		float Cost = 0.0f;
+	};
+
+	PHYSANIMPLUGIN_API bool CalculatePoseSearchChannelCosts(
+		TConstArrayView<float> PoseValues,
+		TConstArrayView<float> QueryValues,
+		TConstArrayView<float> WeightsSqrt,
+		TConstArrayView<FPhysAnimPoseSearchChannelSlice> ChannelSlices,
+		TArray<FPhysAnimPoseSearchChannelCost>& OutChannelCosts,
+		float& OutTotalCost,
 		FString& OutError);
 
 	inline constexpr const TCHAR* FirstPolicyBodySourceFingerprintAlgorithm =

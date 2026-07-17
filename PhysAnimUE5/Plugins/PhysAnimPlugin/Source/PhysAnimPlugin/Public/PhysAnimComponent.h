@@ -1477,6 +1477,22 @@ public:
 		return Mode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked;
 	}
 	FVector GetAcceptedShellPlanarVelocity() const { return BridgeShellState.AcceptedPlanarVelocityCmPerSecond; }
+	float GetBridgeIntentMagnitudeForDiagnostics() const { return BridgeIntentState.IntentMagnitude; }
+	FVector GetBridgeDesiredVelocityForDiagnostics() const { return BridgeTrajectoryState.DesiredVelocityCmPerSecond; }
+	FVector GetBridgeAcceptedVelocityForDiagnostics() const { return BridgeTrajectoryState.AcceptedVelocityCmPerSecond; }
+	FVector GetBridgeQueryVelocityForDiagnostics() const { return BridgeTrajectoryState.QueryVelocityCmPerSecond; }
+	const FString& GetPoseSearchRawBestAnimationForDiagnostics() const { return PoseSearchRawBestAnimationForDiagnostics; }
+	float GetPoseSearchRawBestCostForDiagnostics() const { return PoseSearchRawBestCostForDiagnostics; }
+	const FString& GetPoseSearchBestIdleAnimationForDiagnostics() const { return PoseSearchBestIdleAnimationForDiagnostics; }
+	float GetPoseSearchBestIdleCostForDiagnostics() const { return PoseSearchBestIdleCostForDiagnostics; }
+	const FString& GetPoseSearchBestLocomotionAnimationForDiagnostics() const { return PoseSearchBestLocomotionAnimationForDiagnostics; }
+	float GetPoseSearchBestLocomotionCostForDiagnostics() const { return PoseSearchBestLocomotionCostForDiagnostics; }
+	const FString& GetPoseSearchCommandHistoryBestIdleAnimationForDiagnostics() const { return PoseSearchCommandHistoryBestIdleAnimationForDiagnostics; }
+	float GetPoseSearchCommandHistoryBestIdleCostForDiagnostics() const { return PoseSearchCommandHistoryBestIdleCostForDiagnostics; }
+	const FString& GetPoseSearchCommandHistoryBestLocomotionAnimationForDiagnostics() const { return PoseSearchCommandHistoryBestLocomotionAnimationForDiagnostics; }
+	float GetPoseSearchCommandHistoryBestLocomotionCostForDiagnostics() const { return PoseSearchCommandHistoryBestLocomotionCostForDiagnostics; }
+	const TArray<PhysAnimBridge::FPhysAnimPoseSearchChannelCost>& GetPoseSearchBestIdleChannelCostsForDiagnostics() const { return PoseSearchBestIdleChannelCostsForDiagnostics; }
+	const TArray<PhysAnimBridge::FPhysAnimPoseSearchChannelCost>& GetPoseSearchBestLocomotionChannelCostsForDiagnostics() const { return PoseSearchBestLocomotionChannelCostsForDiagnostics; }
 	float GetCurrentShellPlanarOffsetDeltaCm() const;
 	float GetCurrentShellPlanarVelocityDeltaCmPerSecond() const;
 	void ReanchorShellCouplingReferenceToCurrentRoot(const TCHAR* Source = TEXT("unknown"));
@@ -1496,6 +1512,8 @@ public:
 	const TMap<FName, FQuat>& GetPolicyBlendStartControlTargetRotationsForDiagnostics() const { return PolicyBlendStartControlTargetRotations; }
 	const TArray<float>& GetRawPolicyActionsForDiagnostics() const { return ActionOutputBuffer; }
 	const TArray<float>& GetConditionedPolicyActionsForDiagnostics() const { return ConditionedActionBuffer; }
+	const TArray<float>& GetMimicTargetPosesForDiagnostics() const { return MimicTargetPosesBuffer; }
+	const PhysAnimBridge::FPhysAnimMimicFrameDiagnostics& GetMimicFrameDiagnostics() const { return MimicFrameDiagnostics; }
 	const PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot& GetFirstPolicyInferenceSnapshotForDiagnostics() const { return FirstPolicyInferenceSnapshot; }
 	static void ApplyCausalStandingPolicyActionCompatibility(
 		bool bStandingPolicyMode,
@@ -2521,7 +2539,11 @@ private:
 		FString& OutError) const;
 	void CaptureStartupChronologySampleForTesting(const TCHAR* Stage);
 #endif
-	bool SampleFuturePoses(const FPoseSearchBlueprintResult& SearchResult, TArray<FPhysAnimFuturePoseSample>& OutFutureSamples, FString& OutError) const;
+	bool SampleFuturePoses(
+		const FPoseSearchBlueprintResult& SearchResult,
+		TArray<FPhysAnimFuturePoseSample>& OutFutureSamples,
+		FString& OutError,
+		PhysAnimBridge::FPhysAnimMimicFrameDiagnostics* OutMimicFrameDiagnostics = nullptr) const;
 	bool ResolveMimicTargetReferenceDataFrame(
 		const FPoseSearchBlueprintResult& SearchResult,
 		FTransform& OutWorldRoot,
@@ -2858,6 +2880,24 @@ private:
 	float BridgePoseSearchLatchedQuerySpeedCmPerSecond = 0.0f;
 	double BridgePoseSearchWalkLatchExpireTimeSeconds = -1.0;
 	bool bHasBridgePoseSearchLatchedWalkResult = false;
+	FString PoseSearchRawBestAnimationForDiagnostics;
+	float PoseSearchRawBestCostForDiagnostics = -1.0f;
+	FString PoseSearchBestIdleAnimationForDiagnostics;
+	float PoseSearchBestIdleCostForDiagnostics = -1.0f;
+	FString PoseSearchBestLocomotionAnimationForDiagnostics;
+	float PoseSearchBestLocomotionCostForDiagnostics = -1.0f;
+	FString PoseSearchCommandHistoryBestIdleAnimationForDiagnostics;
+	float PoseSearchCommandHistoryBestIdleCostForDiagnostics = -1.0f;
+	FString PoseSearchCommandHistoryBestLocomotionAnimationForDiagnostics;
+	float PoseSearchCommandHistoryBestLocomotionCostForDiagnostics = -1.0f;
+	TArray<PhysAnimBridge::FPhysAnimPoseSearchChannelCost> PoseSearchBestIdleChannelCostsForDiagnostics;
+	TArray<PhysAnimBridge::FPhysAnimPoseSearchChannelCost> PoseSearchBestLocomotionChannelCostsForDiagnostics;
+	TArray<FPoseSearchBlueprintResult> PoseSearchTopLocomotionCandidateResultsForDiagnostics;
+	TArray<float> PoseSearchTopLocomotionCandidateCostsForDiagnostics;
+	TArray<float> BridgeLocomotionMimicTransitionSource;
+	float BridgeLocomotionMimicTransitionElapsedSeconds = 0.0f;
+	bool bBridgeLocomotionMimicTransitionActive = false;
+	PhysAnimBridge::FPhysAnimMimicFrameDiagnostics MimicFrameDiagnostics;
 	bool bBridgePoseSearchTrajectoryInitialized = false;
 	EBridgeLocomotionAuthorityState BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
 	EBridgeLocomotionRequestState BridgeLocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;

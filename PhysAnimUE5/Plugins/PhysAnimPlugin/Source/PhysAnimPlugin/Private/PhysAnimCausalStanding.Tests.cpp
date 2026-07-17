@@ -163,6 +163,7 @@ namespace
 		}
 		return JsonActions;
 	}
+
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -2495,7 +2496,7 @@ namespace
 		}
 
 		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-		Root->SetStringField(TEXT("schema_version"), TEXT("physanim-locomotion-frame-replay/v1"));
+		Root->SetStringField(TEXT("schema_version"), TEXT("physanim-locomotion-frame-replay/v2"));
 		Root->SetStringField(TEXT("authority"), TEXT("E80_DETERMINISTIC_REPLAY"));
 		Root->SetBoolField(TEXT("enabled"), bEnabled);
 		Root->SetBoolField(TEXT("captured"), Snapshot.bCaptured);
@@ -2520,6 +2521,41 @@ namespace
 		Root->SetObjectField(
 			TEXT("selected_animation_data_root_proto_meters"),
 			BuildPolicyInputProvenanceTransformJson(Snapshot.SelectedAnimationDataRootProtoMeters));
+		Root->SetNumberField(TEXT("intent_magnitude"), Snapshot.IntentMagnitude);
+		Root->SetArrayField(
+			TEXT("desired_velocity_cm_per_second"),
+			BuildVectorJsonArray(Snapshot.DesiredVelocityCmPerSecond));
+		Root->SetArrayField(
+			TEXT("accepted_velocity_cm_per_second"),
+			BuildVectorJsonArray(Snapshot.AcceptedVelocityCmPerSecond));
+		Root->SetArrayField(
+			TEXT("resolved_query_velocity_cm_per_second"),
+			BuildVectorJsonArray(Snapshot.ResolvedQueryVelocityCmPerSecond));
+		Root->SetBoolField(
+			TEXT("use_stabilized_walk_query_speed"),
+			Snapshot.bUseStabilizedWalkQuerySpeed);
+		Root->SetNumberField(TEXT("walk_intent_threshold"), Snapshot.WalkIntentThreshold);
+		Root->SetNumberField(
+			TEXT("stabilized_walk_speed_cm_per_second"),
+			Snapshot.StabilizedWalkSpeedCmPerSecond);
+		Root->SetNumberField(
+			TEXT("idle_predicted_speed_cutoff_cm_per_second"),
+			Snapshot.IdlePredictedSpeedCutoffCmPerSecond);
+
+		TArray<TSharedPtr<FJsonValue>> RawQueryTrajectory;
+		RawQueryTrajectory.Reserve(Snapshot.RawQueryTrajectoryWorldTransformsCm.Num());
+		for (int32 SampleIndex = 0; SampleIndex < Snapshot.RawQueryTrajectoryWorldTransformsCm.Num(); ++SampleIndex)
+		{
+			const TSharedRef<FJsonObject> Sample = BuildPolicyInputProvenanceTransformJson(
+				Snapshot.RawQueryTrajectoryWorldTransformsCm[SampleIndex]);
+			Sample->SetNumberField(
+				TEXT("sample_time_seconds"),
+				Snapshot.RawQueryTrajectorySampleTimesSeconds.IsValidIndex(SampleIndex)
+					? Snapshot.RawQueryTrajectorySampleTimesSeconds[SampleIndex]
+					: -1.0);
+			RawQueryTrajectory.Add(MakeShared<FJsonValueObject>(Sample));
+		}
+		Root->SetArrayField(TEXT("raw_query_trajectory_world_transforms_cm"), RawQueryTrajectory);
 
 		TArray<TSharedPtr<FJsonValue>> QueryTrajectory;
 		QueryTrajectory.Reserve(Snapshot.QueryTrajectoryWorldTransformsCm.Num());
@@ -3525,6 +3561,102 @@ namespace
 				MeasureTargetReadback(PhysicsControl, IntendedTargets, ReadbackMatches, MaxReadbackErrorDegrees);
 			}
 
+			const TArray<float>& MimicTarget = Component->GetMimicTargetPosesForDiagnostics();
+			const PhysAnimBridge::FPhysAnimMimicFrameDiagnostics& MimicFrame =
+				Component->GetMimicFrameDiagnostics();
+			double MimicTargetStepDeltaSquared = 0.0;
+			double MimicRelativeBodyPositionStepDeltaSquared = 0.0;
+			double MimicRootRelativeBodyPositionStepDeltaSquared = 0.0;
+			double MimicRelativeRotationStepDeltaSquared = 0.0;
+			double MimicHeadingRotationStepDeltaSquared = 0.0;
+			double MimicTimeStepDeltaSquared = 0.0;
+			double MimicStepMaxAbs = 0.0;
+			int32 MimicStepMaxIndex = INDEX_NONE;
+			const bool bHasPreviousMimicTarget =
+				LastMimicTargetPoses.Num() == MimicTarget.Num() && !MimicTarget.IsEmpty();
+			if (bHasPreviousMimicTarget)
+			{
+				constexpr int32 MimicFloatsPerFutureStep = 433;
+				constexpr int32 RelativeBodyPositionEnd = 72;
+				constexpr int32 RootRelativeBodyPositionEnd = 144;
+				constexpr int32 RelativeRotationEnd = 288;
+				constexpr int32 HeadingRotationEnd = 432;
+				for (int32 ValueIndex = 0; ValueIndex < MimicTarget.Num(); ++ValueIndex)
+				{
+					const double Difference =
+						static_cast<double>(MimicTarget[ValueIndex]) -
+						static_cast<double>(LastMimicTargetPoses[ValueIndex]);
+					const double DifferenceSquared = Difference * Difference;
+					MimicTargetStepDeltaSquared += DifferenceSquared;
+					const int32 StepLocalIndex = ValueIndex % MimicFloatsPerFutureStep;
+					if (StepLocalIndex < RelativeBodyPositionEnd)
+					{
+						MimicRelativeBodyPositionStepDeltaSquared += DifferenceSquared;
+					}
+					else if (StepLocalIndex < RootRelativeBodyPositionEnd)
+					{
+						MimicRootRelativeBodyPositionStepDeltaSquared += DifferenceSquared;
+					}
+					else if (StepLocalIndex < RelativeRotationEnd)
+					{
+						MimicRelativeRotationStepDeltaSquared += DifferenceSquared;
+					}
+					else if (StepLocalIndex < HeadingRotationEnd)
+					{
+						MimicHeadingRotationStepDeltaSquared += DifferenceSquared;
+					}
+					else
+					{
+						MimicTimeStepDeltaSquared += DifferenceSquared;
+					}
+					const double DifferenceAbs = FMath::Abs(Difference);
+					if (DifferenceAbs > MimicStepMaxAbs)
+					{
+						MimicStepMaxAbs = DifferenceAbs;
+						MimicStepMaxIndex = ValueIndex;
+					}
+				}
+			}
+
+			FString MimicStepMaxCategory;
+			int32 MimicStepMaxFutureIndex = INDEX_NONE;
+			int32 MimicStepMaxBodyIndex = INDEX_NONE;
+			int32 MimicStepMaxComponentIndex = INDEX_NONE;
+			if (MimicStepMaxIndex != INDEX_NONE)
+			{
+				constexpr int32 MimicFloatsPerFutureStep = 433;
+				MimicStepMaxFutureIndex = MimicStepMaxIndex / MimicFloatsPerFutureStep;
+				const int32 StepLocalIndex = MimicStepMaxIndex % MimicFloatsPerFutureStep;
+				if (StepLocalIndex < 72)
+				{
+					MimicStepMaxCategory = TEXT("relative_body_position");
+					MimicStepMaxBodyIndex = StepLocalIndex / 3;
+					MimicStepMaxComponentIndex = StepLocalIndex % 3;
+				}
+				else if (StepLocalIndex < 144)
+				{
+					MimicStepMaxCategory = TEXT("root_relative_body_position");
+					MimicStepMaxBodyIndex = (StepLocalIndex - 72) / 3;
+					MimicStepMaxComponentIndex = (StepLocalIndex - 72) % 3;
+				}
+				else if (StepLocalIndex < 288)
+				{
+					MimicStepMaxCategory = TEXT("relative_rotation_tan_norm");
+					MimicStepMaxBodyIndex = (StepLocalIndex - 144) / 6;
+					MimicStepMaxComponentIndex = (StepLocalIndex - 144) % 6;
+				}
+				else if (StepLocalIndex < 432)
+				{
+					MimicStepMaxCategory = TEXT("heading_rotation_tan_norm");
+					MimicStepMaxBodyIndex = (StepLocalIndex - 288) / 6;
+					MimicStepMaxComponentIndex = (StepLocalIndex - 288) % 6;
+				}
+				else
+				{
+					MimicStepMaxCategory = TEXT("future_time_seconds");
+				}
+			}
+
 			const TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
 			LatestTargetReadbackMatchRatio = Diagnostics.NumTotalTargetsWritten > 0
 				? static_cast<double>(ReadbackMatches) / static_cast<double>(Diagnostics.NumTotalTargetsWritten)
@@ -3538,16 +3670,212 @@ namespace
 			Row->SetBoolField(TEXT("trajectory_conditioning_published"), Config.bScriptedLocomotionRun && Config.Variant != TEXT("DropTrajectoryConditioning") && ScriptStep.bMove);
 			Row->SetBoolField(TEXT("pose_search_valid"), Metrics.PoseSearchQueryCount > LastPoseSearchQueryCount && Metrics.PoseSearchValidResultCount > LastPoseSearchValidCount);
 			Row->SetStringField(TEXT("selected_animation"), Metrics.PoseSearchSelectedAnimationName);
+			Row->SetBoolField(TEXT("mimic_frame_valid"), MimicFrame.bValid);
+			Row->SetStringField(TEXT("mimic_frame_selected_animation"), MimicFrame.SelectedAnimation);
+			Row->SetNumberField(TEXT("mimic_frame_selected_time_sec"), MimicFrame.SelectedTimeSeconds);
+			Row->SetBoolField(TEXT("mimic_frame_mirrored"), MimicFrame.bMirrored);
+			Row->SetNumberField(TEXT("mimic_frame_first_future_time_sec"), MimicFrame.FirstFutureTimeSeconds);
+			Row->SetNumberField(TEXT("mimic_rotation_probe_future_index"), MimicFrame.RotationProbeFutureIndex);
+			Row->SetNumberField(TEXT("mimic_rotation_probe_future_time_sec"), MimicFrame.RotationProbeFutureTimeSeconds);
+			Row->SetArrayField(
+				TEXT("mimic_raw_manny_probe_future_root_rotation_xyzw"),
+				BuildQuaternionJsonArray(MimicFrame.RawMannyProbeFutureRootRotation));
+			Row->SetArrayField(
+				TEXT("mimic_raw_manny_probe_future_right_foot_rotation_xyzw"),
+				BuildQuaternionJsonArray(MimicFrame.RawMannyProbeFutureRightFootRotation));
+			Row->SetArrayField(
+				TEXT("mimic_corrected_manny_probe_future_root_rotation_xyzw"),
+				BuildQuaternionJsonArray(MimicFrame.CorrectedMannyProbeFutureRootRotation));
+			Row->SetArrayField(
+				TEXT("mimic_corrected_manny_probe_future_right_foot_rotation_xyzw"),
+				BuildQuaternionJsonArray(MimicFrame.CorrectedMannyProbeFutureRightFootRotation));
+			Row->SetArrayField(
+				TEXT("mimic_current_data_root_rotation_xyzw"),
+				BuildQuaternionJsonArray(MimicFrame.CurrentDataRootRotation));
+			Row->SetArrayField(
+				TEXT("mimic_current_data_right_foot_rotation_xyzw"),
+				BuildQuaternionJsonArray(MimicFrame.CurrentDataRightFootRotation));
+			Row->SetArrayField(
+				TEXT("mimic_raw_probe_future_root_rotation_xyzw"),
+				BuildQuaternionJsonArray(MimicFrame.RawProbeFutureRootRotation));
+			Row->SetArrayField(
+				TEXT("mimic_raw_probe_future_right_foot_rotation_xyzw"),
+				BuildQuaternionJsonArray(MimicFrame.RawProbeFutureRightFootRotation));
+			Row->SetArrayField(
+				TEXT("mimic_placed_probe_future_root_rotation_xyzw"),
+				BuildQuaternionJsonArray(MimicFrame.PlacedProbeFutureRootRotation));
+			Row->SetArrayField(
+				TEXT("mimic_placed_probe_future_right_foot_rotation_xyzw"),
+				BuildQuaternionJsonArray(MimicFrame.PlacedProbeFutureRightFootRotation));
+			Row->SetBoolField(
+				TEXT("pose_search_idle_to_locomotion_candidate_scan"),
+				MimicFrame.bIdleToLocomotionCandidateScan);
+			TArray<TSharedPtr<FJsonValue>> LocomotionTransitionCandidates;
+			LocomotionTransitionCandidates.Reserve(
+				MimicFrame.LocomotionTransitionCandidates.Num());
+			for (const PhysAnimBridge::FPhysAnimPoseSearchTransitionCandidateDiagnostics& Candidate :
+				MimicFrame.LocomotionTransitionCandidates)
+			{
+				const TSharedRef<FJsonObject> CandidateJson = MakeShared<FJsonObject>();
+				CandidateJson->SetStringField(TEXT("animation"), Candidate.Animation);
+				CandidateJson->SetNumberField(
+					TEXT("selected_time_sec"),
+					Candidate.SelectedTimeSeconds);
+				CandidateJson->SetBoolField(TEXT("mirrored"), Candidate.bMirrored);
+				CandidateJson->SetNumberField(TEXT("pose_cost"), Candidate.PoseCost);
+				CandidateJson->SetNumberField(
+					TEXT("left_foot_orientation_delta_deg"),
+					Candidate.LeftFootOrientationDeltaDegrees);
+				CandidateJson->SetNumberField(
+					TEXT("right_foot_orientation_delta_deg"),
+					Candidate.RightFootOrientationDeltaDegrees);
+				CandidateJson->SetNumberField(
+					TEXT("max_foot_orientation_delta_deg"),
+					Candidate.MaxFootOrientationDeltaDegrees);
+				CandidateJson->SetNumberField(
+					TEXT("mimic_target_step_delta_l2"),
+					Candidate.MimicTargetStepDeltaL2);
+				LocomotionTransitionCandidates.Add(
+					MakeShared<FJsonValueObject>(CandidateJson));
+			}
+			Row->SetArrayField(
+				TEXT("pose_search_locomotion_transition_candidates"),
+				LocomotionTransitionCandidates);
+			Row->SetObjectField(
+				TEXT("mimic_reference_world_root_proto_meters"),
+				BuildPolicyInputProvenanceTransformJson(MimicFrame.ReferenceWorldRootProtoMeters));
+			Row->SetObjectField(
+				TEXT("mimic_reference_data_root_proto_meters"),
+				BuildPolicyInputProvenanceTransformJson(MimicFrame.ReferenceDataRootProtoMeters));
+			Row->SetArrayField(
+				TEXT("mimic_current_root_proto_meters"),
+				BuildVectorJsonArray(MimicFrame.CurrentRootProtoMeters));
+			Row->SetArrayField(
+				TEXT("mimic_current_left_foot_proto_meters"),
+				BuildVectorJsonArray(MimicFrame.CurrentLeftFootProtoMeters));
+			Row->SetArrayField(
+				TEXT("mimic_raw_first_future_root_proto_meters"),
+				BuildVectorJsonArray(MimicFrame.RawFirstFutureRootProtoMeters));
+			Row->SetArrayField(
+				TEXT("mimic_raw_first_future_left_foot_proto_meters"),
+				BuildVectorJsonArray(MimicFrame.RawFirstFutureLeftFootProtoMeters));
+			Row->SetArrayField(
+				TEXT("mimic_placed_first_future_root_proto_meters"),
+				BuildVectorJsonArray(MimicFrame.PlacedFirstFutureRootProtoMeters));
+			Row->SetArrayField(
+				TEXT("mimic_placed_first_future_left_foot_proto_meters"),
+				BuildVectorJsonArray(MimicFrame.PlacedFirstFutureLeftFootProtoMeters));
+			Row->SetNumberField(
+				TEXT("component_intent_magnitude"),
+				Component->GetBridgeIntentMagnitudeForDiagnostics());
+			Row->SetNumberField(
+				TEXT("component_desired_speed_cm_per_sec"),
+				Component->GetBridgeDesiredVelocityForDiagnostics().Size2D());
+			Row->SetNumberField(
+				TEXT("component_accepted_speed_cm_per_sec"),
+				Component->GetBridgeAcceptedVelocityForDiagnostics().Size2D());
+			Row->SetNumberField(
+				TEXT("component_query_speed_cm_per_sec"),
+				Component->GetBridgeQueryVelocityForDiagnostics().Size2D());
+			Row->SetStringField(
+				TEXT("pose_search_raw_best_animation"),
+				Component->GetPoseSearchRawBestAnimationForDiagnostics());
+			Row->SetNumberField(
+				TEXT("pose_search_raw_best_cost"),
+				Component->GetPoseSearchRawBestCostForDiagnostics());
+			Row->SetStringField(
+				TEXT("pose_search_best_idle_animation"),
+				Component->GetPoseSearchBestIdleAnimationForDiagnostics());
+			Row->SetNumberField(
+				TEXT("pose_search_best_idle_cost"),
+				Component->GetPoseSearchBestIdleCostForDiagnostics());
+			Row->SetStringField(
+				TEXT("pose_search_best_locomotion_animation"),
+				Component->GetPoseSearchBestLocomotionAnimationForDiagnostics());
+			Row->SetNumberField(
+				TEXT("pose_search_best_locomotion_cost"),
+				Component->GetPoseSearchBestLocomotionCostForDiagnostics());
+			Row->SetStringField(
+				TEXT("pose_search_command_history_best_idle_animation"),
+				Component->GetPoseSearchCommandHistoryBestIdleAnimationForDiagnostics());
+			Row->SetNumberField(
+				TEXT("pose_search_command_history_best_idle_cost"),
+				Component->GetPoseSearchCommandHistoryBestIdleCostForDiagnostics());
+			Row->SetStringField(
+				TEXT("pose_search_command_history_best_locomotion_animation"),
+				Component->GetPoseSearchCommandHistoryBestLocomotionAnimationForDiagnostics());
+			Row->SetNumberField(
+				TEXT("pose_search_command_history_best_locomotion_cost"),
+				Component->GetPoseSearchCommandHistoryBestLocomotionCostForDiagnostics());
+			TArray<TSharedPtr<FJsonValue>> PoseSearchChannelCosts;
+			const TArray<PhysAnimBridge::FPhysAnimPoseSearchChannelCost>& IdleChannelCosts =
+				Component->GetPoseSearchBestIdleChannelCostsForDiagnostics();
+			const TArray<PhysAnimBridge::FPhysAnimPoseSearchChannelCost>& LocomotionChannelCosts =
+				Component->GetPoseSearchBestLocomotionChannelCostsForDiagnostics();
+			if (IdleChannelCosts.Num() == LocomotionChannelCosts.Num())
+			{
+				PoseSearchChannelCosts.Reserve(IdleChannelCosts.Num());
+				for (int32 ChannelIndex = 0; ChannelIndex < IdleChannelCosts.Num(); ++ChannelIndex)
+				{
+					const PhysAnimBridge::FPhysAnimPoseSearchChannelCost& IdleCost =
+						IdleChannelCosts[ChannelIndex];
+					const PhysAnimBridge::FPhysAnimPoseSearchChannelCost& LocomotionCost =
+						LocomotionChannelCosts[ChannelIndex];
+					if (IdleCost.Label != LocomotionCost.Label ||
+						IdleCost.DataOffset != LocomotionCost.DataOffset ||
+						IdleCost.Cardinality != LocomotionCost.Cardinality)
+					{
+						PoseSearchChannelCosts.Reset();
+						break;
+					}
+					const TSharedRef<FJsonObject> Channel = MakeShared<FJsonObject>();
+					Channel->SetStringField(TEXT("label"), IdleCost.Label);
+					Channel->SetNumberField(TEXT("data_offset"), IdleCost.DataOffset);
+					Channel->SetNumberField(TEXT("cardinality"), IdleCost.Cardinality);
+					Channel->SetNumberField(TEXT("idle_cost"), IdleCost.Cost);
+					Channel->SetNumberField(TEXT("locomotion_cost"), LocomotionCost.Cost);
+					Channel->SetNumberField(
+						TEXT("locomotion_minus_idle_cost"),
+						LocomotionCost.Cost - IdleCost.Cost);
+					PoseSearchChannelCosts.Add(MakeShared<FJsonValueObject>(Channel));
+				}
+			}
+			Row->SetArrayField(TEXT("pose_search_channel_costs"), PoseSearchChannelCosts);
 			Row->SetBoolField(TEXT("inference_attempted"), Metrics.PolicyInferenceAttemptCount > LastInferenceAttemptCount);
 			Row->SetBoolField(TEXT("inference_succeeded"), Metrics.PolicyInferenceSuccessCount > LastInferenceSuccessCount);
 			Row->SetNumberField(TEXT("raw_action_l2"), L2Norm(Component->GetRawPolicyActionsForDiagnostics()));
 			Row->SetNumberField(TEXT("conditioned_action_l2"), L2Norm(Component->GetConditionedPolicyActionsForDiagnostics()));
+			Row->SetNumberField(TEXT("mimic_target_l2"), L2Norm(MimicTarget));
+			Row->SetBoolField(TEXT("mimic_target_has_previous"), bHasPreviousMimicTarget);
+			Row->SetNumberField(TEXT("mimic_target_step_delta_l2"), FMath::Sqrt(MimicTargetStepDeltaSquared));
+			Row->SetNumberField(
+				TEXT("mimic_relative_body_position_step_delta_l2"),
+				FMath::Sqrt(MimicRelativeBodyPositionStepDeltaSquared));
+			Row->SetNumberField(
+				TEXT("mimic_root_relative_body_position_step_delta_l2"),
+				FMath::Sqrt(MimicRootRelativeBodyPositionStepDeltaSquared));
+			Row->SetNumberField(
+				TEXT("mimic_relative_rotation_step_delta_l2"),
+				FMath::Sqrt(MimicRelativeRotationStepDeltaSquared));
+			Row->SetNumberField(
+				TEXT("mimic_heading_rotation_step_delta_l2"),
+				FMath::Sqrt(MimicHeadingRotationStepDeltaSquared));
+			Row->SetNumberField(
+				TEXT("mimic_time_step_delta_l2"),
+				FMath::Sqrt(MimicTimeStepDeltaSquared));
+			Row->SetNumberField(TEXT("mimic_target_step_max_abs"), MimicStepMaxAbs);
+			Row->SetNumberField(TEXT("mimic_target_step_max_index"), MimicStepMaxIndex);
+			Row->SetNumberField(TEXT("mimic_target_step_max_future_index"), MimicStepMaxFutureIndex);
+			Row->SetStringField(TEXT("mimic_target_step_max_category"), MimicStepMaxCategory);
+			Row->SetNumberField(TEXT("mimic_target_step_max_body_index"), MimicStepMaxBodyIndex);
+			Row->SetNumberField(TEXT("mimic_target_step_max_component_index"), MimicStepMaxComponentIndex);
 			Row->SetArrayField(TEXT("raw_actions"), BuildPolicyActionJsonArray(Component->GetRawPolicyActionsForDiagnostics()));
 			Row->SetArrayField(TEXT("conditioned_actions"), BuildPolicyActionJsonArray(Component->GetConditionedPolicyActionsForDiagnostics()));
 			Row->SetNumberField(TEXT("target_write_attempt_count"), Diagnostics.NumTotalTargetsWritten);
 			Row->SetNumberField(TEXT("target_readback_match_count"), ReadbackMatches);
 			Row->SetNumberField(TEXT("target_readback_max_error_deg"), MaxReadbackErrorDegrees);
 			PolicyRows.Add(SerializeJson(Row));
+			LastMimicTargetPoses = MimicTarget;
 
 			LastPolicyActionSampleCount = Metrics.PolicyActionSampleCount;
 			LastPoseSearchQueryCount = Metrics.PoseSearchQueryCount;
@@ -4151,6 +4479,7 @@ namespace
 		int32 LastPoseSearchValidCount = 0;
 		int32 LastInferenceAttemptCount = 0;
 		int32 LastInferenceSuccessCount = 0;
+		TArray<float> LastMimicTargetPoses;
 		TArray<FString> PhysicsRows;
 		TArray<FString> PolicyRows;
 	};

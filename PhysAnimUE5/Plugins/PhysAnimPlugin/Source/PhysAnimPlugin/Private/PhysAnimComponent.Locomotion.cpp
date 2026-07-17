@@ -1,6 +1,10 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimLogger.h"
+#include "Animation/AnimationAsset.h"
+#include "PoseSearch/PoseSearchDatabase.h"
+#include "PoseSearch/PoseSearchFeatureChannel.h"
+#include "PoseSearch/PoseSearchIndex.h"
 
 namespace
 {
@@ -1489,6 +1493,8 @@ bool UPhysAnimComponent::QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprin
 {
 	OutSearchResult = FPoseSearchBlueprintResult();
 	OutError.Reset();
+	PoseSearchTopLocomotionCandidateResultsForDiagnostics.Reset();
+	PoseSearchTopLocomotionCandidateCostsForDiagnostics.Reset();
 
 	UAnimInstance* const LocalAnimInstance = AnimInstance.Get();
 	if (!LocalAnimInstance)
@@ -1549,8 +1555,361 @@ bool UPhysAnimComponent::QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprin
 
 	UE::PoseSearch::FSearchResults_Single SearchResults;
 	UPoseSearchLibrary::MotionMatch(SearchContext, AssetsToSearch, ContinuingProperties, SearchResults);
-
 	const UE::PoseSearch::FSearchResult SearchResult = SearchResults.GetBestResult();
+
+	if (SearchResult.IsValid() && bLastValidWasIdle)
+	{
+		FPoseSearchBlueprintResult RawTransitionResult;
+		RawTransitionResult.InitFrom(SearchResult, 1.0f);
+		if (!IsBridgePoseSearchIdleResult(RawTransitionResult))
+		{
+			UE::PoseSearch::FSearchResults TransitionCandidateResults;
+			TransitionCandidateResults.UpdateWith =
+				[&](const UE::PoseSearch::FSearchResult& Candidate)
+				{
+					if (!Candidate.IsValid() || !Candidate.GetCurrentResultAnimationAsset())
+					{
+						return;
+					}
+					UE::PoseSearch::FSearchResult CandidateWithAssetTime = Candidate;
+					if (!CandidateWithAssetTime.IsAssetTimeValid())
+					{
+						if (!CandidateWithAssetTime.Database.IsValid() ||
+							CandidateWithAssetTime.PoseIdx == INDEX_NONE)
+						{
+							return;
+						}
+						CandidateWithAssetTime.SetAssetTime(
+							CandidateWithAssetTime.Database->GetNormalizedAssetTime(
+								CandidateWithAssetTime.PoseIdx));
+					}
+
+					FPoseSearchBlueprintResult CandidateResult;
+					CandidateResult.InitFrom(CandidateWithAssetTime, 1.0f);
+					if (!CandidateResult.SelectedAnim || IsBridgePoseSearchIdleResult(CandidateResult))
+					{
+						return;
+					}
+
+					const float CandidateCost = static_cast<float>(CandidateWithAssetTime.PoseCost);
+					constexpr int32 MaxTransitionCandidates = 12;
+					int32 InsertIndex = 0;
+					while (InsertIndex < PoseSearchTopLocomotionCandidateCostsForDiagnostics.Num() &&
+						PoseSearchTopLocomotionCandidateCostsForDiagnostics[InsertIndex] <= CandidateCost)
+					{
+						++InsertIndex;
+					}
+					if (InsertIndex >= MaxTransitionCandidates)
+					{
+						return;
+					}
+					PoseSearchTopLocomotionCandidateResultsForDiagnostics.Insert(
+						CandidateResult,
+						InsertIndex);
+					PoseSearchTopLocomotionCandidateCostsForDiagnostics.Insert(
+						CandidateCost,
+						InsertIndex);
+					if (PoseSearchTopLocomotionCandidateResultsForDiagnostics.Num() > MaxTransitionCandidates)
+					{
+						PoseSearchTopLocomotionCandidateResultsForDiagnostics.SetNum(MaxTransitionCandidates);
+						PoseSearchTopLocomotionCandidateCostsForDiagnostics.SetNum(MaxTransitionCandidates);
+					}
+				};
+			TransitionCandidateResults.FinalizeResults = []() {};
+			TransitionCandidateResults.GetBestResult = []() { return UE::PoseSearch::FSearchResult(); };
+			TransitionCandidateResults.ShouldPerformSearch = [](float) { return true; };
+			TransitionCandidateResults.IterateOverSearchResults =
+				[](const TFunctionRef<bool(const UE::PoseSearch::FSearchResult&)>) { return false; };
+			const EPoseSearchMode SavedSearchMode = LoadedPoseSearchDatabase->PoseSearchMode;
+			LoadedPoseSearchDatabase->PoseSearchMode = EPoseSearchMode::BruteForce;
+			UPoseSearchLibrary::MotionMatch(
+				SearchContext,
+				AssetsToSearch,
+				ContinuingProperties,
+				TransitionCandidateResults);
+			LoadedPoseSearchDatabase->PoseSearchMode = SavedSearchMode;
+		}
+	}
+
+#if WITH_DEV_AUTOMATION_TESTS
+	if (bPolicyInputProvenanceTraceEnabledForTesting)
+	{
+		PoseSearchRawBestAnimationForDiagnostics.Reset();
+		PoseSearchRawBestCostForDiagnostics = -1.0f;
+		if (SearchResult.IsValid())
+		{
+			FPoseSearchBlueprintResult RawBestResult;
+			RawBestResult.InitFrom(SearchResult, 1.0f);
+			PoseSearchRawBestAnimationForDiagnostics = GetNameSafe(RawBestResult.SelectedAnim);
+			PoseSearchRawBestCostForDiagnostics = static_cast<float>(SearchResult.PoseCost);
+		}
+
+		auto CollectBruteForceCandidateCosts =
+			[&](
+				UE::PoseSearch::FSearchContext& DiagnosticSearchContext,
+				FString& OutBestIdleAnimation,
+				float& OutBestIdleCost,
+				FString& OutBestLocomotionAnimation,
+				float& OutBestLocomotionCost,
+				UE::PoseSearch::FSearchResult* OutBestIdleResult,
+				UE::PoseSearch::FSearchResult* OutBestLocomotionResult,
+				bool bCollectTopLocomotionCandidates)
+			{
+				OutBestIdleAnimation.Reset();
+				OutBestIdleCost = -1.0f;
+				OutBestLocomotionAnimation.Reset();
+				OutBestLocomotionCost = -1.0f;
+				if (OutBestIdleResult)
+				{
+					*OutBestIdleResult = UE::PoseSearch::FSearchResult();
+				}
+				if (OutBestLocomotionResult)
+				{
+					*OutBestLocomotionResult = UE::PoseSearch::FSearchResult();
+				}
+				if (bCollectTopLocomotionCandidates)
+				{
+					PoseSearchTopLocomotionCandidateResultsForDiagnostics.Reset();
+					PoseSearchTopLocomotionCandidateCostsForDiagnostics.Reset();
+				}
+
+				UE::PoseSearch::FSearchResults CandidateDiagnostics;
+				CandidateDiagnostics.UpdateWith =
+					[&](const UE::PoseSearch::FSearchResult& Candidate)
+					{
+						if (!Candidate.IsValid())
+						{
+							return;
+						}
+						const UAnimationAsset* const CandidateAsset = Candidate.GetCurrentResultAnimationAsset();
+						if (!CandidateAsset)
+						{
+							return;
+						}
+						const FString CandidateName = CandidateAsset->GetName();
+						const FString CandidateNameLower = CandidateName.ToLower();
+						const bool bCandidateIsIdle =
+							CandidateNameLower.Contains(TEXT("mm_idle")) ||
+							CandidateNameLower == TEXT("idle") ||
+							CandidateNameLower.EndsWith(TEXT("_idle")) ||
+							CandidateNameLower.Contains(TEXT("idle"));
+						UE::PoseSearch::FSearchResult CandidateWithAssetTime = Candidate;
+						if (!CandidateWithAssetTime.IsAssetTimeValid())
+						{
+							if (!CandidateWithAssetTime.Database.IsValid() ||
+								CandidateWithAssetTime.PoseIdx == INDEX_NONE)
+							{
+								return;
+							}
+							CandidateWithAssetTime.SetAssetTime(
+								CandidateWithAssetTime.Database->GetNormalizedAssetTime(
+									CandidateWithAssetTime.PoseIdx));
+						}
+						const float CandidateCost = static_cast<float>(CandidateWithAssetTime.PoseCost);
+						if (bCandidateIsIdle)
+						{
+							if (OutBestIdleCost < 0.0f || CandidateCost < OutBestIdleCost)
+							{
+								OutBestIdleAnimation = CandidateName;
+								OutBestIdleCost = CandidateCost;
+								if (OutBestIdleResult)
+								{
+									*OutBestIdleResult = CandidateWithAssetTime;
+								}
+							}
+						}
+						else
+						{
+							if (OutBestLocomotionCost < 0.0f || CandidateCost < OutBestLocomotionCost)
+							{
+								OutBestLocomotionAnimation = CandidateName;
+								OutBestLocomotionCost = CandidateCost;
+								if (OutBestLocomotionResult)
+								{
+									*OutBestLocomotionResult = CandidateWithAssetTime;
+								}
+							}
+
+							if (bCollectTopLocomotionCandidates)
+							{
+								constexpr int32 MaxTransitionCandidates = 12;
+								int32 InsertIndex = 0;
+								while (InsertIndex < PoseSearchTopLocomotionCandidateCostsForDiagnostics.Num() &&
+									PoseSearchTopLocomotionCandidateCostsForDiagnostics[InsertIndex] <= CandidateCost)
+								{
+									++InsertIndex;
+								}
+								if (InsertIndex < MaxTransitionCandidates)
+								{
+									FPoseSearchBlueprintResult CandidateResult;
+									CandidateResult.InitFrom(CandidateWithAssetTime, 1.0f);
+									PoseSearchTopLocomotionCandidateResultsForDiagnostics.Insert(
+									CandidateResult,
+									InsertIndex);
+									PoseSearchTopLocomotionCandidateCostsForDiagnostics.Insert(
+										CandidateCost,
+										InsertIndex);
+									if (PoseSearchTopLocomotionCandidateResultsForDiagnostics.Num() > MaxTransitionCandidates)
+									{
+									PoseSearchTopLocomotionCandidateResultsForDiagnostics.SetNum(MaxTransitionCandidates);
+									PoseSearchTopLocomotionCandidateCostsForDiagnostics.SetNum(MaxTransitionCandidates);
+									}
+								}
+							}
+						}
+					};
+				CandidateDiagnostics.FinalizeResults = []() {};
+				CandidateDiagnostics.GetBestResult = []() { return UE::PoseSearch::FSearchResult(); };
+				CandidateDiagnostics.ShouldPerformSearch = [](float) { return true; };
+				CandidateDiagnostics.IterateOverSearchResults =
+					[](const TFunctionRef<bool(const UE::PoseSearch::FSearchResult&)>) { return false; };
+				const EPoseSearchMode SavedSearchMode = LoadedPoseSearchDatabase->PoseSearchMode;
+				LoadedPoseSearchDatabase->PoseSearchMode = EPoseSearchMode::BruteForce;
+				UPoseSearchLibrary::MotionMatch(
+					DiagnosticSearchContext,
+					AssetsToSearch,
+					ContinuingProperties,
+					CandidateDiagnostics);
+				LoadedPoseSearchDatabase->PoseSearchMode = SavedSearchMode;
+			};
+
+		UE::PoseSearch::FSearchResult BestIdleResultForDiagnostics;
+		UE::PoseSearch::FSearchResult BestLocomotionResultForDiagnostics;
+		CollectBruteForceCandidateCosts(
+			SearchContext,
+			PoseSearchBestIdleAnimationForDiagnostics,
+			PoseSearchBestIdleCostForDiagnostics,
+			PoseSearchBestLocomotionAnimationForDiagnostics,
+			PoseSearchBestLocomotionCostForDiagnostics,
+			&BestIdleResultForDiagnostics,
+			&BestLocomotionResultForDiagnostics,
+			false);
+
+		PoseSearchBestIdleChannelCostsForDiagnostics.Reset();
+		PoseSearchBestLocomotionChannelCostsForDiagnostics.Reset();
+		if (BestIdleResultForDiagnostics.IsValid() &&
+			BestLocomotionResultForDiagnostics.IsValid() &&
+			LoadedPoseSearchDatabase->Schema)
+		{
+			TArray<PhysAnimBridge::FPhysAnimPoseSearchChannelSlice> ChannelSlices;
+			LoadedPoseSearchDatabase->Schema->IterateChannels(
+				[&](const UPoseSearchFeatureChannel* Channel)
+				{
+					if (Channel &&
+						Channel->GetSubChannels().IsEmpty() &&
+						Channel->GetChannelCardinality() > 0)
+					{
+						PhysAnimBridge::FPhysAnimPoseSearchChannelSlice& Slice =
+							ChannelSlices.AddDefaulted_GetRef();
+#if WITH_EDITOR
+						UE::PoseSearch::TLabelBuilder ChannelLabelBuilder;
+						Channel->GetLabel(
+							ChannelLabelBuilder,
+							UE::PoseSearch::ELabelFormat::Full_Horizontal);
+						Slice.Label = ChannelLabelBuilder.ToString();
+#else
+						Slice.Label = FString::Printf(
+							TEXT("%s:%s"),
+							*Channel->GetClass()->GetName(),
+							*Channel->GetName());
+#endif
+						Slice.DataOffset = Channel->GetChannelDataOffset();
+						Slice.Cardinality = Channel->GetChannelCardinality();
+					}
+				});
+			ChannelSlices.Sort(
+				[](const PhysAnimBridge::FPhysAnimPoseSearchChannelSlice& A,
+					const PhysAnimBridge::FPhysAnimPoseSearchChannelSlice& B)
+				{
+					return A.DataOffset < B.DataOffset;
+				});
+
+			const UPoseSearchSchema* const Schema = LoadedPoseSearchDatabase->Schema.Get();
+			const TConstArrayView<float> QueryValues = SearchContext.GetOrBuildQuery(Schema);
+			TArray<float> WeightsSqrtBuffer;
+			WeightsSqrtBuffer.SetNumUninitialized(Schema->SchemaCardinality);
+			const TConstArrayView<float> WeightsSqrt =
+				LoadedPoseSearchDatabase->CalculateDynamicWeightsSqrt(WeightsSqrtBuffer);
+
+			auto ResolvePoseValues =
+				[](const UE::PoseSearch::FSearchResult& Candidate) -> TConstArrayView<float>
+				{
+					const UE::PoseSearch::FSearchIndex& SearchIndex =
+						Candidate.Database->GetSearchIndex();
+					return SearchIndex.IsValuesEmpty()
+						? TConstArrayView<float>()
+						: SearchIndex.GetPoseValues(Candidate.PoseIdx);
+				};
+
+			float IdleChannelTotalCost = 0.0f;
+			float LocomotionChannelTotalCost = 0.0f;
+			FString ChannelCostError;
+			const bool bIdleCostsValid = PhysAnimBridge::CalculatePoseSearchChannelCosts(
+				ResolvePoseValues(BestIdleResultForDiagnostics),
+				QueryValues,
+				WeightsSqrt,
+				ChannelSlices,
+				PoseSearchBestIdleChannelCostsForDiagnostics,
+				IdleChannelTotalCost,
+				ChannelCostError);
+			const bool bLocomotionCostsValid = bIdleCostsValid &&
+				PhysAnimBridge::CalculatePoseSearchChannelCosts(
+					ResolvePoseValues(BestLocomotionResultForDiagnostics),
+					QueryValues,
+					WeightsSqrt,
+					ChannelSlices,
+					PoseSearchBestLocomotionChannelCostsForDiagnostics,
+					LocomotionChannelTotalCost,
+					ChannelCostError);
+			if (!bLocomotionCostsValid)
+			{
+				PoseSearchBestIdleChannelCostsForDiagnostics.Reset();
+				PoseSearchBestLocomotionChannelCostsForDiagnostics.Reset();
+				PHYSANIM_LOG_RATE_LIMITED(
+					LogPhysAnimBridge,
+					Warning,
+					1.0f,
+					TEXT("[PhysAnim] Pose Search channel-cost diagnostics failed: %s"),
+					*ChannelCostError);
+			}
+		}
+
+		FTransformTrajectory CommandHistoryTrajectory = BridgeTrajectoryState.QueryTrajectory;
+		const FTransformTrajectorySample CommandCurrentSample =
+			CommandHistoryTrajectory.GetSampleAtTime(0.0f, true);
+		for (FTransformTrajectorySample& Sample : CommandHistoryTrajectory.Samples)
+		{
+			if (Sample.TimeInSeconds <= 0.0f)
+			{
+				Sample.Position =
+					CommandCurrentSample.Position + QueryVelocity * Sample.TimeInSeconds;
+				Sample.Facing = CommandCurrentSample.Facing;
+			}
+		}
+		MutablePoseHistoryNode->GetPoseHistory().SetTrajectory(CommandHistoryTrajectory, 1.0f);
+		UE::PoseSearch::FSearchContext CommandHistorySearchContext(
+			0.0f,
+			FFloatInterval(0.0f, 0.0f),
+			FPoseSearchEvent());
+		CommandHistorySearchContext.AddRole(
+			UE::PoseSearch::DefaultRole,
+			&ChooserContext,
+			&MutablePoseHistoryNode->GetPoseHistory());
+		CollectBruteForceCandidateCosts(
+			CommandHistorySearchContext,
+			PoseSearchCommandHistoryBestIdleAnimationForDiagnostics,
+			PoseSearchCommandHistoryBestIdleCostForDiagnostics,
+			PoseSearchCommandHistoryBestLocomotionAnimationForDiagnostics,
+			PoseSearchCommandHistoryBestLocomotionCostForDiagnostics,
+			nullptr,
+			nullptr,
+			false);
+		MutablePoseHistoryNode->GetPoseHistory().SetTrajectory(
+			BridgeTrajectoryState.QueryTrajectory,
+			1.0f);
+	}
+#endif
+
 	if (!SearchResult.IsValid())
 	{
 		OutError = TEXT("SearchContext MotionMatch returned no valid result.");

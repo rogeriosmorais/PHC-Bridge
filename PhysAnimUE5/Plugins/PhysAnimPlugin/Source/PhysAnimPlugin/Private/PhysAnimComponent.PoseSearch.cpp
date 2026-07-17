@@ -116,7 +116,8 @@ bool UPhysAnimComponent::QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchRe
 bool UPhysAnimComponent::SampleFuturePoses(
 	const FPoseSearchBlueprintResult& SearchResult,
 	TArray<FPhysAnimFuturePoseSample>& OutFutureSamples,
-	FString& OutError) const
+	FString& OutError,
+	PhysAnimBridge::FPhysAnimMimicFrameDiagnostics* OutMimicFrameDiagnostics) const
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_SampleFuturePoses);
 
@@ -149,8 +150,9 @@ bool UPhysAnimComponent::SampleFuturePoses(
 		BindBoneRotations.Add(RestTransform.GetRotation().GetNormalized());
 	}
 
-	for (const float FutureOffset : FutureOffsets)
+	for (int32 FutureIndex = 0; FutureIndex < FutureOffsets.Num(); ++FutureIndex)
 	{
+		const float FutureOffset = FutureOffsets[FutureIndex];
 		FPoseSearchAssetSamplerInput SamplerInput;
 		SamplerInput.Animation = AnimationAsset;
 		SamplerInput.AnimationTime = FMath::Clamp(SearchResult.SelectedTime + FutureOffset, 0.0f, AnimationLength);
@@ -169,6 +171,7 @@ bool UPhysAnimComponent::SampleFuturePoses(
 		TArray<FQuat> SampleBoneRotations;
 		SampleBoneRotations.Reserve(PhysAnimBridge::NumSmplBodies);
 		FQuat RootCanonicalRotation = FQuat::Identity;
+		FQuat CorrectedRightFootRotation = FQuat::Identity;
 
 		for (int32 i = 0; i < BoneNames.Num(); ++i)
 		{
@@ -192,12 +195,37 @@ bool UPhysAnimComponent::SampleFuturePoses(
 			{
 				RootCanonicalRotation = CorrectedRotation;
 			}
+			else if (i == 7)
+			{
+				CorrectedRightFootRotation = CorrectedRotation;
+			}
 
 			FutureSample.BodyTransforms.Add(FTransform(
 				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CorrectedRotation),
 				PhysAnimBridge::UeWorldPositionToProtoRuntime(WorldTransform.GetLocation()),
 				WorldTransform.GetScale3D()));
 		}
+
+#if WITH_DEV_AUTOMATION_TESTS
+		constexpr int32 RotationProbeFutureIndex = 2;
+		constexpr int32 CanonicalRightFootBodyIndex = 7;
+		if (OutMimicFrameDiagnostics &&
+			FutureIndex == RotationProbeFutureIndex &&
+			SampleBoneRotations.IsValidIndex(0) &&
+			SampleBoneRotations.IsValidIndex(CanonicalRightFootBodyIndex))
+		{
+			OutMimicFrameDiagnostics->RawMannyProbeFutureRootRotation =
+				SampleBoneRotations[0].GetNormalized();
+			OutMimicFrameDiagnostics->RawMannyProbeFutureRightFootRotation =
+				SampleBoneRotations[CanonicalRightFootBodyIndex].GetNormalized();
+			OutMimicFrameDiagnostics->CorrectedMannyProbeFutureRootRotation =
+				RootCanonicalRotation.GetNormalized();
+			OutMimicFrameDiagnostics->CorrectedMannyProbeFutureRightFootRotation =
+				CorrectedRightFootRotation.GetNormalized();
+		}
+#else
+		(void)OutMimicFrameDiagnostics;
+#endif
 
 		TArray<FQuat> CanonicalGlobalRotations;
 		FString AdapterError;
